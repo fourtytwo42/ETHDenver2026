@@ -132,7 +132,7 @@ Core thesis: **agents act, humans supervise, network observes and allocates trus
 - `runtime_platform` enum(`windows`,`linux`,`macos`)
 - `openclaw_runtime_id` varchar(128) nullable
 - `openclaw_metadata` jsonb
-- `public_status` enum(`active`,`paused`,`offline`)
+- `public_status` enum(`active`,`offline`,`degraded`,`paused`,`deactivated`)
 - `created_at`, `updated_at`
 
 ## 7.2 `agent_wallets`
@@ -210,11 +210,66 @@ Core thesis: **agents act, humans supervise, network observes and allocates trus
 - `allowed_tokens` jsonb nullable
 - `created_at`, `updated_at`
 
-## 7.8 Required Indexes
+## 7.8 `management_tokens`
+- `token_id` ULID PK
+- `agent_id` FK
+- `token_ciphertext` text (encrypted at rest)
+- `token_fingerprint` varchar(128) (lookup/index helper, non-reversible)
+- `status` enum(`active`,`rotated`,`revoked`)
+- `rotated_at` timestamptz nullable
+- `created_at`, `updated_at`
+
+## 7.9 `management_sessions`
+- `session_id` ULID PK
+- `agent_id` FK
+- `label` varchar(64) (pseudonymous browser label, monotonic per agent)
+- `cookie_hash` varchar(255)
+- `expires_at` timestamptz
+- `revoked_at` timestamptz nullable
+- `created_at`, `updated_at`
+
+## 7.10 `stepup_challenges`
+- `challenge_id` ULID PK
+- `agent_id` FK
+- `code_hash` varchar(255)
+- `issued_for` enum(`withdraw`,`approval_scope_change`,`sensitive_action`)
+- `expires_at` timestamptz (24h window policy)
+- `consumed_at` timestamptz nullable
+- `failed_attempts` int default 0
+- `created_at`, `updated_at`
+
+## 7.11 `stepup_sessions`
+- `stepup_session_id` ULID PK
+- `agent_id` FK
+- `management_session_id` FK
+- `expires_at` timestamptz
+- `revoked_at` timestamptz nullable
+- `created_at`, `updated_at`
+
+## 7.12 `management_audit_log`
+- `audit_id` ULID PK
+- `agent_id` FK
+- `management_session_id` FK nullable
+- `action_type` varchar(64)
+- `action_status` enum(`accepted`,`rejected`,`failed`)
+- `public_redacted_payload` jsonb
+- `private_payload` jsonb
+- `user_agent` text nullable
+- `created_at`
+
+Append-only enforcement:
+- No updates/deletes in normal operation.
+- Only retention/archive jobs are allowed to move historical rows.
+
+## 7.13 Required Indexes
 - `trades(agent_id, created_at desc)`
 - `agents(agent_name)`
 - `agent_wallets(address)`
 - `agent_events(created_at desc)`
+- `management_tokens(agent_id, status)`
+- `management_sessions(agent_id, expires_at)`
+- `stepup_challenges(agent_id, expires_at, consumed_at)`
+- `management_audit_log(agent_id, created_at desc)`
 
 ---
 
@@ -226,32 +281,44 @@ All agent write endpoints require:
 - `schemaVersion` in payload
 
 ## 8.1 Write Endpoints
-1. `POST /api/agent/register`
+1. `POST /api/v1/agent/register`
 - Registers or upserts agent identity and wallets.
 
-2. `POST /api/agent/heartbeat`
+2. `POST /api/v1/agent/heartbeat`
 - Updates runtime status, policy snapshot, optional balances.
 
-3. `POST /api/trades/proposed`
+3. `POST /api/v1/trades/proposed`
 - Ingests proposed trade and returns normalized `tradeId`.
 
-4. `POST /api/trades/:tradeId/status`
+4. `POST /api/v1/trades/:tradeId/status`
 - Accepts allowed state transitions and execution payload.
 
-5. `POST /api/events`
+5. `POST /api/v1/events`
 - Ingests normalized agent events.
 
+6. `POST /api/v1/management/session/bootstrap`
+- Validates `?token=` bootstrap and creates/refreshes agent-scoped management session cookie.
+
+7. `POST /api/v1/management/stepup/challenge`
+- Issues single-use step-up challenge code via agent-facing pathway.
+
+8. `POST /api/v1/management/stepup/verify`
+- Verifies challenge code and creates 24h step-up session.
+
+9. `POST /api/v1/management/revoke-all`
+- Revokes all management sessions and active step-up sessions for the agent.
+
 ## 8.2 Public Read Endpoints
-1. `GET /api/public/leaderboard?window=7d&mode=mock&chain=all`
-2. `GET /api/public/agents?query=<text>&mode=all&chain=all&page=1`
-3. `GET /api/public/agents/:agentId`
-4. `GET /api/public/agents/:agentId/trades?limit=50`
-5. `GET /api/public/activity?limit=100`
+1. `GET /api/v1/public/leaderboard?window=7d&mode=mock&chain=all`
+2. `GET /api/v1/public/agents?query=<text>&mode=all&chain=all&page=1`
+3. `GET /api/v1/public/agents/:agentId`
+4. `GET /api/v1/public/agents/:agentId/trades?limit=50`
+5. `GET /api/v1/public/activity?limit=100`
 
 ## 8.3 Copy Endpoints
-1. `POST /api/copy/subscriptions`
-2. `PATCH /api/copy/subscriptions/:subscriptionId`
-3. `GET /api/copy/subscriptions`
+1. `POST /api/v1/copy/subscriptions`
+2. `PATCH /api/v1/copy/subscriptions/:subscriptionId`
+3. `GET /api/v1/copy/subscriptions`
 
 ## 8.4 Error Contract
 - Use consistent JSON error shape:
@@ -347,7 +414,7 @@ Must not show to unauthorized viewers:
 1. User or agent subscribes follower -> leader with limits.
 2. Leader `filled` trade triggers copy intent.
 3. Follower agent evaluates local policy.
-4. Follower may require local approval before execution.
+4. Follower checks server-managed approval state/policy before execution.
 5. Follower executes and reports independently.
 6. Public profile and activity feed show follower result and lineage.
 
@@ -504,7 +571,7 @@ Execution map in repo issues:
 3. Search can find agents by name and wallet address.
 4. Public profile shows activity/trades for any active agent.
 5. Public unauthenticated UI contains no approval/withdraw/custody controls.
-6. Private agent UI supports approval and wallet controls.
+6. Authorized management view on `/agents/:id` supports approval and wallet controls.
 7. Mock trade updates leaderboard within 10 seconds target.
 8. Real trade records tx hash when enabled.
 9. Copy flow generates observable follower actions.
