@@ -172,15 +172,15 @@ DoD:
 ---
 
 ## Slice 11: Hardhat Local Trading Path
-Status: [ ]
+Status: [x]
 
 Goal:
 - Propose -> approval -> execute -> verify works locally.
 
 DoD:
-- [ ] local DEX contracts deployed
-- [ ] `config/chains/hardhat_local.json` updated with addresses
-- [ ] lifecycle passes with evidence (including retry constraints and management/step-up checks for touched flows)
+- [x] local DEX contracts deployed
+- [x] `config/chains/hardhat_local.json` updated with addresses
+- [x] lifecycle passes with evidence (including retry constraints and management/step-up checks for touched flows)
 
 ---
 

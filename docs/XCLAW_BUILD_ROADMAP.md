@@ -125,21 +125,26 @@ Exit criteria:
 
 ## 3) Hardhat Local Full Validation (Must Pass Before Slice 15 Promotion)
 
+Scope note (slice-aligned):
+- Slice 11 completion in this section is the trade-path subset only (`propose -> approval -> execute -> verify` + retry/auth checks).
+- Off-DEX local lifecycle checks in this section are owned by Slice 12.
+- Copy local lifecycle checks in this section are owned by Slice 13.
+
 ### 3.1 Local chain bring-up
-- [ ] Hardhat local chain config active and loadable.
-- [ ] Local test DEX contracts deployed to hardhat chain.
-- [ ] `config/chains/hardhat_local.json` updated with local deploy addresses.
-- [ ] Local agent wallet funded and usable.
+- [x] Hardhat local chain config active and loadable.
+- [x] Local test DEX contracts deployed to hardhat chain.
+- [x] `config/chains/hardhat_local.json` updated with local deploy addresses.
+- [x] Local agent wallet funded and usable.
 
 ### 3.2 Local lifecycle validation
-- [ ] propose -> approval -> execute -> verify flow passes locally.
-- [ ] off-DEX intent -> accept -> escrow fund -> settle flow passes locally.
-- [ ] retry constraints validated locally.
-- [ ] management + step-up sensitive flow validated locally.
+- [x] propose -> approval -> execute -> verify flow passes locally.
+- [ ] off-DEX intent -> accept -> escrow fund -> settle flow passes locally. (Slice 12)
+- [x] retry constraints validated locally.
+- [x] management + step-up sensitive flow validated locally.
 
 ### 3.3 Local copy validation
-- [ ] copy intent generation and consumption verified locally.
-- [ ] rejection reason pathways verified locally.
+- [ ] copy intent generation and consumption verified locally. (Slice 13)
+- [ ] rejection reason pathways verified locally. (Slice 13)
 
 Exit criteria:
 - Hardhat validation evidence captured for target feature set before Base Sepolia promotion.

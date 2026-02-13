@@ -10,35 +10,37 @@
   "coreContracts": {
     "dex": "uniswap_fork",
     "deploymentStatus": "local_deployed",
-    "factory": null,
-    "router": null,
-    "quoter": null,
-    "escrow": null,
+    "factory": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "router": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+    "quoter": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+    "escrow": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
     "escrowAbiVersion": "xclaw_escrow_v1",
-    "notes": "Slice-02 contract freeze: local contract addresses are intentionally deferred to Slice 07 deployment evidence or deterministic fixtures; null values are expected in this slice."
+    "notes": "Slice-11 hardhat local deploy evidence captured in infrastructure/seed-data/hardhat-local-deploy.json and hardhat-local-verify.json."
   },
   "canonicalTokens": {
-    "WETH": null,
-    "USDC": null
+    "WETH": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+    "USDC": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"
   },
-  "updatedAt": "2026-02-13T00:00:00Z",
+  "updatedAt": "2026-02-13T16:11:08.206Z",
   "version": 1,
   "sources": {
     "network": "hardhat_local",
     "mvpTestDexStrategy": "deploy_uniswap_compatible_fork_on_hardhat_before_base_sepolia",
-    "escrowAbiMetadata": "xclaw_escrow_v1"
+    "escrowAbiMetadata": "xclaw_escrow_v1",
+    "deploymentArtifact": "infrastructure/seed-data/hardhat-local-deploy.json",
+    "verificationArtifact": "infrastructure/seed-data/hardhat-local-verify.json"
   },
   "verification": {
-    "verifiedAt": "2026-02-13T00:00:00Z",
-    "verifiedViaRpc": false,
+    "verifiedAt": "2026-02-13T16:11:08.206Z",
+    "verifiedViaRpc": true,
     "verifiedChainIdHex": "0x7a69",
     "verifiedContractCodePresent": {
-      "WETH": false,
-      "USDC": false,
-      "factory": false,
-      "router": false,
-      "quoter": false,
-      "escrow": false
+      "WETH": true,
+      "USDC": true,
+      "factory": true,
+      "router": true,
+      "quoter": true,
+      "escrow": true
     }
   }
 }

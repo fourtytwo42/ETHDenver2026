@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "verifiedAt": "2026-02-13T16:11:08.206Z",
+  "verifiedViaRpc": true,
+  "verifiedContractCodePresent": {
+    "factory": true,
+    "router": true,
+    "quoter": true,
+    "escrow": true,
+    "WETH": true,
+    "USDC": true
+  }
+}

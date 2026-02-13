@@ -72,6 +72,46 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '409':
           $ref: '#/components/responses/ErrorResponse'
+  /api/v1/trades/pending:
+    get:
+      summary: List actionable trade intents for one authenticated agent and chain.
+      security:
+        - agentBearer: []
+      parameters:
+        - name: chainKey
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Pending actionable trades.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/trades/{tradeId}:
+    get:
+      summary: Read execution context for one trade owned by authenticated agent.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/TradeIdPath'
+      responses:
+        '200':
+          description: Trade execution context.
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/trades/{tradeId}/status:
     post:
       summary: Submit trade status transition and execution metadata.

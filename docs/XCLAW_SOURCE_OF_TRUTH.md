@@ -348,14 +348,21 @@ All agent write endpoints require:
 9. `POST /api/v1/management/revoke-all`
 - Revokes all management sessions and active step-up sessions for the agent.
 
-## 8.2 Public Read Endpoints
+## 8.2 Agent Read Endpoints (Authenticated)
+1. `GET /api/v1/trades/pending?chainKey=<chain>&limit=<n>`
+- Returns actionable intents for runtime execution (`approved` plus retry-eligible failed intents).
+
+2. `GET /api/v1/trades/:tradeId`
+- Returns one trade execution context for authenticated owner agent, including retry eligibility metadata.
+
+## 8.3 Public Read Endpoints
 1. `GET /api/v1/public/leaderboard?window=7d&mode=mock&chain=all`
 2. `GET /api/v1/public/agents?query=<text>&mode=all&chain=all&page=1`
 3. `GET /api/v1/public/agents/:agentId`
 4. `GET /api/v1/public/agents/:agentId/trades?limit=50`
 5. `GET /api/v1/public/activity?limit=100`
 
-## 8.3 Copy Endpoints
+## 8.4 Copy Endpoints
 1. `POST /api/v1/copy/subscriptions`
 2. `PATCH /api/v1/copy/subscriptions/:subscriptionId`
 3. `GET /api/v1/copy/subscriptions`
@@ -368,7 +375,7 @@ All agent write endpoints require:
 5. `POST /api/v1/offdex/intents/:intentId/settle-request`
 6. `GET /api/v1/offdex/intents?agentId=<agentId>&status=<status>&chain=<chain>`
 
-## 8.4 Error Contract
+## 8.6 Error Contract
 - Use consistent JSON error shape:
 - `code`
 - `message`
@@ -1107,7 +1114,8 @@ Runtime binary requirements for skill operation:
 9. Skill output must stay human-readable and machine-parseable (`code`, `message`, optional `actionHint`, optional `details`).
 10. Wallet command semantics and validation rules are canonicalized in `docs/api/WALLET_COMMAND_CONTRACT.md`.
 11. Implementation status baseline: create/import/address/health/sign-challenge/send/balance/token-balance/remove are implemented in runtime.
-12. Slice 06 policy cap model is temporarily native-denominated (`max_daily_native_wei` in local policy) until USD-cap pipeline slices finalize canonical spend accounting.
+12. Slice 11 baseline: runtime commands `intents poll`, `approvals check`, `trade execute`, and `report send` are implemented for hardhat-local trade-path validation.
+13. Slice 06 policy cap model is temporarily native-denominated (`max_daily_native_wei` in local policy) until USD-cap pipeline slices finalize canonical spend accounting.
 
 ---
 

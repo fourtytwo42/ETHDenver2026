@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import base64
 import getpass
+import hashlib
 import json
 import os
 import pathlib
@@ -19,7 +20,11 @@ import shutil
 import stat
 import subprocess
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -52,6 +57,8 @@ CHALLENGE_TTL_SECONDS = 300
 CHALLENGE_FORMAT_VERSION = "xclaw-auth-v1"
 CHALLENGE_REQUIRED_KEYS = {"domain", "chain", "nonce", "timestamp", "action"}
 CHALLENGE_ALLOWED_DOMAINS = {"xclaw.trade", "localhost", "127.0.0.1", "::1", "staging.xclaw.trade"}
+RETRY_WINDOW_SEC = 600
+MAX_TRADE_RETRIES = 3
 
 
 class WalletStoreError(Exception):
@@ -693,6 +700,178 @@ def _cast_sign_message(private_key_hex: str, message: str) -> str:
     return signature
 
 
+def _require_api_env() -> tuple[str, str]:
+    base_url = (os.environ.get("XCLAW_API_BASE_URL") or "").strip()
+    api_key = (os.environ.get("XCLAW_AGENT_API_KEY") or "").strip()
+    if not base_url:
+        raise WalletStoreError("Missing required env: XCLAW_API_BASE_URL.")
+    if not api_key:
+        raise WalletStoreError("Missing required env: XCLAW_AGENT_API_KEY.")
+    return base_url.rstrip("/"), api_key
+
+
+def _api_request(method: str, path: str, payload: dict[str, Any] | None = None, include_idempotency: bool = False) -> tuple[int, dict[str, Any]]:
+    base_url, api_key = _require_api_env()
+    if path.startswith("http://") or path.startswith("https://"):
+        url = path
+    else:
+        normalized = path if path.startswith("/") else f"/{path}"
+        url = f"{base_url}{normalized}"
+
+    headers: dict[str, str] = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    raw_data: bytes | None = None
+    if payload is not None:
+        raw_data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    if include_idempotency:
+        headers["Idempotency-Key"] = f"rt-{secrets.token_hex(16)}"
+
+    request = urllib.request.Request(url=url, data=raw_data, headers=headers, method=method.upper())
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            body = response.read().decode("utf-8")
+            parsed = json.loads(body) if body else {}
+            if not isinstance(parsed, dict):
+                raise WalletStoreError("API returned non-object JSON payload.")
+            return int(response.status), parsed
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8") if exc.fp else ""
+        try:
+            parsed = json.loads(body) if body else {}
+            if not isinstance(parsed, dict):
+                parsed = {"message": body}
+        except Exception:
+            parsed = {"message": body or str(exc)}
+        return int(exc.code), parsed
+    except urllib.error.URLError as exc:
+        raise WalletStoreError(f"API request failed: {exc.reason}") from exc
+
+
+def _canonical_event_for_trade_status(status: str) -> str:
+    mapping = {
+        "proposed": "trade_proposed",
+        "approval_pending": "trade_approval_pending",
+        "approved": "trade_approved",
+        "rejected": "trade_rejected",
+        "executing": "trade_executing",
+        "verifying": "trade_verifying",
+        "filled": "trade_filled",
+        "failed": "trade_failed",
+        "expired": "trade_expired",
+        "verification_timeout": "trade_verification_timeout",
+    }
+    return mapping.get(status, "trade_failed")
+
+
+def _post_trade_status(trade_id: str, from_status: str, to_status: str, extra: dict[str, Any] | None = None) -> None:
+    payload: dict[str, Any] = {
+        "tradeId": trade_id,
+        "fromStatus": from_status,
+        "toStatus": to_status,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    if extra:
+        payload.update(extra)
+    status_code, body = _api_request("POST", f"/trades/{trade_id}/status", payload=payload, include_idempotency=True)
+    if status_code < 200 or status_code >= 300:
+        code = str(body.get("code", "api_error"))
+        message = str(body.get("message", f"trade status update failed ({status_code})"))
+        raise WalletStoreError(f"{code}: {message}")
+
+
+def _require_chain_contract_address(chain: str, key: str) -> str:
+    cfg = _load_chain_config(chain)
+    contracts = cfg.get("coreContracts")
+    if not isinstance(contracts, dict):
+        raise WalletStoreError(f"Chain config for '{chain}' is missing coreContracts.")
+    value = contracts.get(key)
+    if not isinstance(value, str) or not is_hex_address(value):
+        raise WalletStoreError(f"Chain config for '{chain}' has invalid coreContracts.{key}.")
+    return value
+
+
+def _chain_token_address(chain: str, token_symbol: str) -> str:
+    cfg = _load_chain_config(chain)
+    tokens = cfg.get("canonicalTokens")
+    if not isinstance(tokens, dict):
+        raise WalletStoreError(f"Chain config for '{chain}' is missing canonicalTokens.")
+    value = tokens.get(token_symbol)
+    if not isinstance(value, str) or not is_hex_address(value):
+        raise WalletStoreError(f"Chain config for '{chain}' has invalid canonicalTokens.{token_symbol}.")
+    return value
+
+
+def _to_wei_uint(raw: str | None) -> str:
+    if raw is None:
+        return str(10**15)
+    trimmed = str(raw).strip()
+    if re.fullmatch(r"[0-9]+", trimmed):
+        return trimmed
+    try:
+        decimal_value = Decimal(trimmed)
+    except InvalidOperation as exc:
+        raise WalletStoreError(f"Invalid amount format '{raw}' for trade execution.") from exc
+    if decimal_value <= 0:
+        raise WalletStoreError("Trade amount must be positive.")
+    wei = int(decimal_value * Decimal(10**18))
+    if wei <= 0:
+        raise WalletStoreError("Trade amount is too small after wei conversion.")
+    return str(wei)
+
+
+def _read_trade_details(trade_id: str) -> dict[str, Any]:
+    status_code, body = _api_request("GET", f"/trades/{trade_id}")
+    if status_code < 200 or status_code >= 300:
+        code = str(body.get("code", "api_error"))
+        message = str(body.get("message", f"trade read failed ({status_code})"))
+        raise WalletStoreError(f"{code}: {message}")
+    trade = body.get("trade")
+    if not isinstance(trade, dict):
+        raise WalletStoreError("Trade details response missing trade object.")
+    return trade
+
+
+def _execution_wallet(store: dict[str, Any], chain: str) -> tuple[str, str]:
+    _, wallet = _chain_wallet(store, chain)
+    if wallet is None:
+        raise WalletStoreError(f"No wallet configured for chain '{chain}'.")
+    _validate_wallet_entry_shape(wallet)
+    address = str(wallet.get("address"))
+    passphrase = _require_wallet_passphrase_for_signing(chain)
+    private_key_hex = _decrypt_private_key(wallet, passphrase).hex()
+    return address, private_key_hex
+
+
+def _cast_calldata(signature: str, args: list[str]) -> str:
+    cast_bin = _require_cast_bin()
+    proc = subprocess.run([cast_bin, "calldata", signature, *args], text=True, capture_output=True)
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        stdout = (proc.stdout or "").strip()
+        raise WalletStoreError(stderr or stdout or f"cast calldata failed for {signature}.")
+    data = (proc.stdout or "").strip()
+    if not re.fullmatch(r"0x[a-fA-F0-9]+", data):
+        raise WalletStoreError(f"cast calldata returned malformed output for {signature}.")
+    return data
+
+
+def _cast_rpc_send_transaction(rpc_url: str, tx_obj: dict[str, str]) -> str:
+    cast_bin = _require_cast_bin()
+    proc = subprocess.run(
+        [cast_bin, "rpc", "--rpc-url", rpc_url, "eth_sendTransaction", json.dumps(tx_obj, separators=(",", ":"))],
+        text=True,
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        stdout = (proc.stdout or "").strip()
+        raise WalletStoreError(stderr or stdout or "cast rpc eth_sendTransaction failed.")
+    return _extract_tx_hash(proc.stdout)
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
@@ -711,6 +890,271 @@ def cmd_not_implemented(args: argparse.Namespace, name: str) -> int:
         {"command": name, "scaffold": True},
         exit_code=1,
     )
+
+
+def cmd_intents_poll(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        status_code, body = _api_request("GET", f"/trades/pending?chainKey={urllib.parse.quote(args.chain)}&limit=25")
+        if status_code < 200 or status_code >= 300:
+            return fail(
+                str(body.get("code", "api_error")),
+                str(body.get("message", f"intents poll failed ({status_code})")),
+                str(body.get("actionHint", "Verify API auth and retry.")),
+                {"status": status_code, "chain": args.chain},
+                exit_code=1,
+            )
+        items = body.get("items", [])
+        if not isinstance(items, list):
+            raise WalletStoreError("Trade pending response 'items' is not a list.")
+        return ok("Trade intents polled.", chain=args.chain, count=len(items), intents=items)
+    except WalletStoreError as exc:
+        return fail("intents_poll_failed", str(exc), "Verify API env, auth, and endpoint availability.", {"chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("intents_poll_failed", str(exc), "Inspect runtime intents poll path and retry.", {"chain": args.chain}, exit_code=1)
+
+
+def cmd_approvals_check(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        trade = _read_trade_details(args.intent)
+        if str(trade.get("chainKey")) != args.chain:
+            return fail(
+                "chain_mismatch",
+                "Trade chain does not match command --chain.",
+                "Use matching chain or refresh intent selection.",
+                {"tradeId": args.intent, "tradeChain": trade.get("chainKey"), "requestedChain": args.chain},
+                exit_code=1,
+            )
+
+        status = str(trade.get("status"))
+        retry = trade.get("retry") if isinstance(trade.get("retry"), dict) else {}
+        retry_eligible = bool(retry.get("eligible", False))
+        if status == "approved" or (status == "failed" and retry_eligible):
+            return ok("Approval check passed.", tradeId=args.intent, chain=args.chain, approved=True, status=status, retry=retry)
+        if status == "approval_pending":
+            return fail("approval_required", "Trade is waiting for management approval.", "Approve trade from authorized management view.", {"tradeId": args.intent}, exit_code=1)
+        if status == "rejected":
+            return fail("approval_rejected", "Trade approval was rejected.", "Review rejection reason and create a new trade if needed.", {"tradeId": args.intent, "reasonCode": trade.get("reasonCode")}, exit_code=1)
+        if status == "expired":
+            return fail("approval_expired", "Trade approval has expired.", "Re-propose trade and request approval again.", {"tradeId": args.intent}, exit_code=1)
+        return fail(
+            "policy_denied",
+            f"Trade is not executable from status '{status}'.",
+            "Poll intents and execute only actionable trades.",
+            {"tradeId": args.intent, "status": status, "retry": retry},
+            exit_code=1,
+        )
+    except WalletStoreError as exc:
+        return fail("approval_check_failed", str(exc), "Verify API env, auth, and trade visibility.", {"tradeId": args.intent, "chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("approval_check_failed", str(exc), "Inspect runtime approval-check path and retry.", {"tradeId": args.intent, "chain": args.chain}, exit_code=1)
+
+
+def cmd_trade_execute(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+
+    transition_state = "init"
+    previous_status = "approved"
+    try:
+        trade = _read_trade_details(args.intent)
+        status = str(trade.get("status"))
+        if str(trade.get("chainKey")) != args.chain:
+            return fail(
+                "chain_mismatch",
+                "Trade chain does not match command --chain.",
+                "Use matching chain or refresh intent selection.",
+                {"tradeId": args.intent, "tradeChain": trade.get("chainKey"), "requestedChain": args.chain},
+                exit_code=1,
+            )
+
+        previous_status = status
+        retry = trade.get("retry") if isinstance(trade.get("retry"), dict) else {}
+        retry_eligible = bool(retry.get("eligible", False))
+        if status not in ("approved", "failed"):
+            return fail(
+                "approval_required",
+                f"Trade is not executable from status '{status}'.",
+                "Execute only approved trades or failed trades within retry policy.",
+                {"tradeId": args.intent, "status": status},
+                exit_code=1,
+            )
+        if status == "failed" and not retry_eligible:
+            return fail(
+                "policy_denied",
+                "Retry policy does not allow this failed trade to execute.",
+                "Re-propose trade or retry within policy window/limits.",
+                {"tradeId": args.intent, "retry": retry, "maxRetries": MAX_TRADE_RETRIES, "retryWindowSec": RETRY_WINDOW_SEC},
+                exit_code=1,
+            )
+
+        mode = str(trade.get("mode"))
+        if mode == "mock":
+            mock_receipt_id = f"mrc_{hashlib.sha256(f'{args.intent}:{utc_now()}'.encode('utf-8')).hexdigest()[:24]}"
+            _post_trade_status(args.intent, previous_status, "executing", {"mockReceiptId": mock_receipt_id})
+            transition_state = "executing"
+            _post_trade_status(args.intent, "executing", "verifying", {"mockReceiptId": mock_receipt_id})
+            transition_state = "verifying"
+            _post_trade_status(args.intent, "verifying", "filled", {"mockReceiptId": mock_receipt_id})
+            return ok("Trade executed in mock mode.", tradeId=args.intent, chain=args.chain, mode=mode, status="filled", mockReceiptId=mock_receipt_id)
+
+        if mode != "real":
+            raise WalletStoreError(f"Unsupported trade mode '{mode}'.")
+
+        store = load_wallet_store()
+        wallet_address, _private_key_hex = _execution_wallet(store, args.chain)
+        cast_bin = _require_cast_bin()
+        rpc_url = _chain_rpc_url(args.chain)
+        router = _require_chain_contract_address(args.chain, "router")
+
+        token_in = str(trade.get("tokenIn") or "")
+        token_out = str(trade.get("tokenOut") or "")
+        if not is_hex_address(token_in):
+            token_in = _chain_token_address(args.chain, "WETH")
+        if not is_hex_address(token_out):
+            token_out = _chain_token_address(args.chain, "USDC")
+
+        amount_wei_str = _to_wei_uint(trade.get("amountIn"))
+        amount_wei = int(amount_wei_str)
+        state, day_key, current_spend, max_daily_wei = _enforce_spend_preconditions(args.chain, amount_wei)
+        deadline = str(int(datetime.now(timezone.utc).timestamp()) + 120)
+
+        approve_data = _cast_calldata("approve(address,uint256)(bool)", [router, amount_wei_str])
+        approve_tx_hash = _cast_rpc_send_transaction(
+            rpc_url,
+            {
+                "from": wallet_address,
+                "to": token_in,
+                "data": approve_data,
+            },
+        )
+        approve_receipt = subprocess.run(
+            [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, approve_tx_hash],
+            text=True,
+            capture_output=True,
+        )
+        if approve_receipt.returncode != 0:
+            stderr = (approve_receipt.stderr or "").strip()
+            stdout = (approve_receipt.stdout or "").strip()
+            raise WalletStoreError(stderr or stdout or "cast receipt failed for approve tx.")
+        approve_payload = json.loads((approve_receipt.stdout or "{}").strip() or "{}")
+        approve_status = str(approve_payload.get("status", "0x0")).lower()
+        if approve_status not in {"0x1", "1"}:
+            raise WalletStoreError(f"Approve receipt indicates failure status '{approve_status}'.")
+
+        swap_data = _cast_calldata(
+            "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)(uint256[])",
+            [amount_wei_str, "1", f"[{token_in},{token_out}]", wallet_address, deadline],
+        )
+        tx_hash = _cast_rpc_send_transaction(
+            rpc_url,
+            {
+                "from": wallet_address,
+                "to": router,
+                "data": swap_data,
+            },
+        )
+        _post_trade_status(args.intent, previous_status, "executing", {"txHash": tx_hash})
+        transition_state = "executing"
+        _post_trade_status(args.intent, "executing", "verifying", {"txHash": tx_hash})
+        transition_state = "verifying"
+
+        receipt_proc = subprocess.run(
+            [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, tx_hash],
+            text=True,
+            capture_output=True,
+        )
+        if receipt_proc.returncode != 0:
+            stderr = (receipt_proc.stderr or "").strip()
+            stdout = (receipt_proc.stdout or "").strip()
+            raise WalletStoreError(stderr or stdout or "cast receipt failed.")
+        receipt_payload = json.loads((receipt_proc.stdout or "{}").strip() or "{}")
+        receipt_status = str(receipt_payload.get("status", "0x0")).lower()
+        if receipt_status not in {"0x1", "1"}:
+            raise WalletStoreError(f"On-chain receipt indicates failure status '{receipt_status}'.")
+
+        _record_spend(state, args.chain, day_key, current_spend + amount_wei)
+        _post_trade_status(args.intent, "verifying", "filled", {"txHash": tx_hash})
+        return ok(
+            "Trade executed in real mode.",
+            tradeId=args.intent,
+            chain=args.chain,
+            mode=mode,
+            status="filled",
+            txHash=tx_hash,
+            day=day_key,
+            dailySpendWei=str(current_spend + amount_wei),
+            maxDailyNativeWei=str(max_daily_wei),
+        )
+    except WalletPolicyError as exc:
+        if transition_state == "executing":
+            try:
+                _post_trade_status(args.intent, "executing", "failed", {"reasonCode": "policy_denied", "reasonMessage": str(exc)})
+            except Exception:
+                pass
+        return fail(exc.code, str(exc), exc.action_hint, exc.details, exit_code=1)
+    except WalletStoreError as exc:
+        if transition_state == "executing":
+            try:
+                _post_trade_status(args.intent, "executing", "failed", {"reasonCode": "rpc_unavailable", "reasonMessage": str(exc)})
+            except Exception:
+                pass
+        elif transition_state == "init":
+            try:
+                _post_trade_status(args.intent, previous_status, "failed", {"reasonCode": "rpc_unavailable", "reasonMessage": str(exc)})
+            except Exception:
+                pass
+        elif transition_state == "verifying":
+            try:
+                _post_trade_status(args.intent, "verifying", "failed", {"reasonCode": "verification_timeout", "reasonMessage": str(exc)})
+            except Exception:
+                pass
+        return fail("trade_execute_failed", str(exc), "Verify approval state, wallet setup, and local chain connectivity.", {"tradeId": args.intent, "chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("trade_execute_failed", str(exc), "Inspect runtime trade execute path and retry.", {"tradeId": args.intent, "chain": args.chain}, exit_code=1)
+
+
+def cmd_report_send(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        trade = _read_trade_details(args.trade)
+        event_type = _canonical_event_for_trade_status(str(trade.get("status")))
+        payload = {
+            "schemaVersion": 1,
+            "agentId": trade.get("agentId"),
+            "tradeId": args.trade,
+            "eventType": event_type,
+            "payload": {
+                "status": trade.get("status"),
+                "mode": trade.get("mode"),
+                "chainKey": trade.get("chainKey"),
+                "reasonCode": trade.get("reasonCode"),
+                "reportedBy": "xclaw-agent-runtime",
+            },
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+        }
+        status_code, body = _api_request("POST", "/events", payload=payload, include_idempotency=True)
+        if status_code < 200 or status_code >= 300:
+            return fail(
+                str(body.get("code", "api_error")),
+                str(body.get("message", f"report send failed ({status_code})")),
+                str(body.get("actionHint", "Verify API auth and retry.")),
+                {"status": status_code, "tradeId": args.trade},
+                exit_code=1,
+            )
+        return ok("Trade execution report sent.", tradeId=args.trade, eventType=event_type)
+    except WalletStoreError as exc:
+        return fail("report_send_failed", str(exc), "Verify API env/auth and trade visibility, then retry.", {"tradeId": args.trade}, exit_code=1)
+    except Exception as exc:
+        return fail("report_send_failed", str(exc), "Inspect runtime report-send path and retry.", {"tradeId": args.trade}, exit_code=1)
 
 
 def cmd_wallet_health(args: argparse.Namespace) -> int:
@@ -1206,7 +1650,7 @@ def build_parser() -> argparse.ArgumentParser:
     intents_poll = intents_sub.add_parser("poll")
     intents_poll.add_argument("--chain", required=True)
     intents_poll.add_argument("--json", action="store_true")
-    intents_poll.set_defaults(func=lambda a: cmd_not_implemented(a, "intents.poll"))
+    intents_poll.set_defaults(func=cmd_intents_poll)
 
     approvals = sub.add_parser("approvals")
     approvals_sub = approvals.add_subparsers(dest="approvals_cmd")
@@ -1214,7 +1658,7 @@ def build_parser() -> argparse.ArgumentParser:
     approvals_check.add_argument("--intent", required=True)
     approvals_check.add_argument("--chain", required=True)
     approvals_check.add_argument("--json", action="store_true")
-    approvals_check.set_defaults(func=lambda a: cmd_not_implemented(a, "approvals.check"))
+    approvals_check.set_defaults(func=cmd_approvals_check)
 
     trade = sub.add_parser("trade")
     trade_sub = trade.add_subparsers(dest="trade_cmd")
@@ -1222,14 +1666,14 @@ def build_parser() -> argparse.ArgumentParser:
     trade_exec.add_argument("--intent", required=True)
     trade_exec.add_argument("--chain", required=True)
     trade_exec.add_argument("--json", action="store_true")
-    trade_exec.set_defaults(func=lambda a: cmd_not_implemented(a, "trade.execute"))
+    trade_exec.set_defaults(func=cmd_trade_execute)
 
     report = sub.add_parser("report")
     report_sub = report.add_subparsers(dest="report_cmd")
     report_send = report_sub.add_parser("send")
     report_send.add_argument("--trade", required=True)
     report_send.add_argument("--json", action="store_true")
-    report_send.set_defaults(func=lambda a: cmd_not_implemented(a, "report.send"))
+    report_send.set_defaults(func=cmd_report_send)
 
     offdex = sub.add_parser("offdex")
     offdex_sub = offdex.add_subparsers(dest="offdex_cmd")

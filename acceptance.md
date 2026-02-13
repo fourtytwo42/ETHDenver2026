@@ -876,3 +876,94 @@ Verification highlights:
 - `npm` not initially on shell PATH.
   - Resolution: run validations with `source ~/.nvm/nvm.sh && nvm use --silent default`.
 
+
+## Slice 11 Acceptance Evidence
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 11: Hardhat Local Trading Path`
+Issue mapping: `#11`
+
+### Objective + scope lock
+- Objective: implement hardhat-local trading lifecycle through runtime command surface and local deployed contracts.
+- Scope guard: off-DEX runtime lifecycle and copy lifecycle remain deferred to Slice 12/13.
+
+### File-level evidence (Slice 11)
+- Runtime implementation:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_trade_path.py`
+- API implementation:
+  - `apps/network-web/src/app/api/v1/trades/pending/route.ts`
+  - `apps/network-web/src/app/api/v1/trades/[tradeId]/route.ts`
+- Local chain/deploy:
+  - `hardhat.config.ts`
+  - `infrastructure/contracts/*.sol`
+  - `infrastructure/scripts/hardhat/*.ts`
+  - `config/chains/hardhat_local.json`
+- Contract/docs/process:
+  - `docs/api/openapi.v1.yaml`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `tsconfig.hardhat.json`
+  - `package.json`
+  - `package-lock.json`
+
+### Required global gate evidence
+- `npm run db:parity` -> PASS
+  - `"ok": true`
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+  - `"ok": true`
+- `npm run build` -> PASS
+  - Next.js build succeeded and includes new routes:
+    - `/api/v1/trades/pending`
+    - `/api/v1/trades/[tradeId]`
+
+### Slice 11 trade-path evidence
+- Hardhat node up:
+  - `npm run hardhat:node` -> PASS (`http://127.0.0.1:8545`, chainId `31337`)
+- Local deploy:
+  - `npm run hardhat:deploy-local` -> PASS
+  - Contracts deployed:
+    - `factory`: `0x5FbDB2315678afecb367f032d93F642f64180aa3`
+    - `router`: `0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512`
+    - `quoter`: `0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0`
+    - `escrow`: `0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9`
+    - `WETH`: `0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9`
+    - `USDC`: `0x5FC8d32690cc91D4c39d9d3abcBD16989F875707`
+- Local verify:
+  - `npm run hardhat:verify-local` -> PASS
+  - `verifiedContractCodePresent`: all `true`
+- Runtime command evidence:
+  - `xclaw-agent intents poll --chain hardhat_local --json` -> PASS (`count: 1` for approved trade)
+  - `xclaw-agent approvals check --intent trd_39b55a8c132b9b9ba30f --chain hardhat_local --json` -> PASS (`approved: true`)
+  - `xclaw-agent trade execute --intent trd_39b55a8c132b9b9ba30f --chain hardhat_local --json` -> PASS (`status: filled`, `txHash: 0x3a23877943943093928cb93a0f5c03de6596b9997688ba27b1dddbc45b20cd91`)
+  - `xclaw-agent report send --trade trd_39b55a8c132b9b9ba30f --json` -> PASS (`eventType: trade_filled`)
+- Lifecycle verification:
+  - `GET /api/v1/trades/trd_39b55a8c132b9b9ba30f` -> PASS (`status: filled`, tx hash persisted)
+- Retry constraints negative-path validation:
+  - Max retries guard:
+    - `xclaw-agent approvals check --intent trd_0b4745313796cbd1e51b --chain hardhat_local --json` -> expected failure
+    - Output `code: "policy_denied"` with `retry.failedAttempts: 3`, `eligible: false`
+  - Retry window guard:
+    - `xclaw-agent approvals check --intent trd_3da975cc297aa863ac3b --chain hardhat_local --json` -> expected failure
+    - Output `code: "policy_denied"` with `retry.failedAttempts: 1`, `eligible: false` (window exceeded)
+- Management/step-up checks for touched flows:
+  - `POST /api/v1/management/approvals/decision` without management session -> expected `auth_invalid`
+  - `POST /api/v1/management/approvals/scope` without management session -> expected `auth_invalid`
+
+### High-risk review protocol
+- Security-sensitive classes: auth/session-bound writes and local signing/execution path.
+- Second-opinion review pass: completed via targeted re-read of:
+  - runtime API request boundary + trade status transition emission,
+  - retry eligibility constraints,
+  - local chain transaction path (`cast calldata` + `cast rpc` workaround for hardhat RPC estimate issue).
+- Rollback plan:
+  1. revert Slice 11 touched files only,
+  2. rerun required validation gates,
+  3. verify docs/tracker/roadmap consistency restored.
