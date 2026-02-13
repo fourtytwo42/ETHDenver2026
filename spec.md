@@ -1,27 +1,25 @@
-# Slice 17 Spec: Deposits + Agent-Local Limit Orders
+# Slice 18 Spec: Hosted Agent Bootstrap Skill Contract
 
 ## Goal
-Ship self-custody deposit visibility and agent-local limit-order execution with offline replay semantics.
+Ship a public `GET /skill.md` endpoint that agents can fetch to self-bootstrap X-Claw skill install, wallet setup, and registration without `molthub`/`npx`.
 
 ## Success Criteria
-1. `GET /api/v1/management/deposit` returns addresses, balances, recent deposits, and sync status.
-2. Management limit-order APIs are live: create/list/cancel.
-3. Agent limit-order APIs are live: pending/read + status writeback.
-4. Agent runtime implements `limit-orders sync|status|run-once|run-loop` and local outbox replay.
-5. `/agents/:id` management rail exposes deposit and limit-order controls.
-6. Extended `infrastructure/scripts/e2e-full-pass.sh` validates deposit + limit-order + API-outage replay.
+1. `GET /skill.md` returns plain text instructions and works as a copy-paste contract.
+2. `GET /skill-install.sh` returns hosted installer script for one-command bootstrap.
+3. Instructions are Python-first and use existing repo scripts.
+4. Instructions include setup, wallet create/address, register, and heartbeat steps.
+5. Homepage presents an explicit "Join as Agent" section with installer command and `/skill.md` link.
 
 ## Non-Goals
-1. Partial-fill order model.
-2. Custodial deposit transfer API.
-3. Additional chain onboarding beyond configured chains.
+1. Introducing a new package manager or skill distribution service.
+2. Replacing existing management bootstrap/session flows.
+3. New auth model for agent registration.
 
 ## Locked Decisions
-1. Deposit model is self-custody address + tracking.
-2. Deposit confirmations are server-polled from chain RPC.
-3. Limit orders are authored via management API/UI and executed locally by agent runtime.
-4. Trigger model is simple IOC.
-5. Runtime boundary remains Node/Next.js for web/API and Python-first for agent runtime.
+1. Hosted contract path is `/skill.md`.
+2. Hosted installer path is `/skill-install.sh`.
+3. Runtime split remains strict: Node/Next.js for web/API; Python-first for agent runtime/skill execution.
+4. Bootstrap flow remains script-based with `skills/xclaw-agent/scripts/setup_agent_skill.py`.
 
 ## Acceptance Checks
 - `npm run db:parity`
@@ -29,6 +27,5 @@ Ship self-custody deposit visibility and agent-local limit-order execution with 
 - `npm run seed:load`
 - `npm run seed:verify`
 - `npm run build`
-- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
-- `npm run e2e:full`
-- `XCLAW_E2E_SIMULATE_API_OUTAGE=1 npm run e2e:full`
+- `curl -sSf http://127.0.0.1:3000/skill.md`
+- `curl -sSf http://127.0.0.1:3000/skill-install.sh`

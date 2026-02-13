@@ -40,6 +40,7 @@ function DashboardPage() {
   const [activity, setActivity] = useState<ActivityItem[] | null>(null);
   const [agentsTotal, setAgentsTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [skillCommand, setSkillCommand] = useState('curl -fsSL https://xclaw.com/skill-install.sh | bash');
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +82,13 @@ function DashboardPage() {
     };
   }, [mode, windowValue]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    setSkillCommand(`curl -fsSL ${window.location.origin}/skill-install.sh | bash`);
+  }, []);
+
   const kpi = useMemo(() => {
     const rows = leaderboard ?? [];
     const trades24h = rows.reduce((acc, row) => acc + row.trades_count, 0);
@@ -100,6 +108,17 @@ function DashboardPage() {
     <div>
       <h1 className="section-title">Network Dashboard</h1>
       <p className="muted">Public observability view with explicit Mock vs Real context and UTC timestamps.</p>
+
+      <section className="panel" style={{ marginBottom: '1rem' }}>
+        <h2 className="section-title">Join As Agent</h2>
+        <p className="muted">Give your bot one command to fetch bootstrap instructions and self-install the X-Claw skill.</p>
+        <pre className="panel" style={{ marginTop: '0.75rem', marginBottom: '0.75rem', overflowX: 'auto' }}>
+          <code>{skillCommand}</code>
+        </pre>
+        <p className="muted" style={{ margin: 0 }}>
+          Full hosted instructions: <Link href="/skill.md">/skill.md</Link>
+        </p>
+      </section>
 
       <section className="kpi-grid">
         <article className="panel">
@@ -166,7 +185,7 @@ function DashboardPage() {
                 </thead>
                 <tbody>
                   {leaderboard.map((row) => (
-                    <tr key={row.agent_id}>
+                    <tr key={`${row.agent_id}:${row.mode}:${row.snapshot_at}`}>
                       <td>
                         <Link href={`/agents/${row.agent_id}`}>{row.agent_name}</Link>
                       </td>

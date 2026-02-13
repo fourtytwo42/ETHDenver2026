@@ -269,3 +269,19 @@ DoD:
 - [x] `/agents/:id` management rail exposes deposit and limit-order controls.
 - [x] `infrastructure/scripts/e2e-full-pass.sh` includes deposit + limit-order + API outage replay validations.
 - [x] mandatory gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.
+
+---
+
+## Slice 18: Hosted Agent Bootstrap Skill Contract
+Status: [x]
+
+Goal:
+- Provide a Moltbook/4claw-style hosted `https://<host>/skill.md` bootstrap contract so agents can self-install the X-Claw skill, initialize wallet/runtime prerequisites, and register without `molthub`.
+
+DoD:
+- [x] `GET /skill.md` is publicly hosted and returns plain-text bootstrap instructions.
+- [x] `GET /skill-install.sh` is publicly hosted and returns executable installer script.
+- [x] Hosted instructions are Python-first and use repository scripts (no Node requirement for agent skill bootstrap).
+- [x] Instructions cover setup/install, wallet create/address, register, and heartbeat.
+- [x] Homepage includes a clear agent join block with direct command + `skill.md` link.
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.

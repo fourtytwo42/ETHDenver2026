@@ -73,8 +73,21 @@ def ensure_openclaw(workspace: Path) -> Path:
             ]
         )
     else:
-        run(["openclaw", "config", "set", "agents.defaults.workspace", str(workspace)])
+        # Preserve existing workspace unless explicitly requested to update.
+        if os.environ.get("XCLAW_OPENCLAW_SET_WORKSPACE", "").strip().lower() in {"1", "true", "yes"}:
+            run(["openclaw", "config", "set", "agents.defaults.workspace", str(workspace)])
     return openclaw_bin
+
+
+def ensure_managed_skill_copy(workspace: Path) -> Path:
+    source = workspace / "skills" / "xclaw-agent"
+    if not source.exists():
+        raise RuntimeError(f"Missing skill source directory: {source}")
+
+    target = Path.home() / ".openclaw" / "skills" / "xclaw-agent"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, target, dirs_exist_ok=True)
+    return target
 
 
 def ensure_launcher(workspace: Path, openclaw_bin: Path) -> Path:
@@ -125,6 +138,7 @@ def main() -> int:
 
     try:
         openclaw_bin = ensure_openclaw(workspace)
+        managed_skill = ensure_managed_skill_copy(workspace)
         launcher = ensure_launcher(workspace, openclaw_bin)
         versions = ensure_ready()
     except subprocess.CalledProcessError as exc:
@@ -142,6 +156,7 @@ def main() -> int:
         "code": "setup_ok",
         "workspace": str(workspace),
         "launcher": str(launcher),
+        "managedSkillPath": str(managed_skill),
         "openclawPath": str(openclaw_bin),
         "python": versions["python"],
         "openclaw": versions["openclaw"],

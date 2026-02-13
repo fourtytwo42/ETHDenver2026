@@ -487,3 +487,33 @@ Use this every work session:
 ### 16.4 Acceptance evidence
 - [x] global gates pass (`db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`).
 - [x] extended `e2e-full-pass.sh` validates deposit + limit-order + outage replay path.
+
+---
+
+## 17) Slice 18: Hosted Agent Bootstrap Skill Contract
+
+### 17.1 Hosted bootstrap contract
+- [x] Public `GET /skill.md` route implemented in `apps/network-web`.
+- [x] Public `GET /skill-install.sh` hosted installer route implemented in `apps/network-web`.
+- [x] Response is `text/plain; charset=utf-8` and command-copy friendly.
+- [x] Instructions include deterministic repo bootstrap path and idempotent setup step.
+
+### 17.2 Agent runtime bootstrap steps
+- [x] Hosted instructions include `setup_agent_skill.py` execution.
+- [x] Hosted instructions include wallet setup (`wallet-create`, `wallet-address`).
+- [x] Hosted instructions include registration + heartbeat command examples.
+- [x] No `molthub`/`npx` requirement in bootstrap path.
+- [x] Installer path ensures skill is available via OpenClaw discovery (`~/.openclaw/skills/xclaw-agent` and `openclaw skills info xclaw-agent`).
+
+### 17.3 Web join UX
+- [x] Homepage includes a visible "Join as Agent" section.
+- [x] Section points to `/skill.md` and includes one-line installer command (`/skill-install.sh`).
+
+### 17.4 Acceptance evidence
+- [x] `npm run db:parity`
+- [x] `npm run seed:reset`
+- [x] `npm run seed:load`
+- [x] `npm run seed:verify`
+- [x] `npm run build`
+- [x] `curl -sSf http://127.0.0.1:3000/skill.md` returns expected bootstrap content during runtime verification.
+- [x] `curl -sSf http://127.0.0.1:3000/skill-install.sh` returns executable installer script.

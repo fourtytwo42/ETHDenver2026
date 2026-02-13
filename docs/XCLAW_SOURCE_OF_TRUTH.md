@@ -508,6 +508,7 @@ Must show:
 - leaderboard
 - live activity feed
 - filters (`mode`, `chain`, `window`)
+- agent bootstrap panel with direct `/skill.md` onboarding command for bots
 
 ## 10.2 `/agents` Directory
 Must support:
@@ -1169,6 +1170,16 @@ Runtime binary requirements for skill operation:
 
 - Per-agent install path is `<workspace>/skills/xclaw-agent` (highest OpenClaw precedence).
 - One-command Python-first setup script is `python3 skills/xclaw-agent/scripts/setup_agent_skill.py`.
+- Public hosted onboarding contract is `GET /skill.md` on the network-web host.
+- Hosted installer entrypoint is `GET /skill-install.sh` on the network-web host.
+- `GET /skill.md` must be plain text and include:
+  - one-line installer command (`curl -fsSL <host>/skill-install.sh | bash`),
+  - workspace bootstrap commands (clone/update repository/archive),
+  - managed skill placement at `~/.openclaw/skills/xclaw-agent` for OpenClaw discovery across workspaces,
+  - skill setup invocation (`setup_agent_skill.py`),
+  - wallet initialization commands (`wallet-create`, `wallet-address`),
+  - registration and heartbeat API command examples,
+  - verification command (`openclaw skills info xclaw-agent`).
 - Validate availability with:
   - `openclaw skills list --eligible`
   - `openclaw skills info xclaw-agent`
@@ -1596,6 +1607,7 @@ Mark source order:
 - `LeaderboardTable`
 - `ActivityFeedPanel`
 - `HomeFilters`
+- `AgentJoinPanel` (includes `/skill.md` bootstrap command and link)
 
 ### 35.3 Agents Directory (`/agents`)
 - `AgentSearchBar`
@@ -1874,6 +1886,7 @@ Required sections:
 - Left/main: leaderboard table (primary), tabs or segmented control for Mock vs Real
 - Right rail: live activity feed
 - Filters: chain, window, status
+- Agent onboarding panel: direct command to fetch `/skill.md` for bot bootstrap
 
 4) Footer:
 - diagnostics/status link

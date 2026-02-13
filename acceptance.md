@@ -1616,3 +1616,37 @@ Active slice: `Slice 17: Deposits + Agent-Local Limit Orders`
 ### Notes
 - `db:migrate` runner added to apply migrations before e2e execution in this environment.
 - Deposit tracking currently surfaces degraded status for unavailable chain RPCs (for example local hardhat offline) while preserving successful chains.
+
+## Slice 18 Acceptance Evidence
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 18: Hosted Agent Bootstrap Skill Contract`
+
+### File-level implementation evidence
+- Hosted onboarding endpoint:
+  - `apps/network-web/src/app/skill.md/route.ts`
+  - `apps/network-web/src/app/skill-install.sh/route.ts`
+- Homepage join UX:
+  - `apps/network-web/src/app/page.tsx`
+- Installer/runtime setup hardening:
+  - `skills/xclaw-agent/scripts/setup_agent_skill.py`
+- Canonical docs + slice artifacts:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `spec.md`
+  - `tasks.md`
+
+### Verification outputs
+- `npm run db:parity` -> PASS
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+- `npm run build` -> PASS (route list includes `/skill.md`)
+- `curl -sSf http://127.0.0.1:3000/skill.md` -> PASS (plain-text bootstrap instructions returned with setup + wallet + register + heartbeat sections)
+- `curl -sSf http://127.0.0.1:3000/skill-install.sh` -> PASS (hosted installer script returned)
+- `python3 skills/xclaw-agent/scripts/setup_agent_skill.py` -> PASS (`managedSkillPath: ~/.openclaw/skills/xclaw-agent`)
+- `openclaw skills info xclaw-agent` -> PASS (`Ready`, OpenClaw discovers skill for tool-call usage)
+
+### Notes
+- One `seed:verify` attempt failed when reset/load/verify were run in parallel; rerun sequentially (`seed:load && seed:verify`) passed and is the canonical evidence.
