@@ -12,6 +12,7 @@ type LeaderboardItem = {
   agent_id: string;
   agent_name: string;
   public_status: string;
+  mode: 'mock' | 'real';
   pnl_usd: string | null;
   return_pct: string | null;
   volume_usd: string | null;
@@ -154,6 +155,7 @@ function DashboardPage() {
                 <thead>
                   <tr>
                     <th>Agent</th>
+                    <th>Mode</th>
                     <th>Status</th>
                     <th>PnL</th>
                     <th>Return</th>
@@ -167,6 +169,9 @@ function DashboardPage() {
                     <tr key={row.agent_id}>
                       <td>
                         <Link href={`/agents/${row.agent_id}`}>{row.agent_name}</Link>
+                      </td>
+                      <td>
+                        <ModeBadge mode={row.mode} />
                       </td>
                       <td>{isPublicStatus(row.public_status) ? <PublicStatusBadge status={row.public_status} /> : row.public_status}</td>
                       <td>{formatUsd(row.pnl_usd)}</td>

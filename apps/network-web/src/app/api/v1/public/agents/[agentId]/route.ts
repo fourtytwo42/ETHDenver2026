@@ -75,30 +75,100 @@ export async function GET(
     );
 
     const metrics = await dbQuery<{
-      window: string;
+      mode: 'mock' | 'real';
+      window_key: string;
+      chain_key: string;
+      score: string | null;
       pnl_usd: string | null;
       return_pct: string | null;
       volume_usd: string | null;
       trades_count: number;
       followers_count: number;
+      self_trades_count: number;
+      copied_trades_count: number;
+      self_volume_usd: string | null;
+      copied_volume_usd: string | null;
+      self_pnl_usd: string | null;
+      copied_pnl_usd: string | null;
+      stale: boolean;
+      degraded_reason: string | null;
       created_at: string;
     }>(
       `
+      with ranked as (
+        select
+          mode,
+          "window" as window_key,
+          chain_key,
+          score::text,
+          pnl_usd::text,
+          return_pct::text,
+          volume_usd::text,
+          trades_count,
+          followers_count,
+          self_trades_count,
+          copied_trades_count,
+          self_volume_usd::text,
+          copied_volume_usd::text,
+          self_pnl_usd::text,
+          copied_pnl_usd::text,
+          stale,
+          degraded_reason,
+          created_at::text,
+          row_number() over (partition by mode, "window", chain_key order by created_at desc) as rn
+        from performance_snapshots
+        where agent_id = $1
+          and "window" = '7d'::performance_window
+          and chain_key = 'all'
+      )
       select
-        "window" as window,
-        pnl_usd::text,
-        return_pct::text,
-        volume_usd::text,
+        mode,
+        window_key,
+        chain_key,
+        score,
+        pnl_usd,
+        return_pct,
+        volume_usd,
         trades_count,
         followers_count,
-        created_at::text
-      from performance_snapshots
-      where agent_id = $1
-      order by created_at desc
-      limit 1
+        self_trades_count,
+        copied_trades_count,
+        self_volume_usd,
+        copied_volume_usd,
+        self_pnl_usd,
+        copied_pnl_usd,
+        stale,
+        degraded_reason,
+        created_at
+      from ranked
+      where rn = 1
+      order by mode asc
       `,
       [agentId]
     );
+
+    const mapMetric = (row: (typeof metrics.rows)[number] | null) =>
+      row
+        ? {
+            ...row,
+            window: row.window_key
+          }
+        : null;
+
+    const latestMetrics = mapMetric(metrics.rows.find((row) => row.mode === 'real') ?? metrics.rows[0] ?? null);
+    const mockMetrics = mapMetric(metrics.rows.find((row) => row.mode === 'mock') ?? null);
+    const realMetrics = mapMetric(metrics.rows.find((row) => row.mode === 'real') ?? null);
+
+    const copyBreakdown = latestMetrics
+      ? {
+          selfTradesCount: latestMetrics.self_trades_count,
+          copiedTradesCount: latestMetrics.copied_trades_count,
+          selfVolumeUsd: latestMetrics.self_volume_usd,
+          copiedVolumeUsd: latestMetrics.copied_volume_usd,
+          selfPnlUsd: latestMetrics.self_pnl_usd,
+          copiedPnlUsd: latestMetrics.copied_pnl_usd
+        }
+      : null;
 
     const offdexHistory = await dbQuery<{
       settlement_intent_id: string;
@@ -141,7 +211,12 @@ export async function GET(
         ok: true,
         agent: agent.rows[0],
         wallets: wallets.rows,
-        latestMetrics: metrics.rows[0] ?? null,
+        latestMetrics,
+        metricsByMode: {
+          mock: mockMetrics,
+          real: realMetrics
+        },
+        copyBreakdown,
         offdexHistory: offdexHistory.rows.map((row) => ({
           settlementIntentId: row.settlement_intent_id,
           chainKey: row.chain_key,

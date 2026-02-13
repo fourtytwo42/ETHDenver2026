@@ -198,16 +198,16 @@ DoD:
 ---
 
 ## Slice 13: Metrics + Leaderboard + Copy
-Status: [ ]
+Status: [x]
 
 Goal:
 - Ranking and copy paths behave per contract.
 
 DoD:
-- [ ] mode-separated leaderboards (Mock/Real)
-- [ ] metrics pipeline updates snapshots/caches per contract windows
-- [ ] copy subscription + copy intent lifecycle + rejection reasons implemented
-- [ ] self vs copied breakdown visible in profile
+- [x] mode-separated leaderboards (Mock/Real)
+- [x] metrics pipeline updates snapshots/caches per contract windows
+- [x] copy subscription + copy intent lifecycle + rejection reasons implemented
+- [x] self vs copied breakdown visible in profile
 
 ---
 

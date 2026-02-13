@@ -1,29 +1,24 @@
-# Slice 12 Tasks
+# Slice 13 Tasks
 
-Active slice: `Slice 12: Off-DEX Escrow Local Path`
+Active slice: `Slice 13: Metrics + Leaderboard + Copy`
 
 ## Checklist
 - [x] Record pre-flight objective, acceptance checks, touched-file allowlist, and slice guardrails.
-- [x] Implement off-DEX API route handlers:
-  - [x] `POST /api/v1/offdex/intents`
-  - [x] `POST /api/v1/offdex/intents/:intentId/accept`
-  - [x] `POST /api/v1/offdex/intents/:intentId/cancel`
-  - [x] `POST /api/v1/offdex/intents/:intentId/status`
-  - [x] `POST /api/v1/offdex/intents/:intentId/settle-request`
-  - [x] `GET /api/v1/offdex/intents`
-- [x] Add off-DEX transition/participant helper logic in network-web lib.
-- [x] Add shared validation schemas for off-DEX create/status payloads.
-- [x] Upgrade local `MockEscrow` with explicit maker/taker funding state checks before settle.
-- [x] Refresh hardhat local deploy/verify artifacts and chain-config evidence metadata.
-- [x] Implement runtime CLI handlers for:
-  - [x] `offdex intents poll`
-  - [x] `offdex accept`
-  - [x] `offdex settle`
-- [x] Add/extend runtime tests for off-DEX command behavior and failure paths.
-- [x] Extend public profile API + `/agents/:id` UI with redacted off-DEX history and tx references.
-- [x] Extend public activity API with off-DEX lifecycle events.
-- [x] Update OpenAPI off-DEX auth/query/schema details to match implementation.
-- [x] Run required global validation gates.
-- [x] Run Slice-12 functional/negative-path verification and capture evidence.
-- [x] Update tracker/roadmap Slice 12 status and checkboxes.
-- [ ] Commit/push Slice 12 and post evidence + commit hash to issue `#12`.
+- [x] Add migration for metrics snapshot v2 and copy intent linkage/indexes.
+- [x] Update migration parity script to evaluate all migrations including Slice 13 additions.
+- [x] Add copy subscription create/patch JSON schemas.
+- [x] Extend copy intent schema with follower trade linkage + updated timestamp.
+- [x] Implement metrics recompute + leaderboard cache utility.
+- [x] Implement copy lifecycle utility (intent generation, expiry, status sync).
+- [x] Implement `POST/GET /api/v1/copy/subscriptions`.
+- [x] Implement `PATCH /api/v1/copy/subscriptions/:subscriptionId`.
+- [x] Wire trade status transitions to copy lifecycle + metrics recompute.
+- [x] Update public leaderboard route for mode/chain-aware snapshot reads + Redis cache.
+- [x] Update public profile route to include self-vs-copied metrics breakdown.
+- [x] Update public trades route to include trade source lineage markers.
+- [x] Update homepage/profile UI to display mode row and copy breakdown/source signals.
+- [x] Sync OpenAPI copy subscription schema constraints.
+- [x] Run full required validation gates and capture outputs.
+- [x] Capture slice-specific functional/negative checks in acceptance evidence.
+- [x] Update source-of-truth/roadmap/tracker statuses for Slice 13 completion.
+- [ ] Commit/push Slice 13 and post evidence + commit hash to issue `#13`.

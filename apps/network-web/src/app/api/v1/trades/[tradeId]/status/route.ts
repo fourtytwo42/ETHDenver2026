@@ -9,6 +9,8 @@ import { makeId } from '@/lib/ids';
 import { getRequestId } from '@/lib/request-id';
 import { eventTypeForTradeStatus, isAllowedTransition } from '@/lib/trade-state';
 import { validatePayload } from '@/lib/validation';
+import { generateCopyIntentsForLeaderFill, syncCopyIntentFromTradeStatus } from '@/lib/copy-lifecycle';
+import { recomputeMetricsForAgents } from '@/lib/metrics';
 
 export const runtime = 'nodejs';
 
@@ -160,6 +162,29 @@ export async function POST(
         ]
       );
 
+      const affectedAgents = new Set<string>([auth.agentId]);
+      const copySyncAgents = await syncCopyIntentFromTradeStatus(
+        client,
+        pathTradeId,
+        body.toStatus,
+        body.reasonCode ?? null,
+        body.reasonMessage ?? null
+      );
+      for (const agentId of copySyncAgents) {
+        affectedAgents.add(agentId);
+      }
+
+      if (body.toStatus === 'filled') {
+        const generatedAgents = await generateCopyIntentsForLeaderFill(client, pathTradeId, auth.agentId, body.at);
+        for (const agentId of generatedAgents) {
+          affectedAgents.add(agentId);
+        }
+      }
+
+      if (['filled', 'failed', 'verification_timeout', 'rejected', 'expired'].includes(body.toStatus)) {
+        await recomputeMetricsForAgents(client, [...affectedAgents]);
+      }
+
       return { ok: true as const };
     });
 
@@ -221,7 +246,8 @@ export async function POST(
 
     await storeIdempotencyResponse(idempotency.ctx, 200, responseBody);
     return successResponse(responseBody, 200, requestId);
-  } catch {
+  } catch (error) {
+    console.error('trade_status_route_error', error);
     return internalErrorResponse(requestId);
   }
 }

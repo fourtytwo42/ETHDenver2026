@@ -1063,25 +1063,38 @@ components:
           type: boolean
         scaleBps:
           type: integer
+          minimum: 1
+          maximum: 100000
         maxTradeUsd:
           type: string
+          pattern: '^[0-9]+(\.[0-9]{1,8})?$'
         allowedTokens:
           type: array
+          maxItems: 64
+          uniqueItems: true
           items:
             type: string
+            pattern: '^0x[a-fA-F0-9]{40}$'
     CopySubscriptionPatchRequest:
       type: object
+      minProperties: 1
       properties:
         enabled:
           type: boolean
         scaleBps:
           type: integer
+          minimum: 1
+          maximum: 100000
         maxTradeUsd:
           type: string
+          pattern: '^[0-9]+(\.[0-9]{1,8})?$'
         allowedTokens:
           type: array
+          maxItems: 64
+          uniqueItems: true
           items:
             type: string
+            pattern: '^0x[a-fA-F0-9]{40}$'
     OffdexIntentCreateRequest:
       type: object
       required: [schemaVersion, chainKey, makerAgentId, makerWalletAddress, makerToken, takerToken, makerAmount, takerAmount, escrowContract, expiresAt]

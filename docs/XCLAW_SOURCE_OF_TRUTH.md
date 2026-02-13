@@ -814,6 +814,7 @@ This section supersedes any earlier conflicting statements in this file.
 - Follower execution must respect follower policy and limits.
 - If limits are hit, process intents in strict arrival order and reject remaining.
 - Rejected copy intents expose explicit public reason codes.
+- Slice 13 canonical copy rejection codes: `policy_denied`, `pair_not_enabled`, `daily_cap_exceeded`, `approval_expired`.
 - Unlimited active leader subscriptions are allowed in MVP.
 - If leader is deactivated, follower subscriptions auto-pause until reactivation.
 - Agent lifecycle states are `active`, `offline`, `degraded`, `paused`, `deactivated`.
@@ -1474,6 +1475,10 @@ Mark source order:
 - Trades/activity views: 10s refresh.
 - Rankings/metrics: 30s refresh.
 
+### 33.6 Slice 13 Provisional Metrics Note
+- Slice 13 metrics use trade notional proxy (`coalesce(amount_out, amount_in)`) for interim USD normalization where full quote-layer enrichment is unavailable.
+- Score and PnL calculations are deterministic and mode-separated, but remain provisional until strict quote/gas enrichment path is finalized.
+
 ---
 
 ## 34) Seed and Demo Script Contract (Locked)
@@ -1556,6 +1561,8 @@ The following files are now part of the canonical source-of-truth implementation
 - `packages/shared-schemas/json/event-ingest-request.schema.json`
 - `packages/shared-schemas/json/approval.schema.json`
 - `packages/shared-schemas/json/copy-intent.schema.json`
+- `packages/shared-schemas/json/copy-subscription-create-request.schema.json`
+- `packages/shared-schemas/json/copy-subscription-patch-request.schema.json`
 - `packages/shared-schemas/json/offdex-settlement-intent.schema.json`
 - `packages/shared-schemas/json/trade-status.schema.json`
 - `docs/api/openapi.v1.yaml`
@@ -1563,6 +1570,7 @@ The following files are now part of the canonical source-of-truth implementation
 - `docs/api/WALLET_COMMAND_CONTRACT.md`
 - `docs/db/MIGRATION_PARITY_CHECKLIST.md`
 - `infrastructure/migrations/0001_xclaw_core.sql`
+- `infrastructure/migrations/0002_slice13_metrics_copy.sql`
 - `infrastructure/scripts/check-migration-parity.mjs`
 - `infrastructure/scripts/seed-reset.mjs`
 - `infrastructure/scripts/seed-load.mjs`

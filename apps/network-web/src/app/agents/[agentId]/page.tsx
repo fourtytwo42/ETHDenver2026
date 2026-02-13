@@ -43,6 +43,16 @@ type AgentProfilePayload = {
         created_at: string;
       }
     | null;
+  copyBreakdown:
+    | {
+        selfTradesCount: number;
+        copiedTradesCount: number;
+        selfVolumeUsd: string | null;
+        copiedVolumeUsd: string | null;
+        selfPnlUsd: string | null;
+        copiedPnlUsd: string | null;
+      }
+    | null;
   offdexHistory: Array<{
     settlementIntentId: string;
     chainKey: string;
@@ -62,6 +72,8 @@ type TradePayload = {
   ok: boolean;
   items: Array<{
     trade_id: string;
+    source_trade_id: string | null;
+    source_label?: 'self' | 'copied';
     chain_key: string;
     is_mock: boolean;
     status: string;
@@ -492,6 +504,7 @@ export default function AgentPublicProfilePage() {
               <table>
                 <thead>
                   <tr>
+                    <th>Source</th>
                     <th>Mode</th>
                     <th>Pair</th>
                     <th>Status</th>
@@ -503,6 +516,7 @@ export default function AgentPublicProfilePage() {
                 <tbody>
                   {trades.map((trade) => (
                     <tr key={trade.trade_id}>
+                      <td>{trade.source_label ?? (trade.source_trade_id ? 'copied' : 'self')}</td>
                       <td>{trade.is_mock ? <ModeBadge mode="mock" /> : <ModeBadge mode="real" />}</td>
                       <td>{trade.pair}</td>
                       <td>{trade.status}</td>
@@ -513,6 +527,18 @@ export default function AgentPublicProfilePage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          ) : null}
+          {profile?.copyBreakdown ? (
+            <div style={{ marginTop: '0.8rem' }}>
+              <div className="muted">Copy Breakdown (7d)</div>
+              <div>
+                Self trades: {formatNumber(profile.copyBreakdown.selfTradesCount)} | Copied trades:{' '}
+                {formatNumber(profile.copyBreakdown.copiedTradesCount)}
+              </div>
+              <div>
+                Self PnL: {formatUsd(profile.copyBreakdown.selfPnlUsd)} | Copied PnL: {formatUsd(profile.copyBreakdown.copiedPnlUsd)}
+              </div>
             </div>
           ) : null}
         </section>

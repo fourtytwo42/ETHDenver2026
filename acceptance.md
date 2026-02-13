@@ -1079,3 +1079,100 @@ Using local API server with agent bearer keys for maker+taker:
   1. revert Slice 12 touched files only,
   2. rerun required npm gates + off-DEX command/API checks,
   3. confirm tracker/roadmap/docs return to pre-Slice-12 state.
+
+## Slice 13 Acceptance Evidence
+
+Date (UTC): 2026-02-13  
+Active slice: `Slice 13: Metrics + Leaderboard + Copy`  
+Issue mapping: `#13`
+
+### Objective + scope lock
+- Objective: implement mode-separated leaderboard + metrics snapshot/cache pipeline + copy subscription/lifecycle + profile copy breakdown.
+- Scope guard honored: no Slice 14 observability implementation and no Slice 15 Base Sepolia promotion work.
+
+### File-level evidence (Slice 13)
+- DB/schema/contracts:
+  - `infrastructure/migrations/0002_slice13_metrics_copy.sql`
+  - `infrastructure/scripts/check-migration-parity.mjs`
+  - `packages/shared-schemas/json/copy-intent.schema.json`
+  - `packages/shared-schemas/json/copy-subscription-create-request.schema.json`
+  - `packages/shared-schemas/json/copy-subscription-patch-request.schema.json`
+- Server/runtime:
+  - `apps/network-web/src/lib/metrics.ts`
+  - `apps/network-web/src/lib/copy-lifecycle.ts`
+  - `apps/network-web/src/app/api/v1/copy/subscriptions/route.ts`
+  - `apps/network-web/src/app/api/v1/copy/subscriptions/[subscriptionId]/route.ts`
+  - `apps/network-web/src/app/api/v1/trades/[tradeId]/status/route.ts`
+  - `apps/network-web/src/app/api/v1/public/leaderboard/route.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/[agentId]/route.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/[agentId]/trades/route.ts`
+- Web/UI + canonical artifacts:
+  - `apps/network-web/src/app/page.tsx`
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+  - `docs/api/openapi.v1.yaml`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+
+### Required gate evidence
+- `npm run db:parity` -> PASS
+  - `ok: true`
+  - migration files include `0001_xclaw_core.sql`, `0002_slice13_metrics_copy.sql`
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+- `npm run build` -> PASS
+
+### Slice-specific API/flow evidence (local)
+Environment for local API smoke:
+- Next dev server launched with explicit env overrides:
+  - `XCLAW_MANAGEMENT_TOKEN_ENC_KEY=<32-byte-base64>`
+  - `XCLAW_AGENT_API_KEYS={"ag_leader13":"leader_token_13","ag_follower13":"follower_token_13","ag_slice7":"slice7_token_abc12345"}`
+- Local Postgres reachable on `127.0.0.1:55432`; migration `0002_slice13_metrics_copy.sql` applied with `psql -f`.
+
+Copy subscriptions:
+- Self-follow rejection (negative path):
+  - `POST /api/v1/copy/subscriptions` with leader=follower -> `400 payload_invalid` (`Follower cannot subscribe to itself.`)
+- Session mismatch rejection (negative path):
+  - follower in payload not equal to session agent -> `401 auth_invalid`
+- Invalid scale rejection (negative path):
+  - `scaleBps: 0` -> `400 payload_invalid`, schema detail `must be >= 1`
+- Create/list/update success:
+  - `POST /api/v1/copy/subscriptions` -> `200` with subscription payload
+  - `GET /api/v1/copy/subscriptions` -> `200` with follower-scoped items
+  - `PATCH /api/v1/copy/subscriptions/:id` -> `200` persisted updates
+
+Copy lifecycle:
+- Leader trade terminal fill generated copy intent + follower trade lineage:
+  - `copy_intents` row created with `source_trade_id=<leader_trade>` and `follower_trade_id=<follower_trade>`
+- Follower execution updates copy intent status:
+  - follower trade `approved -> executing -> verifying -> filled` via `POST /api/v1/trades/:id/status`
+  - corresponding `copy_intents.status` updated to `filled`
+- Rejection reason persistence:
+  - with subscription `maxTradeUsd=1`, next leader fill produced
+  - `copy_intents.status='rejected'`, `rejection_code='daily_cap_exceeded'`, explicit message persisted.
+
+Metrics + leaderboard:
+- Mode split verified:
+  - `GET /api/v1/public/leaderboard?window=7d&mode=real&chain=all` returned only `mode=real` rows
+  - `GET /api/v1/public/leaderboard?window=7d&mode=mock&chain=all` returned only `mode=mock` rows
+- Redis cache behavior verified:
+  - first real-mode call `cached:false`
+  - immediate repeat call `cached:true`
+- Profile breakdown + lineage visibility verified:
+  - `GET /api/v1/public/agents/ag_follower13` includes `copyBreakdown` with copied metrics
+  - `GET /api/v1/public/agents/ag_follower13/trades` includes copied rows (`source_label: copied`, `source_trade_id` populated)
+
+### High-risk review mode notes
+- Security/auth-sensitive surfaces touched: management session + CSRF protected copy subscription writes.
+- Negative auth-path evidence captured (`401 auth_invalid` for session-agent mismatch).
+- Rollback plan:
+  1. revert Slice 13 touched files only,
+  2. rerun required gates,
+  3. verify tracker/roadmap/source-of-truth sync state.
+
+### Follow-up closure items
+- Commit/push + GitHub issue evidence posting to `#13` are pending in this session.

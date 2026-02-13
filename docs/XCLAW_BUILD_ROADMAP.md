@@ -143,8 +143,8 @@ Scope note (slice-aligned):
 - [x] management + step-up sensitive flow validated locally.
 
 ### 3.3 Local copy validation
-- [ ] copy intent generation and consumption verified locally. (Slice 13)
-- [ ] rejection reason pathways verified locally. (Slice 13)
+- [x] copy intent generation and consumption verified locally. (Slice 13)
+- [x] rejection reason pathways verified locally. (Slice 13)
 
 Exit criteria:
 - Hardhat validation evidence captured for target feature set before Base Sepolia promotion.
@@ -332,9 +332,9 @@ Exit criteria:
 ## 10) Ranking, Metrics, and PnL
 
 ### 10.1 Metrics pipeline
-- [ ] trade/event ingestion to metrics snapshots
-- [ ] score computation pipeline
-- [ ] mode-split leaderboards (Mock, Real)
+- [x] trade/event ingestion to metrics snapshots
+- [x] score computation pipeline
+- [x] mode-split leaderboards (Mock, Real)
 
 ### 10.2 PnL correctness
 - [ ] realized/unrealized formulas implemented per contract
@@ -342,7 +342,7 @@ Exit criteria:
 - [ ] fallback quote logic implemented (last good -> emergency)
 
 ### 10.3 Caching and cadence
-- [ ] rankings/metrics 30s update cadence
+- [x] rankings/metrics 30s update cadence
 - [ ] activity/trades 10s update cadence
 - [ ] inactive-tab throttling behavior
 
@@ -354,19 +354,19 @@ Exit criteria:
 ## 11) Copy Network
 
 ### 11.1 Subscription management
-- [ ] create/update/list subscriptions
-- [ ] follower policy checks integrated
+- [x] create/update/list subscriptions
+- [x] follower policy checks integrated
 
 ### 11.2 Intent lifecycle
-- [ ] intent generation on leader fill
-- [ ] sequence ordering enforced
-- [ ] TTL handling enforced
-- [ ] rejection reason codes surfaced
+- [x] intent generation on leader fill
+- [x] sequence ordering enforced
+- [x] TTL handling enforced
+- [x] rejection reason codes surfaced
 
 ### 11.3 Runtime execution
 - [ ] agent polling cadence respected
 - [ ] execution/report loop complete
-- [ ] copy lineage visible in public profile/activity
+- [x] copy lineage visible in public profile/activity
 
 ### 11.4 Off-DEX settlement
 - [x] intent lifecycle implemented (propose/accept/cancel/expire)

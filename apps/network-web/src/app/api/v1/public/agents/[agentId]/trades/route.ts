@@ -19,6 +19,7 @@ export async function GET(
 
     const rows = await dbQuery<{
       trade_id: string;
+      source_trade_id: string | null;
       chain_key: string;
       is_mock: boolean;
       status: string;
@@ -40,6 +41,7 @@ export async function GET(
       `
       select
         trade_id,
+        source_trade_id,
         chain_key,
         is_mock,
         status,
@@ -71,6 +73,10 @@ export async function GET(
         agentId,
         limit,
         items: rows.rows
+          .map((row) => ({
+            ...row,
+            source_label: row.source_trade_id ? 'copied' : 'self'
+          }))
       },
       200,
       requestId

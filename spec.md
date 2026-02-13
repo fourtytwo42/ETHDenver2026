@@ -1,34 +1,28 @@
-# Slice 12 Spec: Off-DEX Escrow Local Path
+# Slice 13 Spec: Metrics + Leaderboard + Copy
 
 ## Goal
-Implement the canonical Slice 12 off-DEX escrow lifecycle so `intent -> accept -> fund -> settle` works end-to-end on Hardhat local with contract-compliant API/runtime flows and public visibility.
+Implement canonical Slice 13 behavior so ranking/metrics and copy lifecycle paths are functional with auditable outputs and mode-separated public visibility.
 
 ## Success Criteria
-1. Agent-facing off-DEX API endpoints are implemented and functional:
-   - `POST /api/v1/offdex/intents`
-   - `POST /api/v1/offdex/intents/:intentId/accept`
-   - `POST /api/v1/offdex/intents/:intentId/cancel`
-   - `POST /api/v1/offdex/intents/:intentId/status`
-   - `POST /api/v1/offdex/intents/:intentId/settle-request`
-   - `GET /api/v1/offdex/intents`
-2. Runtime commands are implemented and functional:
-   - `xclaw-agent offdex intents poll --chain <chain_key> --json`
-   - `xclaw-agent offdex accept --intent <intent_id> --chain <chain_key> --json`
-   - `xclaw-agent offdex settle --intent <intent_id> --chain <chain_key> --json`
-3. Updated `MockEscrow` enforces maker+taker funding before settlement.
-4. Public profile/activity include redacted off-DEX history with settlement/funding tx references.
-5. Slice 12 docs/artifacts are synchronized and evidence captured.
+1. `GET /api/v1/public/leaderboard` is mode/chain-aware and backed by snapshot cache pipeline.
+2. Metrics snapshots are recomputed from trade/copy lifecycle updates across windows `24h`, `7d`, `30d`, `all`.
+3. Copy subscription endpoints are implemented:
+   - `POST /api/v1/copy/subscriptions`
+   - `GET /api/v1/copy/subscriptions`
+   - `PATCH /api/v1/copy/subscriptions/:subscriptionId`
+4. Leader `filled` trades generate ordered copy intents and materialize follower trades (`source_trade_id` lineage).
+5. Copy rejection reasons are persisted and visible to API consumers.
+6. Agent profile exposes self-vs-copied breakdown and trade source labels.
 
 ## Non-Goals
-1. Copy trading lifecycle (Slice 13).
-2. Metrics/leaderboard engine expansion (Slice 13).
-3. Base Sepolia deployment/promotion (Slice 15).
+1. Slice 14 observability deliverables.
+2. Slice 15 Base Sepolia deployment/promotion.
+3. New agent runtime command surface for copy polling (reuse existing trade poll/execute loop).
 
 ## Locked Decisions
-1. Public off-DEX history is exposed by extending `GET /api/v1/public/agents/:agentId`.
-2. Hardhat local escrow validation requires explicit maker/taker funding semantics.
-3. Runtime command surface remains Python-first.
-4. Error/auth/idempotency contract remains unchanged.
+1. Copy execution path is server-generated copy intents plus server-materialized follower trades.
+2. Metrics use snapshot-v2 plus Redis leaderboard cache.
+3. Source-of-truth updates include scoped provisional note for current metrics approximation model.
 
 ## Acceptance Checks
 1. `npm run db:parity`
@@ -36,9 +30,9 @@ Implement the canonical Slice 12 off-DEX escrow lifecycle so `intent -> accept -
 3. `npm run seed:load`
 4. `npm run seed:verify`
 5. `npm run build`
-6. Slice-12 matrix:
-   - hardhat local deploy/verify evidence with updated escrow flow
-   - off-DEX create/accept/fund/settle API transitions
-   - runtime off-DEX poll/accept/settle command evidence
-   - negative-path validation (`trade_invalid_transition`, auth/idempotency constraints)
-   - redacted public profile/activity visibility of settlement metadata and tx hashes
+6. Slice-13 matrix:
+   - copy subscription success + negative auth/validation checks
+   - leader fill -> copy intent + follower trade materialization
+   - rejected copy intent contains explicit rejection code/message
+   - mode-separated leaderboard payload behavior
+   - profile self-vs-copied visibility

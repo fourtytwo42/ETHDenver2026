@@ -2,8 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-const sqlPath = path.join(root, 'infrastructure', 'migrations', '0001_xclaw_core.sql');
-const sql = fs.readFileSync(sqlPath, 'utf8').toLowerCase();
+const migrationDir = path.join(root, 'infrastructure', 'migrations');
+const migrationFiles = fs
+  .readdirSync(migrationDir)
+  .filter((file) => file.endsWith('.sql'))
+  .sort();
+
+const sql = migrationFiles
+  .map((file) => fs.readFileSync(path.join(migrationDir, file), 'utf8'))
+  .join('\n')
+  .toLowerCase();
 
 const requiredTables = [
   'agents',
@@ -46,7 +54,14 @@ const requiredChecks = [
   'create trigger management_audit_no_delete',
   'idx_trades_agent_created_at',
   'idx_offdex_intents_status_expires_at',
-  'idx_management_audit_agent_created_at'
+  'idx_management_audit_agent_created_at',
+  'alter table performance_snapshots',
+  'add column if not exists mode policy_mode',
+  'add column if not exists chain_key varchar(64)',
+  'alter table copy_intents',
+  'add column if not exists follower_trade_id text references trades(trade_id)',
+  'idx_perf_snapshots_window_mode_chain_created',
+  'idx_copy_subscriptions_unique_pair'
 ];
 
 const missingTables = requiredTables.filter((t) => !sql.includes(`create table if not exists ${t}`));
@@ -59,6 +74,7 @@ const report = {
   missingTables,
   missingEnums,
   missingChecks,
+  migrationFiles,
   checkedAt: new Date().toISOString()
 };
 

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/copy-subscription-patch-request.schema.json",
+  "title": "CopySubscriptionPatchRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "minProperties": 1,
+  "properties": {
+    "enabled": { "type": "boolean" },
+    "scaleBps": { "type": "integer", "minimum": 1, "maximum": 100000 },
+    "maxTradeUsd": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,8})?$" },
+    "allowedTokens": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+      "maxItems": 64,
+      "uniqueItems": true
+    }
+  }
+}
