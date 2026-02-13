@@ -14,4 +14,4 @@ Active slice: `Slice 10: Management UI Vertical Slice`
 - [x] Run required global validation gates.
 - [x] Run Slice-10 functional + negative-path verification matrix and capture evidence.
 - [x] Update tracker/roadmap Slice 10 status after all validations pass.
-- [ ] Commit/push Slice 10 and post verification evidence + commit hash to issue `#10`.
+- [x] Commit/push Slice 10 and post verification evidence + commit hash to issue `#10`.
