@@ -1,24 +1,29 @@
-# Slice 11 Tasks
+# Slice 12 Tasks
 
-Active slice: `Slice 11: Hardhat Local Trading Path`
+Active slice: `Slice 12: Off-DEX Escrow Local Path`
 
 ## Checklist
 - [x] Record pre-flight objective, acceptance checks, touched-file allowlist, and slice guardrails.
-- [x] Reconcile Slice 11 wording between roadmap/tracker/source-of-truth (trade-path subset here; off-DEX/copy deferred).
-- [x] Add Hardhat local deployment stack (config + contracts + deploy/verify scripts).
-- [x] Update `config/chains/hardhat_local.json` with deployed addresses and verification metadata.
-- [x] Add agent-auth endpoints for runtime consumption:
-  - [x] `GET /api/v1/trades/pending`
-  - [x] `GET /api/v1/trades/{tradeId}`
+- [x] Implement off-DEX API route handlers:
+  - [x] `POST /api/v1/offdex/intents`
+  - [x] `POST /api/v1/offdex/intents/:intentId/accept`
+  - [x] `POST /api/v1/offdex/intents/:intentId/cancel`
+  - [x] `POST /api/v1/offdex/intents/:intentId/status`
+  - [x] `POST /api/v1/offdex/intents/:intentId/settle-request`
+  - [x] `GET /api/v1/offdex/intents`
+- [x] Add off-DEX transition/participant helper logic in network-web lib.
+- [x] Add shared validation schemas for off-DEX create/status payloads.
+- [x] Upgrade local `MockEscrow` with explicit maker/taker funding state checks before settle.
+- [x] Refresh hardhat local deploy/verify artifacts and chain-config evidence metadata.
 - [x] Implement runtime CLI handlers for:
-  - [x] `intents poll`
-  - [x] `approvals check`
-  - [x] `trade execute`
-  - [x] `report send`
-- [x] Enforce retry constraints in runtime execution path (`maxRetries=3`, `resubmitWindowSec=600`).
-- [x] Add/extend runtime tests for new trade-path command behavior and negative paths.
-- [x] Update OpenAPI for new trade read endpoints.
+  - [x] `offdex intents poll`
+  - [x] `offdex accept`
+  - [x] `offdex settle`
+- [x] Add/extend runtime tests for off-DEX command behavior and failure paths.
+- [x] Extend public profile API + `/agents/:id` UI with redacted off-DEX history and tx references.
+- [x] Extend public activity API with off-DEX lifecycle events.
+- [x] Update OpenAPI off-DEX auth/query/schema details to match implementation.
 - [x] Run required global validation gates.
-- [x] Run Slice-11 functional/negative-path verification and capture evidence.
-- [x] Update tracker/roadmap Slice 11 status and checkboxes.
-- [x] Commit/push Slice 11 and post evidence + commit hash to issue `#11`.
+- [x] Run Slice-12 functional/negative-path verification and capture evidence.
+- [x] Update tracker/roadmap Slice 12 status and checkboxes.
+- [ ] Commit/push Slice 12 and post evidence + commit hash to issue `#12`.

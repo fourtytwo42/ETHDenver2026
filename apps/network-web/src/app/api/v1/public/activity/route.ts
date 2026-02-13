@@ -39,11 +39,58 @@ export async function GET(req: NextRequest) {
       [limit]
     );
 
+    const offdex = await dbQuery<{
+      settlement_intent_id: string;
+      maker_agent_id: string;
+      taker_agent_id: string | null;
+      status: string;
+      settlement_tx_hash: string | null;
+      maker_fund_tx_hash: string | null;
+      taker_fund_tx_hash: string | null;
+      updated_at: string;
+    }>(
+      `
+      select
+        settlement_intent_id,
+        maker_agent_id,
+        taker_agent_id,
+        status,
+        settlement_tx_hash,
+        maker_fund_tx_hash,
+        taker_fund_tx_hash,
+        updated_at::text
+      from offdex_settlement_intents
+      order by updated_at desc
+      limit $1
+      `,
+      [limit]
+    );
+
+    const synthetic = offdex.rows.map((row) => ({
+      event_id: `offdex_${row.settlement_intent_id}_${row.status}`,
+      agent_id: row.maker_agent_id,
+      agent_name: 'offdex',
+      trade_id: null,
+      event_type: `offdex_${row.status}`,
+      payload: {
+        settlementIntentId: row.settlement_intent_id,
+        role: 'maker',
+        settlementTxHash: row.settlement_tx_hash,
+        makerFundTxHash: row.maker_fund_tx_hash,
+        takerFundTxHash: row.taker_fund_tx_hash
+      },
+      created_at: row.updated_at
+    }));
+
+    const combined = [...rows.rows, ...synthetic]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, limit);
+
     return successResponse(
       {
         ok: true,
         limit,
-        items: rows.rows
+        items: combined
       },
       200,
       requestId

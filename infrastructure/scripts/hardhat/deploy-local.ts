@@ -44,6 +44,12 @@ async function main() {
       escrow: await escrow.getAddress(),
       WETH: await weth.getAddress(),
       USDC: await usdc.getAddress()
+    },
+    escrowCapabilities: {
+      openDeal: true,
+      fundMaker: true,
+      fundTaker: true,
+      settle: true
     }
   };
 

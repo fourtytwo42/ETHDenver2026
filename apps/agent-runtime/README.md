@@ -39,7 +39,7 @@ apps/agent-runtime/bin/xclaw-agent wallet send --to 0x00000000000000000000000000
   - `chains.<chain>.chain_enabled` must be `true`
   - if `spend.approval_required=true`, then `spend.approval_granted` must be `true`
   - `spend.max_daily_native_wei` cap must not be exceeded (UTC day ledger)
-- Non-wallet trade/copy/off-DEX commands remain scaffold placeholders pending later runtime slices.
+- Trade and off-DEX command paths are implemented for local validation slices (`intents poll`, `approvals check`, `trade execute`, `report send`, `offdex intents poll`, `offdex accept`, `offdex settle`).
 
 ## Policy file schema (Slice 06 provisional)
 

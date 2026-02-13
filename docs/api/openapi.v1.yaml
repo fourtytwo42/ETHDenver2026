@@ -625,7 +625,7 @@ paths:
     get:
       summary: Query off-DEX settlement intents.
       security:
-        - managementCookie: []
+        - agentBearer: []
       parameters:
         - name: agentId
           in: query
@@ -639,6 +639,13 @@ paths:
           in: query
           schema:
             type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
       responses:
         '200':
           description: Off-DEX intent list.
@@ -1113,6 +1120,14 @@ components:
         failureCode:
           type: string
         failureMessage:
+          type: string
+        makerFundTxHash:
+          type: string
+        takerFundTxHash:
+          type: string
+        settlementTxHash:
+          type: string
+        escrowDealId:
           type: string
         at:
           type: string

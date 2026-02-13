@@ -43,6 +43,19 @@ type AgentProfilePayload = {
         created_at: string;
       }
     | null;
+  offdexHistory: Array<{
+    settlementIntentId: string;
+    chainKey: string;
+    role: 'maker' | 'taker';
+    status: string;
+    pairLabel: string;
+    escrowContract: string;
+    makerFundTxHash: string | null;
+    takerFundTxHash: string | null;
+    settlementTxHash: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }>;
 };
 
 type TradePayload = {
@@ -216,6 +229,23 @@ export default function AgentPublicProfilePage() {
   const [stepupCode, setStepupCode] = useState('');
   const [withdrawDestination, setWithdrawDestination] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('0.1');
+
+  function renderTxHash(hash: string | null): string {
+    if (!hash) {
+      return '-';
+    }
+    return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
+  }
+
+  function txExplorerUrl(chainKey: string, hash: string | null): string | null {
+    if (!hash) {
+      return null;
+    }
+    if (chainKey === 'base_sepolia') {
+      return `https://sepolia.basescan.org/tx/${hash}`;
+    }
+    return null;
+  }
 
   useEffect(() => {
     if (!agentId) {
@@ -479,6 +509,66 @@ export default function AgentPublicProfilePage() {
                       <td>{trade.is_mock ? trade.mock_receipt_id ?? '-' : trade.tx_hash ?? '-'}</td>
                       <td>{trade.reason_code ?? trade.reason_message ?? trade.reason ?? '-'}</td>
                       <td>{formatUtc(trade.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="panel" id="offdex">
+          <h2 className="section-title">Off-DEX Settlement History</h2>
+          {!profile ? <p className="muted">Loading off-DEX history...</p> : null}
+          {profile && profile.offdexHistory.length === 0 ? <p className="muted">No off-DEX settlement history yet.</p> : null}
+          {profile && profile.offdexHistory.length > 0 ? (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Role</th>
+                    <th>Pair</th>
+                    <th>Status</th>
+                    <th>Maker Fund Tx</th>
+                    <th>Taker Fund Tx</th>
+                    <th>Settlement Tx</th>
+                    <th>Updated (UTC)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profile.offdexHistory.map((intent) => (
+                    <tr key={intent.settlementIntentId}>
+                      <td>{intent.role}</td>
+                      <td>{intent.pairLabel}</td>
+                      <td>{intent.status}</td>
+                      <td>
+                        {txExplorerUrl(intent.chainKey, intent.makerFundTxHash) ? (
+                          <a href={txExplorerUrl(intent.chainKey, intent.makerFundTxHash) ?? '#'} target="_blank" rel="noreferrer">
+                            {renderTxHash(intent.makerFundTxHash)}
+                          </a>
+                        ) : (
+                          renderTxHash(intent.makerFundTxHash)
+                        )}
+                      </td>
+                      <td>
+                        {txExplorerUrl(intent.chainKey, intent.takerFundTxHash) ? (
+                          <a href={txExplorerUrl(intent.chainKey, intent.takerFundTxHash) ?? '#'} target="_blank" rel="noreferrer">
+                            {renderTxHash(intent.takerFundTxHash)}
+                          </a>
+                        ) : (
+                          renderTxHash(intent.takerFundTxHash)
+                        )}
+                      </td>
+                      <td>
+                        {txExplorerUrl(intent.chainKey, intent.settlementTxHash) ? (
+                          <a href={txExplorerUrl(intent.chainKey, intent.settlementTxHash) ?? '#'} target="_blank" rel="noreferrer">
+                            {renderTxHash(intent.settlementTxHash)}
+                          </a>
+                        ) : (
+                          renderTxHash(intent.settlementTxHash)
+                        )}
+                      </td>
+                      <td>{formatUtc(intent.updatedAt)}</td>
                     </tr>
                   ))}
                 </tbody>

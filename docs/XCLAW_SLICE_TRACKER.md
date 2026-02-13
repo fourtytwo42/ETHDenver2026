@@ -185,15 +185,15 @@ DoD:
 ---
 
 ## Slice 12: Off-DEX Escrow Local Path
-Status: [ ]
+Status: [x]
 
 Goal:
 - Intent -> accept -> fund -> settle path works locally.
 
 DoD:
-- [ ] off-DEX intent endpoints/runtime hooks active
-- [ ] escrow flow status transitions verified
-- [ ] public activity/profile shows redacted intent metadata + settlement tx links
+- [x] off-DEX intent endpoints/runtime hooks active
+- [x] escrow flow status transitions verified
+- [x] public activity/profile shows redacted intent metadata + settlement tx links
 
 ---
 

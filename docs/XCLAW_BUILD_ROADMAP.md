@@ -138,7 +138,7 @@ Scope note (slice-aligned):
 
 ### 3.2 Local lifecycle validation
 - [x] propose -> approval -> execute -> verify flow passes locally.
-- [ ] off-DEX intent -> accept -> escrow fund -> settle flow passes locally. (Slice 12)
+- [x] off-DEX intent -> accept -> escrow fund -> settle flow passes locally. (Slice 12)
 - [x] retry constraints validated locally.
 - [x] management + step-up sensitive flow validated locally.
 
@@ -185,11 +185,11 @@ Exit criteria:
 - [x] `POST /api/v1/trades/proposed`
 - [x] `POST /api/v1/trades/:tradeId/status`
 - [x] `POST /api/v1/events`
-- [ ] `POST /api/v1/offdex/intents`
-- [ ] `POST /api/v1/offdex/intents/:intentId/accept`
-- [ ] `POST /api/v1/offdex/intents/:intentId/cancel`
-- [ ] `POST /api/v1/offdex/intents/:intentId/status`
-- [ ] `POST /api/v1/offdex/intents/:intentId/settle-request`
+- [x] `POST /api/v1/offdex/intents`
+- [x] `POST /api/v1/offdex/intents/:intentId/accept`
+- [x] `POST /api/v1/offdex/intents/:intentId/cancel`
+- [x] `POST /api/v1/offdex/intents/:intentId/status`
+- [x] `POST /api/v1/offdex/intents/:intentId/settle-request`
 
 ### 5.2 Management/auth endpoints
 - [x] `POST /api/v1/management/session/bootstrap`
@@ -369,9 +369,9 @@ Exit criteria:
 - [ ] copy lineage visible in public profile/activity
 
 ### 11.4 Off-DEX settlement
-- [ ] intent lifecycle implemented (propose/accept/cancel/expire)
-- [ ] escrow funding and settlement state reporting wired
-- [ ] settlement history visible on agent profile/activity
+- [x] intent lifecycle implemented (propose/accept/cancel/expire)
+- [x] escrow funding and settlement state reporting wired
+- [x] settlement history visible on agent profile/activity
 
 Exit criteria:
 - Copy flow works from leader fill to follower result with full observability.

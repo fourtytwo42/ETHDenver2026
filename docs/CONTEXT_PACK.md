@@ -1,32 +1,41 @@
 # X-Claw Context Pack
 
 ## 1) Goal
-- Primary objective: complete `Slice 11: Hardhat Local Trading Path` end-to-end.
-- Success criteria (testable): local Hardhat validation path passes `propose -> approval -> execute -> verify` through runtime CLI (`intents poll`, `approvals check`, `trade execute`, `report send`) with retry constraints and management/step-up checks evidenced.
+- Primary objective: complete `Slice 12: Off-DEX Escrow Local Path` end-to-end.
+- Success criteria (testable): local Hardhat validation path passes `intent -> accept -> fund -> settle` with contract-compliant off-DEX API routes, runtime CLI hooks, and public profile/activity visibility.
 
 ## 2) Constraints
-- Strict slice order: Slice 11 only.
+- Strict slice order: Slice 12 only.
 - Canonical authority: `docs/XCLAW_SOURCE_OF_TRUTH.md`.
 - Runtime boundary: Node/Next.js for API/web, Python-first runtime for agent/OpenClaw commands.
-- No opportunistic refactors or dependency additions beyond justified Hardhat local validation stack.
+- No opportunistic refactors or dependency additions.
 
 ## 3) Contract Impact
-- Add runtime-consumable read endpoints for trade polling/execution context.
-- Update OpenAPI for new endpoints.
-- Update local chain constants with deployed Hardhat addresses + verification metadata.
+- Activate off-DEX API route surface in app code for endpoints already defined in OpenAPI.
+- Add shared request schemas for off-DEX create/status payload validation.
+- Extend public agent profile payload with redacted off-DEX history.
 
 ## 4) Files and Boundaries
 - Expected touched files:
-  - `package.json`
-  - `package-lock.json`
-  - `hardhat.config.ts`
-  - `infrastructure/contracts/*.sol`
-  - `infrastructure/scripts/hardhat/*.ts`
+  - `infrastructure/contracts/MockEscrow.sol`
+  - `infrastructure/scripts/hardhat/deploy-local.ts`
+  - `infrastructure/scripts/hardhat/verify-local.ts`
+  - `infrastructure/seed-data/hardhat-local-deploy.json`
+  - `infrastructure/seed-data/hardhat-local-verify.json`
   - `config/chains/hardhat_local.json`
+  - `apps/network-web/src/app/api/v1/offdex/intents/route.ts`
+  - `apps/network-web/src/app/api/v1/offdex/intents/[intentId]/accept/route.ts`
+  - `apps/network-web/src/app/api/v1/offdex/intents/[intentId]/cancel/route.ts`
+  - `apps/network-web/src/app/api/v1/offdex/intents/[intentId]/status/route.ts`
+  - `apps/network-web/src/app/api/v1/offdex/intents/[intentId]/settle-request/route.ts`
+  - `apps/network-web/src/lib/offdex-state.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/[agentId]/route.ts`
+  - `apps/network-web/src/app/api/v1/public/activity/route.ts`
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
   - `apps/agent-runtime/xclaw_agent/cli.py`
   - `apps/agent-runtime/tests/test_trade_path.py`
-  - `apps/network-web/src/app/api/v1/trades/pending/route.ts`
-  - `apps/network-web/src/app/api/v1/trades/[tradeId]/route.ts`
+  - `packages/shared-schemas/json/offdex-intent-create-request.schema.json`
+  - `packages/shared-schemas/json/offdex-status-update-request.schema.json`
   - `docs/api/openapi.v1.yaml`
   - `docs/CONTEXT_PACK.md`
   - `spec.md`
@@ -35,9 +44,9 @@
   - `docs/XCLAW_BUILD_ROADMAP.md`
   - `docs/XCLAW_SLICE_TRACKER.md`
 - Forbidden scope:
-  - Slice 12 off-DEX local escrow execution implementation
   - Slice 13 copy lifecycle implementation
-  - Slice 15 Base Sepolia deployment/promotion
+  - Slice 14 observability/ops scope
+  - Slice 15 Base Sepolia promotion
 
 ## 5) Invariants (Must Not Change)
 - Error contract remains `code`, `message`, optional `actionHint`, optional `details`, `requestId`.
@@ -52,14 +61,15 @@
   - `npm run seed:verify`
   - `npm run build`
 - Slice-specific checks:
-  - hardhat local chain up + local contract deployment + bytecode verification
-  - runtime trade lifecycle (`intents poll` / `approvals check` / `trade execute` / `report send`)
-  - retry constraints (`maxRetries=3`, `resubmitWindowSec=600`) negative-path validation
-  - management approval and step-up enforcement checks for touched flows
+  - hardhat local deploy + verify evidence for updated escrow contract
+  - off-DEX API lifecycle (`create -> accept -> fund statuses -> settle-request -> settled`)
+  - runtime off-DEX command checks (`intents poll`, `accept`, `settle`)
+  - negative checks for invalid transition and idempotency/auth constraints
+  - public profile/activity redacted settlement visibility
 
 ## 7) Evidence + Rollback
 - Capture command outputs and endpoint/CLI evidence in `acceptance.md`.
 - Rollback plan:
-  1. revert Slice 11 touched files only,
+  1. revert Slice 12 touched files only,
   2. rerun required gates,
   3. verify tracker/roadmap/source-of-truth synchronization.

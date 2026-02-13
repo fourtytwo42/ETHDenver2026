@@ -15,13 +15,13 @@
     "quoter": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
     "escrow": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
     "escrowAbiVersion": "xclaw_escrow_v1",
-    "notes": "Slice-11 hardhat local deploy evidence captured in infrastructure/seed-data/hardhat-local-deploy.json and hardhat-local-verify.json."
+    "notes": "Slice-12 hardhat local escrow validation evidence captured in infrastructure/seed-data/hardhat-local-deploy.json and hardhat-local-verify.json."
   },
   "canonicalTokens": {
     "WETH": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
     "USDC": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"
   },
-  "updatedAt": "2026-02-13T16:11:08.206Z",
+  "updatedAt": "2026-02-13T16:38:14.748Z",
   "version": 1,
   "sources": {
     "network": "hardhat_local",
@@ -31,7 +31,7 @@
     "verificationArtifact": "infrastructure/seed-data/hardhat-local-verify.json"
   },
   "verification": {
-    "verifiedAt": "2026-02-13T16:11:08.206Z",
+    "verifiedAt": "2026-02-13T16:38:14.748Z",
     "verifiedViaRpc": true,
     "verifiedChainIdHex": "0x7a69",
     "verifiedContractCodePresent": {

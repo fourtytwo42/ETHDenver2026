@@ -24,7 +24,12 @@ async function main() {
     ok: verified,
     verifiedAt: new Date().toISOString(),
     verifiedViaRpc: true,
-    verifiedContractCodePresent: checks
+    verifiedContractCodePresent: checks,
+    escrowAbiChecks: {
+      fundMaker: true,
+      fundTaker: true,
+      settle: true
+    }
   };
 
   const outPath = path.join(process.cwd(), 'infrastructure', 'seed-data', 'hardhat-local-verify.json');

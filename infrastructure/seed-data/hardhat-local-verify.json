@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "verifiedAt": "2026-02-13T16:11:08.206Z",
+  "verifiedAt": "2026-02-13T16:38:14.748Z",
   "verifiedViaRpc": true,
   "verifiedContractCodePresent": {
     "factory": true,
@@ -9,5 +9,10 @@
     "escrow": true,
     "WETH": true,
     "USDC": true
+  },
+  "escrowAbiChecks": {
+    "fundMaker": true,
+    "fundTaker": true,
+    "settle": true
   }
 }

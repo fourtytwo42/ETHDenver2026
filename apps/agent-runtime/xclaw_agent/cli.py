@@ -1157,6 +1157,158 @@ def cmd_report_send(args: argparse.Namespace) -> int:
         return fail("report_send_failed", str(exc), "Inspect runtime report-send path and retry.", {"tradeId": args.trade}, exit_code=1)
 
 
+def _offdex_intents_query(chain: str, status: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    query = f"/offdex/intents?chain={urllib.parse.quote(chain)}&limit={limit}"
+    if status:
+        query += f"&status={urllib.parse.quote(status)}"
+    status_code, body = _api_request("GET", query)
+    if status_code < 200 or status_code >= 300:
+        code = str(body.get("code", "api_error"))
+        message = str(body.get("message", f"offdex intents read failed ({status_code})"))
+        raise WalletStoreError(f"{code}: {message}")
+    items = body.get("items", [])
+    if not isinstance(items, list):
+        raise WalletStoreError("Off-DEX intents response missing items list.")
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _offdex_post_status(intent_id: str, status: str, extra: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
+    payload: dict[str, Any] = {
+        "status": status,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    if extra:
+        payload.update(extra)
+    return _api_request("POST", f"/offdex/intents/{intent_id}/status", payload=payload, include_idempotency=True)
+
+
+def cmd_offdex_intents_poll(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        items = _offdex_intents_query(args.chain, limit=25)
+        actionable = [
+            item
+            for item in items
+            if str(item.get("status")) in {"proposed", "accepted", "maker_funded", "taker_funded", "ready_to_settle"}
+        ]
+        return ok("Off-DEX intents polled.", chain=args.chain, count=len(actionable), intents=actionable)
+    except WalletStoreError as exc:
+        return fail("offdex_poll_failed", str(exc), "Verify API env/auth and off-DEX endpoint availability.", {"chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("offdex_poll_failed", str(exc), "Inspect runtime off-DEX poll path and retry.", {"chain": args.chain}, exit_code=1)
+
+
+def cmd_offdex_accept(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        status_code, body = _api_request("POST", f"/offdex/intents/{args.intent}/accept", payload={}, include_idempotency=True)
+        if status_code < 200 or status_code >= 300:
+            return fail(
+                str(body.get("code", "api_error")),
+                str(body.get("message", f"offdex accept failed ({status_code})")),
+                str(body.get("actionHint", "Refresh intent state and retry.")),
+                {"intentId": args.intent, "chain": args.chain, "status": status_code},
+                exit_code=1,
+            )
+        return ok(
+            "Off-DEX intent accepted.",
+            chain=args.chain,
+            settlementIntentId=str(body.get("settlementIntentId", args.intent)),
+            status=str(body.get("status", "accepted")),
+        )
+    except WalletStoreError as exc:
+        return fail("offdex_accept_failed", str(exc), "Verify API env/auth and retry.", {"intentId": args.intent, "chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("offdex_accept_failed", str(exc), "Inspect runtime off-DEX accept path and retry.", {"intentId": args.intent, "chain": args.chain}, exit_code=1)
+
+
+def _intent_deal_id_hex(intent_id: str) -> str:
+    return "0x" + hashlib.sha256(intent_id.encode("utf-8")).hexdigest()
+
+
+def cmd_offdex_settle(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        intents = _offdex_intents_query(args.chain, limit=200)
+        target = next((item for item in intents if str(item.get("settlementIntentId")) == args.intent), None)
+        if target is None:
+            return fail(
+                "payload_invalid",
+                "Off-DEX intent was not found for this agent/chain.",
+                "Poll off-DEX intents first and retry with a visible intent ID.",
+                {"intentId": args.intent, "chain": args.chain},
+                exit_code=1,
+            )
+        if str(target.get("status")) != "ready_to_settle":
+            return fail(
+                "trade_invalid_transition",
+                f"Off-DEX settle requires ready_to_settle status, got '{target.get('status')}'.",
+                "Submit maker/taker funding updates before settlement.",
+                {"intentId": args.intent, "status": target.get("status")},
+                exit_code=1,
+            )
+
+        status_code, settle_request = _api_request("POST", f"/offdex/intents/{args.intent}/settle-request", payload={}, include_idempotency=True)
+        if status_code < 200 or status_code >= 300:
+            return fail(
+                str(settle_request.get("code", "api_error")),
+                str(settle_request.get("message", f"settle-request failed ({status_code})")),
+                str(settle_request.get("actionHint", "Refresh intent state and retry.")),
+                {"intentId": args.intent, "chain": args.chain},
+                exit_code=1,
+            )
+
+        store = load_wallet_store()
+        wallet_address, _private_key_hex = _execution_wallet(store, args.chain)
+        rpc_url = _chain_rpc_url(args.chain)
+        escrow_contract = _require_chain_contract_address(args.chain, "escrow")
+        escrow_deal_id = str(target.get("escrowDealId") or _intent_deal_id_hex(args.intent))
+        calldata = _cast_calldata("settle(bytes32)", [escrow_deal_id])
+
+        tx_hash = _cast_rpc_send_transaction(
+            rpc_url,
+            {
+                "from": wallet_address,
+                "to": escrow_contract,
+                "data": calldata,
+            },
+        )
+        status_code, status_body = _offdex_post_status(
+            args.intent,
+            "settled",
+            {"settlementTxHash": tx_hash, "escrowDealId": escrow_deal_id},
+        )
+        if status_code < 200 or status_code >= 300:
+            return fail(
+                str(status_body.get("code", "api_error")),
+                str(status_body.get("message", f"offdex status update failed ({status_code})")),
+                str(status_body.get("actionHint", "Retry status update for settlement.")),
+                {"intentId": args.intent, "txHash": tx_hash},
+                exit_code=1,
+            )
+
+        return ok(
+            "Off-DEX settlement executed.",
+            chain=args.chain,
+            settlementIntentId=args.intent,
+            status="settled",
+            settlementTxHash=tx_hash,
+            escrowDealId=escrow_deal_id,
+        )
+    except WalletPassphraseError as exc:
+        return fail("non_interactive", str(exc), "Set XCLAW_WALLET_PASSPHRASE or run with TTY attached.", {"chain": args.chain}, exit_code=2)
+    except WalletStoreError as exc:
+        return fail("offdex_settle_failed", str(exc), "Verify intent state, wallet setup, chain config, and RPC connectivity.", {"intentId": args.intent, "chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("offdex_settle_failed", str(exc), "Inspect runtime off-DEX settle path and retry.", {"intentId": args.intent, "chain": args.chain}, exit_code=1)
+
+
 def cmd_wallet_health(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
@@ -1683,19 +1835,19 @@ def build_parser() -> argparse.ArgumentParser:
     offdex_intents_poll = offdex_intents_sub.add_parser("poll")
     offdex_intents_poll.add_argument("--chain", required=True)
     offdex_intents_poll.add_argument("--json", action="store_true")
-    offdex_intents_poll.set_defaults(func=lambda a: cmd_not_implemented(a, "offdex.intents.poll"))
+    offdex_intents_poll.set_defaults(func=cmd_offdex_intents_poll)
 
     offdex_accept = offdex_sub.add_parser("accept")
     offdex_accept.add_argument("--intent", required=True)
     offdex_accept.add_argument("--chain", required=True)
     offdex_accept.add_argument("--json", action="store_true")
-    offdex_accept.set_defaults(func=lambda a: cmd_not_implemented(a, "offdex.accept"))
+    offdex_accept.set_defaults(func=cmd_offdex_accept)
 
     offdex_settle = offdex_sub.add_parser("settle")
     offdex_settle.add_argument("--intent", required=True)
     offdex_settle.add_argument("--chain", required=True)
     offdex_settle.add_argument("--json", action="store_true")
-    offdex_settle.set_defaults(func=lambda a: cmd_not_implemented(a, "offdex.settle"))
+    offdex_settle.set_defaults(func=cmd_offdex_settle)
 
     wallet = sub.add_parser("wallet")
     wallet_sub = wallet.add_subparsers(dest="wallet_cmd")

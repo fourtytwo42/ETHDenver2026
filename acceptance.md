@@ -967,3 +967,115 @@ Issue mapping: `#11`
   1. revert Slice 11 touched files only,
   2. rerun required validation gates,
   3. verify docs/tracker/roadmap consistency restored.
+
+## Slice 12 Acceptance Evidence
+
+Date (UTC): 2026-02-13  
+Active slice: `Slice 12: Off-DEX Escrow Local Path`  
+Issue mapping: `#12`
+
+### Objective + scope lock
+- Objective: implement off-DEX escrow local lifecycle end-to-end (`intent -> accept -> fund -> settle`) with API/runtime hooks and public redacted visibility.
+- Scope guard honored: no Slice 13 copy lifecycle or Slice 15 promotion work.
+
+### File-level evidence (Slice 12)
+- Network API/runtime behavior:
+  - `apps/network-web/src/app/api/v1/offdex/intents/route.ts`
+  - `apps/network-web/src/app/api/v1/offdex/intents/[intentId]/accept/route.ts`
+  - `apps/network-web/src/app/api/v1/offdex/intents/[intentId]/cancel/route.ts`
+  - `apps/network-web/src/app/api/v1/offdex/intents/[intentId]/status/route.ts`
+  - `apps/network-web/src/app/api/v1/offdex/intents/[intentId]/settle-request/route.ts`
+  - `apps/network-web/src/lib/offdex-state.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/[agentId]/route.ts`
+  - `apps/network-web/src/app/api/v1/public/activity/route.ts`
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+- Agent runtime:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_trade_path.py`
+  - `apps/agent-runtime/README.md`
+- Contracts/artifacts/config:
+  - `infrastructure/contracts/MockEscrow.sol`
+  - `infrastructure/scripts/hardhat/deploy-local.ts`
+  - `infrastructure/scripts/hardhat/verify-local.ts`
+  - `infrastructure/seed-data/hardhat-local-deploy.json`
+  - `infrastructure/seed-data/hardhat-local-verify.json`
+  - `config/chains/hardhat_local.json`
+- Contracts/docs/process:
+  - `packages/shared-schemas/json/offdex-intent-create-request.schema.json`
+  - `packages/shared-schemas/json/offdex-status-update-request.schema.json`
+  - `docs/api/openapi.v1.yaml`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+
+### Required global gate evidence
+Executed with results:
+- `npm run db:parity` -> PASS (`"ok": true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`"ok": true`)
+- `npm run build` -> PASS
+
+### Hardhat local escrow evidence
+- `npm run hardhat:deploy-local` -> PASS
+  - deploy artifact updated with escrow capabilities (`openDeal`, `fundMaker`, `fundTaker`, `settle`)
+- `npm run hardhat:verify-local` -> PASS
+  - contract code present for `factory/router/quoter/escrow/WETH/USDC`
+- `config/chains/hardhat_local.json` updated with fresh `updatedAt` / `verification.verifiedAt` and Slice-12 escrow note.
+
+### Off-DEX API lifecycle evidence (live local)
+Using local API server with agent bearer keys for maker+taker:
+- Register maker/taker:
+  - `POST /api/v1/agent/register` (`ag_slice7`, `ag_taker`) -> PASS
+- Intent create:
+  - `POST /api/v1/offdex/intents` -> `{"status":"proposed"}`
+- Taker accept:
+  - `POST /api/v1/offdex/intents/:intentId/accept` -> `{"status":"accepted"}`
+- On-chain escrow operations (Hardhat):
+  - `openDeal(bytes32,address,uint256,uint256)` tx captured
+  - `fundMaker(bytes32)` tx captured
+  - `fundTaker(bytes32)` tx captured
+- Funding status reporting:
+  - maker `POST /status` with `makerFundTxHash` -> `maker_funded`
+  - taker `POST /status` with `takerFundTxHash` -> `ready_to_settle`
+- Runtime settle (below) finalizes to `settled` with settlement tx hash.
+
+### Runtime command evidence
+- `xclaw-agent offdex intents poll --chain hardhat_local --json` -> PASS (returned actionable intents, including ready-to-settle)
+- `xclaw-agent offdex accept --intent <intent> --chain hardhat_local --json` -> PASS (`accepted`)
+- `xclaw-agent offdex settle --intent ofi_9a74fa323fcbcbd86a8c --chain hardhat_local --json` -> PASS:
+  - `status: settled`
+  - `settlementTxHash: 0xc7bb913a3d527d7bcecc977f9f7cf3e3a75b1ce812975ffbf114a88757718b1b`
+
+### Public visibility evidence
+- `GET /api/v1/public/agents/ag_slice7` includes `offdexHistory` with redacted pair label and tx hash references.
+- `GET /api/v1/public/activity?limit=20` includes synthetic off-DEX events (`offdex_settled`, `offdex_settling`, etc.) with intent id + tx references.
+- `/agents/:id` consumes profile payload and renders an off-DEX settlement history table.
+
+### Negative/failure-path evidence
+- Invalid transition check:
+  - `POST /api/v1/offdex/intents/ofi_9a74fa323fcbcbd86a8c/status` with `status=taker_funded` after settled -> PASS reject (`code: trade_invalid_transition`, HTTP 409)
+- Runtime negative check:
+  - `xclaw-agent offdex settle` on non-ready intent returns `trade_invalid_transition`.
+
+### Notes
+- During live validation, parallel maker/taker status updates created racey status ordering for intermediate intents; sequential updates were used for final canonical evidence intent.
+- Runtime settle uses cast RPC transaction path (`eth_sendTransaction`) on Hardhat local for compatibility with local RPC behavior.
+
+### Slice status synchronization
+- `docs/XCLAW_SLICE_TRACKER.md` Slice 12 set to `[x]` and all DoD checkboxes checked.
+- `docs/XCLAW_BUILD_ROADMAP.md` Slice-12-related checklist entries marked done:
+  - local off-DEX lifecycle validation
+  - core off-DEX endpoint implementation
+  - section 11.4 off-DEX settlement sub-checklist
+
+### High-risk review protocol
+- Security-sensitive classes touched: auth-gated write routes, escrow status transitions, wallet-invoking runtime command path.
+- Second-opinion pass: completed through focused review of transition checks, actor constraints, idempotency coverage, and runtime failure handling.
+- Rollback plan:
+  1. revert Slice 12 touched files only,
+  2. rerun required npm gates + off-DEX command/API checks,
+  3. confirm tracker/roadmap/docs return to pre-Slice-12 state.

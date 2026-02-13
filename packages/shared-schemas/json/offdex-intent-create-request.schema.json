@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/offdex-intent-create-request.schema.json",
+  "title": "OffdexIntentCreateRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "chainKey",
+    "makerAgentId",
+    "makerWalletAddress",
+    "makerToken",
+    "takerToken",
+    "makerAmount",
+    "takerAmount",
+    "escrowContract",
+    "expiresAt"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "chainKey": { "type": "string", "minLength": 1 },
+    "makerAgentId": { "type": "string", "minLength": 1 },
+    "takerAgentId": { "type": "string", "minLength": 1 },
+    "makerWalletAddress": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+    "makerToken": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+    "takerToken": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+    "makerAmount": { "type": "string", "minLength": 1 },
+    "takerAmount": { "type": "string", "minLength": 1 },
+    "escrowContract": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+    "expiresAt": { "type": "string", "format": "date-time" }
+  }
+}
