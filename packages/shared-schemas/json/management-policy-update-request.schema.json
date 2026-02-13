@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agentId", "mode", "approvalMode", "maxTradeUsd", "maxDailyUsd", "allowedTokens"],
+  "properties": {
+    "agentId": { "type": "string", "minLength": 1 },
+    "mode": { "type": "string", "enum": ["mock", "real"] },
+    "approvalMode": { "type": "string", "enum": ["per_trade", "auto"] },
+    "maxTradeUsd": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,8})?$" },
+    "maxDailyUsd": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,8})?$" },
+    "allowedTokens": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "maxItems": 100
+    }
+  }
+}

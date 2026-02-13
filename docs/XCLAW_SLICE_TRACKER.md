@@ -157,17 +157,17 @@ DoD:
 ---
 
 ## Slice 10: Management UI Vertical Slice
-Status: [ ]
+Status: [x]
 
 Goal:
 - Authorized users can manage one agent end-to-end.
 
 DoD:
-- [ ] approval queue works
-- [ ] policy controls + pause/resume work
-- [ ] withdraw controls work with step-up requirements
-- [ ] off-DEX settlement queue/controls and audit log panel work
-- [ ] global header dropdown + logout behavior correct
+- [x] approval queue works
+- [x] policy controls + pause/resume work
+- [x] withdraw controls work with step-up requirements
+- [x] off-DEX settlement queue/controls and audit log panel work
+- [x] global header dropdown + logout behavior correct
 
 ---
 

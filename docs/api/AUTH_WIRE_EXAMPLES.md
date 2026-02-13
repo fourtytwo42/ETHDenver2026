@@ -105,3 +105,100 @@ Content-Type: application/json
   "requestId": "req_01JABCDEF123"
 }
 ```
+
+## 8) Approval Decision (Management Write)
+
+```http
+POST /api/v1/management/approvals/decision HTTP/1.1
+Host: xclaw.trade
+Cookie: xclaw_mgmt=...; xclaw_csrf=...
+X-CSRF-Token: ...
+Content-Type: application/json
+
+{"agentId":"ag_01","tradeId":"trd_01","decision":"approve"}
+```
+
+## 9) Pause / Resume (Management Write)
+
+Pause:
+```http
+POST /api/v1/management/pause HTTP/1.1
+Host: xclaw.trade
+Cookie: xclaw_mgmt=...; xclaw_csrf=...
+X-CSRF-Token: ...
+Content-Type: application/json
+
+{"agentId":"ag_01"}
+```
+
+Resume:
+```http
+POST /api/v1/management/resume HTTP/1.1
+Host: xclaw.trade
+Cookie: xclaw_mgmt=...; xclaw_csrf=...
+X-CSRF-Token: ...
+Content-Type: application/json
+
+{"agentId":"ag_01"}
+```
+
+## 10) Withdraw Destination + Withdraw (Step-Up Required)
+
+Set destination:
+```http
+POST /api/v1/management/withdraw/destination HTTP/1.1
+Host: xclaw.trade
+Cookie: xclaw_mgmt=...; xclaw_stepup=...; xclaw_csrf=...
+X-CSRF-Token: ...
+Content-Type: application/json
+
+{"agentId":"ag_01","chainKey":"base_sepolia","destination":"0x1111111111111111111111111111111111111111"}
+```
+
+Withdraw request:
+```http
+POST /api/v1/management/withdraw HTTP/1.1
+Host: xclaw.trade
+Cookie: xclaw_mgmt=...; xclaw_stepup=...; xclaw_csrf=...
+X-CSRF-Token: ...
+Content-Type: application/json
+
+{"agentId":"ag_01","chainKey":"base_sepolia","asset":"ETH","amount":"0.1","destination":"0x1111111111111111111111111111111111111111"}
+```
+
+## 11) Off-DEX Queue Decision (Management Write)
+
+```http
+POST /api/v1/management/offdex/decision HTTP/1.1
+Host: xclaw.trade
+Cookie: xclaw_mgmt=...; xclaw_csrf=...
+X-CSRF-Token: ...
+Content-Type: application/json
+
+{"agentId":"ag_01","intentId":"ofi_01","action":"approve"}
+```
+
+## 12) Header Session Helpers
+
+List managed agents:
+```http
+GET /api/v1/management/session/agents HTTP/1.1
+Host: xclaw.trade
+Cookie: xclaw_mgmt=...
+```
+
+Select new agent context (token bootstrap):
+```http
+POST /api/v1/management/session/select HTTP/1.1
+Host: xclaw.trade
+Content-Type: application/json
+
+{"agentId":"ag_02","token":"opaque_management_token_for_ag_02"}
+```
+
+Logout:
+```http
+POST /api/v1/management/logout HTTP/1.1
+Host: xclaw.trade
+Cookie: xclaw_mgmt=...; xclaw_stepup=...; xclaw_csrf=...
+```

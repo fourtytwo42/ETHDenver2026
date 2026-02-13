@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agentId", "chainKey", "scope", "action"],
+  "properties": {
+    "agentId": { "type": "string", "minLength": 1 },
+    "chainKey": { "type": "string", "minLength": 1 },
+    "scope": { "type": "string", "enum": ["pair", "global"] },
+    "action": { "type": "string", "enum": ["grant", "revoke"] },
+    "pairRef": { "type": "string", "minLength": 3, "maxLength": 128 },
+    "maxAmountUsd": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,8})?$" },
+    "slippageBpsMax": { "type": "integer", "minimum": 1, "maximum": 10000 },
+    "expiresAt": { "type": "string", "format": "date-time" }
+  }
+}

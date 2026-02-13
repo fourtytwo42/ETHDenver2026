@@ -1,53 +1,41 @@
 # X-Claw Context Pack
 
 ## 1) Goal
-- Primary objective: complete Slice 09 Public Web Vertical Slice in `apps/network-web`.
-- Success criteria (testable): `/`, `/agents`, and `/agents/:id` render public data with no unauthorized management controls, mock/real visual separation, canonical status vocabulary, and dark-default persistent theme.
-- Scope lock: `/status` page ownership deferred to Slice 14 and synchronized in canonical docs first.
+- Primary objective: complete Slice 10 Management UI Vertical Slice in `apps/network-web`.
+- Success criteria (testable): `/agents/:id` supports authorized management controls (approval queue, policy controls, pause/resume, withdraw+step-up, off-DEX queue controls, audit log), and header-level managed-agent dropdown + logout behavior.
 
 ## 2) Constraints
-- Strict slice order: Slice 09 only.
+- Strict slice order: Slice 10 only.
 - Canonical authority: `docs/XCLAW_SOURCE_OF_TRUTH.md`.
-- Runtime boundary: Node/Next.js scope only; no Python/runtime changes.
+- Runtime boundary: Node/Next.js only; no Python/runtime execution work.
 - No opportunistic refactors or dependency additions.
 
 ## 3) Contract Impact
-- Public web route implementation:
-  - `/`
-  - `/agents`
-  - `/agents/:id`
-- Public API additive refinements:
-  - `GET /api/v1/public/agents` supports `sort`, `status`, `includeDeactivated`, `pageSize`, `total` metadata.
-  - `GET /api/v1/public/leaderboard` supports `includeDeactivated` and validates query enums.
-- Canonical docs synchronized for `/status` deferral from Slice 09 to Slice 14.
+- Add management endpoint surface under `/api/v1/management/*` for Slice 10 controls.
+- Add management request schemas in `packages/shared-schemas/json/`.
+- Extend OpenAPI + auth wire examples to match implementation.
 
 ## 4) Files and Boundaries
 - Expected touched files:
-  - `apps/network-web/src/app/layout.tsx`
-  - `apps/network-web/src/app/globals.css`
-  - `apps/network-web/src/app/page.tsx`
-  - `apps/network-web/src/app/agents/page.tsx`
   - `apps/network-web/src/app/agents/[agentId]/page.tsx`
-  - `apps/network-web/src/app/api/v1/public/agents/route.ts`
-  - `apps/network-web/src/app/api/v1/public/leaderboard/route.ts`
   - `apps/network-web/src/components/public-shell.tsx`
-  - `apps/network-web/src/components/theme-toggle.tsx`
-  - `apps/network-web/src/components/public-status-badge.tsx`
-  - `apps/network-web/src/components/mode-badge.tsx`
-  - `apps/network-web/src/lib/public-format.ts`
-  - `apps/network-web/src/lib/public-types.ts`
-  - `docs/XCLAW_SLICE_TRACKER.md`
-  - `docs/XCLAW_BUILD_ROADMAP.md`
-  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `apps/network-web/src/components/management-header-controls.tsx`
+  - `apps/network-web/src/app/globals.css`
+  - `apps/network-web/src/lib/management-service.ts`
+  - `apps/network-web/src/lib/management-auth.ts`
+  - `apps/network-web/src/app/api/v1/management/**/route.ts`
+  - `packages/shared-schemas/json/*.schema.json` (Slice 10 additions)
   - `docs/api/openapi.v1.yaml`
+  - `docs/api/AUTH_WIRE_EXAMPLES.md`
   - `docs/CONTEXT_PACK.md`
   - `spec.md`
   - `tasks.md`
   - `acceptance.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
 - Forbidden scope:
-  - Slice 10 management control implementation
-  - Slice 14 `/api/status` endpoint implementation
-  - Off-DEX/write endpoint changes
+  - Slice 11 Hardhat local trading path implementation
+  - Slice 12 off-DEX runtime escrow execution
 
 ## 5) Invariants (Must Not Change)
 - Error contract remains `code`, `message`, optional `actionHint`, optional `details`, `requestId`.
@@ -62,14 +50,15 @@
   - `npm run seed:verify`
   - `npm run build`
 - Slice-specific checks:
-  - `curl -i http://localhost:3000/`
-  - `curl -s "http://localhost:3000/api/v1/public/agents?query=agent&sort=last_activity&page=1"`
-  - `curl -i "http://localhost:3000/api/v1/public/agents?sort=bad_value"`
-  - `curl -i http://localhost:3000/agents/<seed-agent-id>`
+  - management bootstrap + token strip
+  - approval queue approve/reject + invalid transition rejection
+  - policy/pause/resume and step-up protected withdraw flows
+  - off-DEX queue decision transitions + invalid transition rejection
+  - header dropdown route switching + logout cookie clear
 
 ## 7) Evidence + Rollback
-- Capture command outputs and route/API verification snippets in `acceptance.md`.
+- Capture command outputs and API/UI verification snippets in `acceptance.md`.
 - Rollback plan:
-  1. revert Slice 09 touched files only,
+  1. revert Slice 10 touched files only,
   2. rerun required gates,
-  3. verify tracker/roadmap/source-of-truth stay synchronized.
+  3. verify tracker/roadmap/source-of-truth synchronization.

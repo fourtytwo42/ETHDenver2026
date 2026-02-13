@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { ManagementHeaderControls } from '@/components/management-header-controls';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 export function PublicShell({ children }: { children: React.ReactNode }) {
@@ -14,6 +15,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="header-controls">
           <span className="chain-chip">Base Sepolia</span>
+          <ManagementHeaderControls />
           <ThemeToggle />
         </div>
       </header>

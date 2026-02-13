@@ -302,22 +302,22 @@ Exit criteria:
 ## 9) Management UX (Authorized on `/agents/:id`)
 
 ### 9.1 Controls
-- [ ] approval queue panel
-- [ ] policy controls panel
-- [ ] withdraw controls panel
-- [ ] off-DEX settlement queue/controls panel
-- [ ] pause/resume controls
-- [ ] audit log panel
+- [x] approval queue panel
+- [x] policy controls panel
+- [x] withdraw controls panel
+- [x] off-DEX settlement queue/controls panel
+- [x] pause/resume controls
+- [x] audit log panel
 
 ### 9.2 Header-level auth UX
-- [ ] global managed-agent dropdown
-- [ ] global logout button
-- [ ] route auto-switch on agent selection
+- [x] global managed-agent dropdown
+- [x] global logout button
+- [x] route auto-switch on agent selection
 
 ### 9.3 Step-up UX
-- [ ] challenge/verify flow
-- [ ] active session countdown indicator
-- [ ] clear failure/actionHint messages
+- [x] challenge/verify flow
+- [x] active session countdown indicator
+- [x] clear failure/actionHint messages
 
 Exit criteria:
 - Authorized users can safely manage one or multiple agents end-to-end.

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agentId", "tradeId", "decision"],
+  "properties": {
+    "agentId": { "type": "string", "minLength": 1 },
+    "tradeId": { "type": "string", "minLength": 1 },
+    "decision": { "type": "string", "enum": ["approve", "reject"] },
+    "reasonCode": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "reasonMessage": { "type": "string", "minLength": 1, "maxLength": 280 }
+  }
+}

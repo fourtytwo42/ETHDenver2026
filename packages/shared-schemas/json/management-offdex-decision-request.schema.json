@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agentId", "intentId", "action"],
+  "properties": {
+    "agentId": { "type": "string", "minLength": 1 },
+    "intentId": { "type": "string", "minLength": 1 },
+    "action": { "type": "string", "enum": ["approve", "cancel", "settle_request"] },
+    "reasonCode": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "reasonMessage": { "type": "string", "minLength": 1, "maxLength": 280 }
+  }
+}

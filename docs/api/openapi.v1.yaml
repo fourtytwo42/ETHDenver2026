@@ -186,6 +186,219 @@ paths:
           description: Sessions revoked.
         '401':
           $ref: '#/components/responses/ErrorResponse'
+  /api/v1/management/agent-state:
+    get:
+      summary: Read authorized management state for one agent.
+      security:
+        - managementCookie: []
+      parameters:
+        - name: agentId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Management state payload.
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/management/audit:
+    get:
+      summary: Read redacted management audit entries.
+      security:
+        - managementCookie: []
+      parameters:
+        - name: agentId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Audit list payload.
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/management/approvals/decision:
+    post:
+      summary: Approve or reject one pending trade intent.
+      security:
+        - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementApprovalDecisionRequest'
+      responses:
+        '200':
+          description: Decision accepted.
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/management/policy/update:
+    post:
+      summary: Create a new policy snapshot for an agent.
+      security:
+        - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementPolicyUpdateRequest'
+      responses:
+        '200':
+          description: Policy snapshot created.
+  /api/v1/management/approvals/scope:
+    post:
+      summary: Grant or revoke pair/global approval scopes.
+      security:
+        - managementCookie: []
+        - stepupCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementApprovalScopeRequest'
+      responses:
+        '200':
+          description: Scope operation accepted.
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/management/pause:
+    post:
+      summary: Pause one agent.
+      security:
+        - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementPauseRequest'
+      responses:
+        '200':
+          description: Agent paused.
+  /api/v1/management/resume:
+    post:
+      summary: Resume one agent after validation checks.
+      security:
+        - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementResumeRequest'
+      responses:
+        '200':
+          description: Agent resumed.
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/management/withdraw/destination:
+    post:
+      summary: Update withdraw destination for an agent chain.
+      security:
+        - managementCookie: []
+        - stepupCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementWithdrawDestinationRequest'
+      responses:
+        '200':
+          description: Destination updated.
+  /api/v1/management/withdraw:
+    post:
+      summary: Submit step-up gated withdraw request.
+      security:
+        - managementCookie: []
+        - stepupCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementWithdrawRequest'
+      responses:
+        '200':
+          description: Withdraw request accepted.
+  /api/v1/management/offdex/decision:
+    post:
+      summary: Perform management action on off-DEX settlement queue item.
+      security:
+        - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementOffdexDecisionRequest'
+      responses:
+        '200':
+          description: Off-DEX decision accepted.
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/management/session/agents:
+    get:
+      summary: List managed agents visible to current session context.
+      security:
+        - managementCookie: []
+      responses:
+        '200':
+          description: Managed agent list.
+  /api/v1/management/session/select:
+    post:
+      summary: Select agent context by bootstrapping session with token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementSessionSelectRequest'
+      responses:
+        '200':
+          description: Session selected.
+  /api/v1/management/logout:
+    post:
+      summary: Clear management cookies and logout active management context.
+      security:
+        - managementCookie: []
+      responses:
+        '200':
+          description: Logout accepted.
   /api/v1/public/leaderboard:
     get:
       summary: Read public leaderboard.
@@ -671,6 +884,125 @@ components:
         agentId:
           type: string
         code:
+          type: string
+    ManagementApprovalDecisionRequest:
+      type: object
+      required: [agentId, tradeId, decision]
+      properties:
+        agentId:
+          type: string
+        tradeId:
+          type: string
+        decision:
+          type: string
+          enum: [approve, reject]
+        reasonCode:
+          type: string
+        reasonMessage:
+          type: string
+    ManagementPolicyUpdateRequest:
+      type: object
+      required: [agentId, mode, approvalMode, maxTradeUsd, maxDailyUsd, allowedTokens]
+      properties:
+        agentId:
+          type: string
+        mode:
+          type: string
+          enum: [mock, real]
+        approvalMode:
+          type: string
+          enum: [per_trade, auto]
+        maxTradeUsd:
+          type: string
+        maxDailyUsd:
+          type: string
+        allowedTokens:
+          type: array
+          items:
+            type: string
+    ManagementApprovalScopeRequest:
+      type: object
+      required: [agentId, chainKey, scope, action]
+      properties:
+        agentId:
+          type: string
+        chainKey:
+          type: string
+        scope:
+          type: string
+          enum: [pair, global]
+        action:
+          type: string
+          enum: [grant, revoke]
+        pairRef:
+          type: string
+        maxAmountUsd:
+          type: string
+        slippageBpsMax:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+    ManagementPauseRequest:
+      type: object
+      required: [agentId]
+      properties:
+        agentId:
+          type: string
+    ManagementResumeRequest:
+      type: object
+      required: [agentId]
+      properties:
+        agentId:
+          type: string
+        force:
+          type: boolean
+    ManagementWithdrawDestinationRequest:
+      type: object
+      required: [agentId, chainKey, destination]
+      properties:
+        agentId:
+          type: string
+        chainKey:
+          type: string
+        destination:
+          type: string
+    ManagementWithdrawRequest:
+      type: object
+      required: [agentId, chainKey, asset, amount, destination]
+      properties:
+        agentId:
+          type: string
+        chainKey:
+          type: string
+        asset:
+          type: string
+        amount:
+          type: string
+        destination:
+          type: string
+    ManagementOffdexDecisionRequest:
+      type: object
+      required: [agentId, intentId, action]
+      properties:
+        agentId:
+          type: string
+        intentId:
+          type: string
+        action:
+          type: string
+          enum: [approve, cancel, settle_request]
+        reasonCode:
+          type: string
+        reasonMessage:
+          type: string
+    ManagementSessionSelectRequest:
+      type: object
+      required: [agentId, token]
+      properties:
+        agentId:
+          type: string
+        token:
           type: string
     CopySubscriptionCreateRequest:
       type: object

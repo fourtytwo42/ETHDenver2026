@@ -1,17 +1,17 @@
-# Slice 09 Tasks
+# Slice 10 Tasks
 
-Active slice: `Slice 09: Public Web Vertical Slice`
+Active slice: `Slice 10: Management UI Vertical Slice`
 
 ## Checklist
 - [x] Record pre-flight objective, acceptance checks, touched-file allowlist, and slice guardrails.
-- [x] Reconcile canonical docs to defer `/status` from Slice 09 to Slice 14.
-- [x] Implement shared public UI primitives (theme toggle, shell, status/mode badges, public types/formatters).
-- [x] Replace `/` with dashboard UI and data loading from public endpoints.
-- [x] Add `/agents` directory route with search/filter/sort/pagination and stale indicators.
-- [x] Replace `/agents/[agentId]` placeholder with public profile content while preserving bootstrap token-strip behavior.
-- [x] Extend public read endpoints for Slice 09 UI data needs.
-- [x] Update OpenAPI for public endpoint query/response surface changes.
+- [x] Reconcile issue `#10` scope with canonical Slice 10 DoD (include off-DEX queue/controls + audit panel).
+- [x] Add management API routes for agent-state, approvals decision/scope, policy update, pause/resume, withdraw destination/withdraw, audit list, off-DEX decision, session helpers, and logout.
+- [x] Add/extend management service + auth helpers for Slice 10 write/read enforcement and audit recording.
+- [x] Add JSON schemas for Slice 10 request payloads and wire route validation.
+- [x] Update `/agents/[agentId]` to render authorized management panels with loading/empty/error/degraded/unauthorized states.
+- [x] Add header managed-agent dropdown + logout behavior and route auto-switch.
+- [x] Update OpenAPI and auth wire examples for Slice 10 endpoint additions.
 - [x] Run required global validation gates.
-- [x] Run Slice 09 curl/browser matrix including negative-path checks.
-- [x] Update acceptance evidence and mark Slice 09 complete in tracker/roadmap.
-- [x] Post final verification evidence + commit hash to issue `#9`.
+- [x] Run Slice-10 functional + negative-path verification matrix and capture evidence.
+- [x] Update tracker/roadmap Slice 10 status after all validations pass.
+- [ ] Commit/push Slice 10 and post verification evidence + commit hash to issue `#10`.

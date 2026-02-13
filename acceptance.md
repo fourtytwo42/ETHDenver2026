@@ -761,3 +761,118 @@ Results:
   1. revert Slice 09 touched files only,
   2. rerun required gates,
   3. verify tracker/roadmap/source-of-truth consistency and public route behavior.
+
+## Slice 10 Acceptance Evidence
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 10: Management UI Vertical Slice`
+Issue mapping: `#10`
+
+### Objective + scope lock
+- Objective: implement canonical Slice 10 management UI + API vertical slice on `/agents/:id`.
+- Scope lock honored: off-DEX depth is queue/state controls only; no Slice 12 escrow execution/runtime adapter work.
+
+### File-level evidence (Slice 10)
+- Web/API implementation:
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+  - `apps/network-web/src/components/public-shell.tsx`
+  - `apps/network-web/src/components/management-header-controls.tsx`
+  - `apps/network-web/src/app/globals.css`
+  - `apps/network-web/src/app/api/v1/management/agent-state/route.ts`
+  - `apps/network-web/src/app/api/v1/management/audit/route.ts`
+  - `apps/network-web/src/app/api/v1/management/approvals/decision/route.ts`
+  - `apps/network-web/src/app/api/v1/management/approvals/scope/route.ts`
+  - `apps/network-web/src/app/api/v1/management/policy/update/route.ts`
+  - `apps/network-web/src/app/api/v1/management/pause/route.ts`
+  - `apps/network-web/src/app/api/v1/management/resume/route.ts`
+  - `apps/network-web/src/app/api/v1/management/withdraw/destination/route.ts`
+  - `apps/network-web/src/app/api/v1/management/withdraw/route.ts`
+  - `apps/network-web/src/app/api/v1/management/offdex/decision/route.ts`
+  - `apps/network-web/src/app/api/v1/management/session/agents/route.ts`
+  - `apps/network-web/src/app/api/v1/management/session/select/route.ts`
+  - `apps/network-web/src/app/api/v1/management/logout/route.ts`
+- Schemas/contracts/docs:
+  - `packages/shared-schemas/json/management-approval-decision-request.schema.json`
+  - `packages/shared-schemas/json/management-policy-update-request.schema.json`
+  - `packages/shared-schemas/json/management-approval-scope-request.schema.json`
+  - `packages/shared-schemas/json/management-pause-request.schema.json`
+  - `packages/shared-schemas/json/management-resume-request.schema.json`
+  - `packages/shared-schemas/json/management-withdraw-destination-request.schema.json`
+  - `packages/shared-schemas/json/management-withdraw-request.schema.json`
+  - `packages/shared-schemas/json/management-offdex-decision-request.schema.json`
+  - `packages/shared-schemas/json/management-session-select-request.schema.json`
+  - `docs/api/openapi.v1.yaml`
+  - `docs/api/AUTH_WIRE_EXAMPLES.md`
+- Governance/process:
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+
+### Governance synchronization evidence
+- GitHub issue `#10` DoD synchronized to canonical scope (added off-DEX queue/controls + audit panel).
+
+### Required global gate evidence
+Executed with:
+- `source ~/.nvm/nvm.sh && nvm use --silent default`
+
+Results:
+- `npm run db:parity` -> PASS (`ok: true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`ok: true`)
+- `npm run build` -> PASS (Next.js build + TypeScript)
+
+### Slice-10 functional and negative-path API evidence
+Runtime for API verification:
+- `XCLAW_MANAGEMENT_TOKEN_ENC_KEY` set to a valid base64 32-byte key for local test session/bootstrap path.
+- Local seeded test agent: `ag_slice10` with bootstrap token fixture inserted for test matrix.
+
+Verification highlights:
+1. Bootstrap session succeeds and emits cookies:
+- `POST /api/v1/management/session/bootstrap` -> `200`
+- `Set-Cookie`: `xclaw_mgmt`, `xclaw_csrf`, clear `xclaw_stepup`
+
+2. Unauthorized read fails correctly:
+- `GET /api/v1/management/agent-state?agentId=ag_slice10` (no cookie) -> `401 auth_invalid`
+
+3. CSRF enforcement works:
+- `POST /api/v1/management/approvals/decision` (no `X-CSRF-Token`) -> `401 csrf_invalid`
+
+4. Approval queue action works:
+- `POST /api/v1/management/approvals/decision` approve -> `200` (`status: approved`)
+- repeat decision on same trade -> `409 trade_invalid_transition`
+
+5. Step-up gating works:
+- `POST /api/v1/management/withdraw/destination` (no stepup cookie) -> `401 stepup_required`
+- `POST /api/v1/management/stepup/challenge` -> `200`
+- `POST /api/v1/management/stepup/verify` -> `200` + `Set-Cookie xclaw_stepup`
+- `POST /api/v1/management/withdraw/destination` -> `200`
+- `POST /api/v1/management/withdraw` -> `200` (`status: accepted`)
+
+6. Off-DEX queue controls work:
+- `POST /api/v1/management/offdex/decision` action `approve` from `proposed` -> `200` (`status: accepted`)
+- repeat `approve` from `accepted` -> `409 trade_invalid_transition` + actionHint
+
+7. Header/session helper + logout behavior works:
+- `GET /api/v1/management/session/agents` -> `200` with managed agent list
+- `POST /api/v1/management/logout` -> `200` with clear-cookie headers
+- subsequent `GET /api/v1/management/agent-state` with updated cookie jar -> `401 auth_invalid`
+
+8. Audit panel backing data present:
+- `GET /api/v1/management/agent-state` response includes non-empty `auditLog` with redacted payload entries.
+
+### High-risk review mode evidence
+- Security-sensitive areas touched: management auth, CSRF, step-up gating, withdraw controls, approval scope changes.
+- Second-opinion pass: completed by targeted re-review of auth/step-up guarded endpoints and failure-path responses.
+- Rollback plan:
+  1. revert Slice 10 touched files only,
+  2. rerun required validation gates,
+  3. verify tracker/roadmap + issue `#10` synchronization remains coherent.
+
+### Blockers encountered and resolution
+- `npm` not initially on shell PATH.
+  - Resolution: run validations with `source ~/.nvm/nvm.sh && nvm use --silent default`.
+
