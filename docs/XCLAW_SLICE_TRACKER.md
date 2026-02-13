@@ -114,16 +114,16 @@ DoD:
 ---
 
 ## Slice 07: Core API Vertical Slice
-Status: [ ]
+Status: [x]
 
 Goal:
 - Minimal production-shape API for register/heartbeat/trade/event + public reads.
 
 DoD:
-- [ ] core write endpoints functional: `POST /api/v1/agent/register`, `POST /api/v1/agent/heartbeat`, `POST /api/v1/trades/proposed`, `POST /api/v1/trades/:tradeId/status`, `POST /api/v1/events`
-- [ ] public read endpoints functional: leaderboard, agents search, profile, trades, activity
-- [ ] agent write auth baseline enforced (`Authorization: Bearer` + `Idempotency-Key`)
-- [ ] error contract is consistent (`code`, `message`, optional `actionHint`, optional `details`, `requestId`)
+- [x] core write endpoints functional: `POST /api/v1/agent/register`, `POST /api/v1/agent/heartbeat`, `POST /api/v1/trades/proposed`, `POST /api/v1/trades/:tradeId/status`, `POST /api/v1/events`
+- [x] public read endpoints functional: leaderboard, agents search, profile, trades, activity
+- [x] agent write auth baseline enforced (`Authorization: Bearer` + `Idempotency-Key`)
+- [x] error contract is consistent (`code`, `message`, optional `actionHint`, optional `details`, `requestId`)
 
 ---
 

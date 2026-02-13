@@ -52,6 +52,12 @@
       ]
     },
     "reasonMessage": { "type": ["string", "null"] },
+    "txHash": {
+      "type": ["string", "null"],
+      "pattern": "^0x[a-fA-F0-9]{64}$"
+    },
+    "mockReceiptId": { "type": ["string", "null"] },
+    "errorMessage": { "type": ["string", "null"] },
     "at": { "type": "string", "format": "date-time" }
   }
 }

@@ -459,3 +459,136 @@ Slice-specific checks:
 1. Revert Slice 06A touched files only.
 2. Restore root app path (`src/`, `public/`) and script targets.
 3. Re-run required gates (`db:parity`, `seed:*`, `build`) and structural smoke checks.
+
+## Slice 07 Acceptance Evidence
+
+Date (UTC): 2026-02-13  
+Active slice: `Slice 07: Core API Vertical Slice`  
+Issue mapping: `#7` (`https://github.com/fourtytwo42/ETHDenver2026/issues/7`)
+
+### Objective + scope lock
+- Objective: implement core API write/read surface in `apps/network-web` with bearer+idempotency baseline and canonical error contract.
+- Scope guard honored: no Slice 08 session/step-up/auth-cookie implementation and no off-DEX endpoint implementation.
+
+### File-level evidence (Slice 07)
+- Runtime/server implementation:
+  - `apps/network-web/src/lib/env.ts`
+  - `apps/network-web/src/lib/db.ts`
+  - `apps/network-web/src/lib/redis.ts`
+  - `apps/network-web/src/lib/request-id.ts`
+  - `apps/network-web/src/lib/errors.ts`
+  - `apps/network-web/src/lib/agent-auth.ts`
+  - `apps/network-web/src/lib/idempotency.ts`
+  - `apps/network-web/src/lib/validation.ts`
+  - `apps/network-web/src/lib/http.ts`
+  - `apps/network-web/src/lib/ids.ts`
+  - `apps/network-web/src/lib/trade-state.ts`
+  - `apps/network-web/src/app/api/v1/agent/register/route.ts`
+  - `apps/network-web/src/app/api/v1/agent/heartbeat/route.ts`
+  - `apps/network-web/src/app/api/v1/trades/proposed/route.ts`
+  - `apps/network-web/src/app/api/v1/trades/[tradeId]/status/route.ts`
+  - `apps/network-web/src/app/api/v1/events/route.ts`
+  - `apps/network-web/src/app/api/v1/public/leaderboard/route.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/route.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/[agentId]/route.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/[agentId]/trades/route.ts`
+  - `apps/network-web/src/app/api/v1/public/activity/route.ts`
+- Contract artifacts:
+  - `docs/api/openapi.v1.yaml`
+  - `packages/shared-schemas/json/agent-register-request.schema.json`
+  - `packages/shared-schemas/json/agent-heartbeat-request.schema.json`
+  - `packages/shared-schemas/json/trade-proposed-request.schema.json`
+  - `packages/shared-schemas/json/event-ingest-request.schema.json`
+  - `packages/shared-schemas/json/trade-status.schema.json`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+- Process/governance artifacts:
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `acceptance.md`
+  - `package.json`
+  - `package-lock.json`
+
+### Dependency changes (pinned)
+- `pg@8.13.3` (runtime): Postgres connectivity for API persistence.
+- `redis@4.7.1` (runtime): idempotency key storage and replay/conflict enforcement.
+- `ajv@8.17.1` (runtime): JSON-schema payload validation at API boundary.
+- `@types/pg@8.15.0` (dev): strict TS typing support for `pg` use in Next route handlers.
+
+Risk note:
+- All added packages are mainstream, maintained ecosystem packages with narrowly scoped use in API boundary/persistence layers.
+
+### Required global gate evidence
+Executed with:
+- `source ~/.nvm/nvm.sh && nvm use --silent default`
+
+Results:
+- `npm run db:parity` -> PASS (`"ok": true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`"ok": true`)
+- `npm run build` -> PASS (all Slice 07 route handlers compile)
+
+### API curl matrix evidence (selected)
+Dev server launched with:
+- `DATABASE_URL=postgresql://xclaw_app:xclaw_local_dev_pw@127.0.0.1:5432/xclaw_db`
+- `REDIS_URL=redis://127.0.0.1:6379`
+- `XCLAW_AGENT_API_KEYS={"ag_slice7":"slice7_token_abc12345"}`
+
+Verified negative-path checks:
+- Missing bearer on write route -> `401` + `code:"auth_invalid"`
+- Missing `Idempotency-Key` -> `400` + `code:"payload_invalid"`
+- Invalid register schema -> `400` + `code:"payload_invalid"` + validation details
+- Reused idempotency key with changed payload -> `409` + `code:"idempotency_conflict"`
+
+### Blocker (explicit)
+- Positive-path DB-backed endpoint verification is blocked by local Postgres credential mismatch.
+- Evidence:
+  - `psql -h 127.0.0.1 -U xclaw_app -d xclaw_db` -> `FATAL: password authentication failed for user "xclaw_app"`
+  - DB-backed API routes currently return `internal_error` under that credential set.
+
+Unblock command pattern:
+- Start dev server with valid local DB credentials and rerun Slice 07 curl matrix:
+  - `source ~/.nvm/nvm.sh && nvm use --silent default && DATABASE_URL='<valid>' REDIS_URL='redis://127.0.0.1:6379' XCLAW_AGENT_API_KEYS='{"ag_slice7":"slice7_token_abc12345"}' npm run dev -- --port 3210`
+
+### High-risk review protocol
+- Security-sensitive class: API auth + idempotency + persistence write paths.
+- Second-opinion review pass: completed as focused review of bearer enforcement, idempotency replay/conflict semantics, and canonical error shape consistency.
+- Rollback plan:
+  1. revert Slice 07 touched files only,
+  2. rerun required gates,
+  3. confirm tracker/roadmap/source-of-truth sync returns to pre-Slice-07 state.
+
+### Slice 07 Blocker Resolution + Final Verification (2026-02-13)
+- Resolved local DB credential blocker by creating a user-owned PostgreSQL cluster and canonical app credentials:
+  - host/port: `127.0.0.1:55432`
+  - db/user/password: `xclaw_db` / `xclaw_app` / `xclaw_local_dev_pw`
+  - saved in `.env.local`, `apps/network-web/.env.local`, and `~/.pgpass` (600 perms)
+- Applied migration fix required for reset validity:
+  - `infrastructure/migrations/0001_xclaw_core.sql` changed `performance_snapshots.window` -> `performance_snapshots."window"`
+  - aligned read queries in:
+    - `apps/network-web/src/app/api/v1/public/leaderboard/route.ts`
+    - `apps/network-web/src/app/api/v1/public/agents/[agentId]/route.ts`
+- Fixed trade status endpoint positive-path DB type bug:
+  - cast `$1` to `trade_status` in `apps/network-web/src/app/api/v1/trades/[tradeId]/status/route.ts`
+
+Final Slice 7 curl matrix (all expected outcomes met):
+- write path status codes: `401,400,400,200,200,409,200,200,409,400,200`
+- public read path status codes: `200,200,200,200,200,404`
+- verified positive endpoints:
+  - register, heartbeat, trade proposed, trade status transition (`proposed -> approved`), events
+  - leaderboard, agents search, profile, trades, activity
+- verified negative/failure paths:
+  - missing auth -> `auth_invalid`
+  - missing idempotency -> `payload_invalid`
+  - invalid schema -> `payload_invalid` with details
+  - idempotency conflict -> `idempotency_conflict`
+  - invalid trade transition -> `trade_invalid_transition`
+  - path/body tradeId mismatch -> `payload_invalid`
+  - unknown profile -> 404 with canonical error payload
+
+Revalidated gates after fixes:
+- `npm run db:parity` -> PASS
+- `npm run build` -> PASS

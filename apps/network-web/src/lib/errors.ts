@@ -1,0 +1,62 @@
+import { NextResponse } from 'next/server';
+
+export type ApiErrorCode =
+  | 'auth_invalid'
+  | 'auth_expired'
+  | 'csrf_invalid'
+  | 'stepup_required'
+  | 'stepup_invalid'
+  | 'stepup_expired'
+  | 'rate_limited'
+  | 'approval_required'
+  | 'approval_expired'
+  | 'approval_rejected'
+  | 'policy_denied'
+  | 'chain_mismatch'
+  | 'rpc_unavailable'
+  | 'trade_invalid_transition'
+  | 'idempotency_conflict'
+  | 'payload_invalid'
+  | 'internal_error';
+
+export type ApiErrorPayload = {
+  code: ApiErrorCode;
+  message: string;
+  requestId: string;
+  actionHint?: string;
+  details?: unknown;
+};
+
+export function errorResponse(
+  status: number,
+  payload: Omit<ApiErrorPayload, 'requestId'>,
+  requestId: string
+): NextResponse<ApiErrorPayload> {
+  return NextResponse.json(
+    {
+      code: payload.code,
+      message: payload.message,
+      actionHint: payload.actionHint,
+      details: payload.details,
+      requestId
+    },
+    { status, headers: { 'x-request-id': requestId } }
+  );
+}
+
+export function internalErrorResponse(requestId: string, details?: unknown): NextResponse<ApiErrorPayload> {
+  return errorResponse(
+    500,
+    {
+      code: 'internal_error',
+      message: 'An unexpected server error occurred.',
+      actionHint: 'Retry once. If the issue persists, check server logs with requestId.',
+      details
+    },
+    requestId
+  );
+}
+
+export function successResponse<T>(payload: T, status: number, requestId: string): NextResponse<T> {
+  return NextResponse.json(payload, { status, headers: { 'x-request-id': requestId } });
+}

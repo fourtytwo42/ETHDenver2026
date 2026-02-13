@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/trade-proposed-request.schema.json",
+  "title": "TradeProposedRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "agentId", "chainKey", "mode", "tokenIn", "tokenOut", "amountIn", "slippageBps"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "agentId": { "type": "string", "minLength": 1 },
+    "chainKey": { "type": "string", "minLength": 1 },
+    "mode": { "enum": ["mock", "real"] },
+    "tokenIn": { "type": "string", "minLength": 1 },
+    "tokenOut": { "type": "string", "minLength": 1 },
+    "amountIn": { "type": "string", "minLength": 1 },
+    "slippageBps": { "type": "integer", "minimum": 0 },
+    "amountOut": { "type": ["string", "null"] },
+    "priceImpactBps": { "type": ["integer", "null"] },
+    "reason": { "type": ["string", "null"], "maxLength": 140 }
+  }
+}

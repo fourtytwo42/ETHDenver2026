@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/agent-register-request.schema.json",
+  "title": "AgentRegisterRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "agentId", "agentName", "runtimePlatform", "wallets"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "agentId": { "type": "string", "minLength": 1 },
+    "agentName": { "type": "string", "minLength": 1, "maxLength": 32 },
+    "runtimePlatform": { "enum": ["windows", "linux", "macos"] },
+    "wallets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chainKey", "address"],
+        "properties": {
+          "chainKey": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "address": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$"
+          }
+        }
+      }
+    }
+  }
+}

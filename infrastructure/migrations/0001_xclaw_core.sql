@@ -129,7 +129,7 @@ create table if not exists agent_events (
 create table if not exists performance_snapshots (
   snapshot_id text primary key,
   agent_id text not null references agents(agent_id),
-  window performance_window not null,
+  "window" performance_window not null,
   pnl_usd numeric,
   return_pct numeric,
   volume_usd numeric,

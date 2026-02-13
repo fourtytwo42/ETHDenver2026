@@ -175,11 +175,11 @@ Exit criteria:
 ## 5) Network App Backend (API + Persistence)
 
 ### 5.1 Core API endpoints
-- [ ] `POST /api/v1/agent/register`
-- [ ] `POST /api/v1/agent/heartbeat`
-- [ ] `POST /api/v1/trades/proposed`
-- [ ] `POST /api/v1/trades/:tradeId/status`
-- [ ] `POST /api/v1/events`
+- [x] `POST /api/v1/agent/register`
+- [x] `POST /api/v1/agent/heartbeat`
+- [x] `POST /api/v1/trades/proposed`
+- [x] `POST /api/v1/trades/:tradeId/status`
+- [x] `POST /api/v1/events`
 - [ ] `POST /api/v1/offdex/intents`
 - [ ] `POST /api/v1/offdex/intents/:intentId/accept`
 - [ ] `POST /api/v1/offdex/intents/:intentId/cancel`
@@ -193,17 +193,20 @@ Exit criteria:
 - [ ] `POST /api/v1/management/revoke-all`
 
 ### 5.3 Public read endpoints
-- [ ] leaderboard endpoint
-- [ ] agents search endpoint
-- [ ] agent profile endpoint
-- [ ] agent trades endpoint
-- [ ] activity endpoint
+- [x] leaderboard endpoint
+- [x] agents search endpoint
+- [x] agent profile endpoint
+- [x] agent trades endpoint
+- [x] activity endpoint
 
 ### 5.4 Reliability controls
-- [ ] idempotency enforcement on writes
+- [x] idempotency enforcement on writes
 - [ ] rate limits per policy
-- [ ] structured errors with `code/message/actionHint`
-- [ ] correlation IDs and structured logging
+- [x] structured errors with `code/message/actionHint`
+- [x] correlation IDs and structured logging
+
+Note:
+- Slice 07 DB-blocker is resolved using user-owned local Postgres with canonical app credentials (`xclaw_app` / `xclaw_db`) on `127.0.0.1:55432`; see `acceptance.md` Slice 07 evidence.
 
 Exit criteria:
 - Endpoints functional with contract-compliant payloads and errors.

@@ -1,21 +1,18 @@
-# Slice 06A Tasks
+# Slice 07 Tasks
 
-Active slice: `Slice 06A: Foundation Alignment Backfill (Post-06 Prereq)`
+Active slice: `Slice 07: Core API Vertical Slice`
 
 ## Checklist
 - [x] Record pre-flight objective, acceptance checks, touched-file allowlist, and slice guardrails.
-- [x] Update `docs/CONTEXT_PACK.md`, `spec.md`, and `tasks.md` for Slice 06A scope.
-- [x] Create canonical web app root `apps/network-web`.
-- [x] Move root `src/` to `apps/network-web/src/`.
-- [x] Move root `public/` to `apps/network-web/public/`.
-- [x] Add app-local Next config/env/tsconfig for directory-mode build.
-- [x] Update root scripts to run Next/lint against `apps/network-web`.
-- [x] Update root TS path alias to `apps/network-web/src/*`.
-- [x] Verify no remaining dependency on root legacy app paths.
-- [x] Synchronize source-of-truth sequence/issue mapping for Slice 06A.
-- [x] Synchronize roadmap execution order to include Slice 06A prerequisite.
+- [x] Add server runtime primitives for env, db, redis, request-id, auth, idempotency, errors, and validation.
+- [x] Add JSON schema artifacts for Slice 07 request validation.
+- [x] Implement core write routes for register/heartbeat/trade-proposed/trade-status/events.
+- [x] Implement public read routes for leaderboard/agents/profile/trades/activity.
+- [x] Enforce bearer + idempotency baseline on write routes.
+- [x] Enforce canonical error shape and trade-transition validation.
+- [x] Update OpenAPI and source-of-truth artifacts touched by Slice 07 contract changes.
 - [x] Run required global validation gates.
-- [x] Run slice-specific structural checks (`dev`, `start`, path assertions, agent smoke).
-- [x] Update tracker Slice 06A to complete only after validations pass.
-- [x] Append acceptance evidence and rollback/high-risk notes.
-- [x] Create/link GitHub issue `#18`, commit, push, and post verification evidence + commit hash.
+- [x] Run API curl matrix including negative-path checks.
+- [x] Update process artifacts (`docs/CONTEXT_PACK.md`, `spec.md`, `tasks.md`, `acceptance.md`).
+- [x] Mark Slice 07 complete in tracker/roadmap only after DB-backed positive API verification is fully unblocked.
+- [ ] Post final verification evidence + commit hash to issue `#7`.

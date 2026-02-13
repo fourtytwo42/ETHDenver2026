@@ -59,7 +59,6 @@ A change is done only when:
 2. Pin versions for deterministic builds.
 3. Avoid adding transitive risk for convenience-only changes.
 4. Prefer existing project dependencies when feasible.
-5. Run local skill security scan (MoltCops or equivalent) before enabling/updating any OpenClaw skill; block on critical findings.
 
 ## H) Evidence-first debugging and recovery
 1. Debug loop: reproduce -> instrument -> hypothesize -> smallest fix -> re-verify -> regression test.

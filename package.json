@@ -14,12 +14,16 @@
     "db:parity": "node infrastructure/scripts/check-migration-parity.mjs"
   },
   "dependencies": {
+    "ajv": "8.17.1",
     "next": "16.1.6",
+    "pg": "8.13.3",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "redis": "4.7.1"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/pg": "8.15.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

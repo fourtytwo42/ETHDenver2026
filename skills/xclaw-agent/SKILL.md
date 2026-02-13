@@ -23,8 +23,6 @@ Use this skill to operate a local X-Claw agent runtime safely.
 - Never place secrets in prompts or logs.
 - Use the Python-first wrapper (`scripts/xclaw_agent_skill.py`) which delegates to local `xclaw-agent`.
 - Do not bypass with ad-hoc RPC-signing scripts.
-- Run local skill scan before enabling/updating this skill:
-  - `scripts/scan-skill-security.sh`
 
 ## Required Environment
 

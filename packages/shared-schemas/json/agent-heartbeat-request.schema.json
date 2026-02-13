@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/agent-heartbeat-request.schema.json",
+  "title": "AgentHeartbeatRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "agentId", "publicStatus", "mode", "approvalMode"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "agentId": { "type": "string", "minLength": 1 },
+    "publicStatus": { "enum": ["active", "offline", "degraded", "paused", "deactivated"] },
+    "mode": { "enum": ["mock", "real"] },
+    "approvalMode": { "enum": ["per_trade", "auto"] },
+    "maxTradeUsd": { "type": ["string", "number", "null"] },
+    "maxDailyUsd": { "type": ["string", "number", "null"] },
+    "allowedTokens": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "balances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chainKey", "token", "amount"],
+        "properties": {
+          "chainKey": { "type": "string" },
+          "token": { "type": "string" },
+          "amount": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -22,7 +22,11 @@ paths:
       responses:
         '200':
           description: Agent registered.
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
         '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/agent/heartbeat:
     post:
@@ -40,7 +44,11 @@ paths:
       responses:
         '200':
           description: Heartbeat accepted.
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
         '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/trades/proposed:
     post:
@@ -58,7 +66,11 @@ paths:
       responses:
         '200':
           description: Proposed trade accepted.
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
         '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/trades/{tradeId}/status:
     post:
@@ -77,6 +89,10 @@ paths:
       responses:
         '200':
           description: Status transition accepted.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
         '409':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/events:
@@ -95,7 +111,11 @@ paths:
       responses:
         '200':
           description: Event accepted.
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
         '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/management/session/bootstrap:
     post:
@@ -553,6 +573,12 @@ components:
         reasonCode:
           type: string
         reasonMessage:
+          type: string
+        txHash:
+          type: string
+        mockReceiptId:
+          type: string
+        errorMessage:
           type: string
         at:
           type: string

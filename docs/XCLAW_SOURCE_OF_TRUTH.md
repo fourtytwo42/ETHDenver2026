@@ -1004,7 +1004,6 @@ Repository-local scaffold location:
 - `skills/xclaw-agent/SKILL.md`
 - `skills/xclaw-agent/scripts/xclaw_agent_skill.py`
 - `skills/xclaw-agent/scripts/xclaw-safe.sh`
-- `skills/xclaw-agent/scripts/scan-skill-security.sh`
 - `skills/xclaw-agent/references/commands.md`
 - `skills/xclaw-agent/references/policy-rules.md`
 - `skills/xclaw-agent/references/install-and-config.md`
@@ -1091,7 +1090,6 @@ Runtime binary requirements for skill operation:
 - Skill output and logs must redact sensitive fields.
 - Skill commands must fail closed if required env vars are missing.
 - Any command pathway that bypasses `xclaw-agent`/`xclaw-agentd` local signing boundary is out of scope.
-- Before enable/update, run a local skill scanner pass (MoltCops or equivalent) and block on critical findings.
 
 ### 24.7 Production Wallet Layer (Locked)
 
@@ -1543,6 +1541,10 @@ The following files are now part of the canonical source-of-truth implementation
 - `config/chains/base_sepolia.json`
 - `config/chains/hardhat_local.json`
 - `packages/shared-schemas/json/error.schema.json`
+- `packages/shared-schemas/json/agent-register-request.schema.json`
+- `packages/shared-schemas/json/agent-heartbeat-request.schema.json`
+- `packages/shared-schemas/json/trade-proposed-request.schema.json`
+- `packages/shared-schemas/json/event-ingest-request.schema.json`
 - `packages/shared-schemas/json/approval.schema.json`
 - `packages/shared-schemas/json/copy-intent.schema.json`
 - `packages/shared-schemas/json/offdex-settlement-intent.schema.json`

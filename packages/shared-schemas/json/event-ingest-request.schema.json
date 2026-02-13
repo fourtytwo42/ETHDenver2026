@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/event-ingest-request.schema.json",
+  "title": "EventIngestRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "agentId", "eventType", "createdAt"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "agentId": { "type": "string", "minLength": 1 },
+    "tradeId": { "type": ["string", "null"] },
+    "eventType": {
+      "enum": [
+        "heartbeat",
+        "trade_proposed",
+        "trade_approval_pending",
+        "trade_approved",
+        "trade_rejected",
+        "trade_executing",
+        "trade_verifying",
+        "trade_filled",
+        "trade_failed",
+        "trade_expired",
+        "trade_verification_timeout",
+        "policy_changed"
+      ]
+    },
+    "payload": { "type": "object" },
+    "createdAt": { "type": "string", "minLength": 1 }
+  }
+}
