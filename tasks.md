@@ -18,4 +18,4 @@ Active slice: `Slice 06A: Foundation Alignment Backfill (Post-06 Prereq)`
 - [x] Run slice-specific structural checks (`dev`, `start`, path assertions, agent smoke).
 - [x] Update tracker Slice 06A to complete only after validations pass.
 - [x] Append acceptance evidence and rollback/high-risk notes.
-- [ ] Create/link GitHub issue `#18`, commit, push, and post verification evidence + commit hash.
+- [x] Create/link GitHub issue `#18`, commit, push, and post verification evidence + commit hash.
