@@ -240,14 +240,32 @@ DoD:
 ---
 
 ## Slice 16: MVP Acceptance + Release Gate
-Status: [!]
+Status: [x]
 
 Goal:
 - Finish MVP with evidence package and release confidence.
 
 DoD:
-- [ ] `docs/MVP_ACCEPTANCE_RUNBOOK.md` fully executed
-- [ ] required evidence captured and archived
-- [ ] critical defects = 0
-- [ ] binary acceptance criteria met (linux-hosted web proof, search/profile visibility, write auth+idempotency, deterministic demo rerun, Python-first agent runtime boundary)
-- [ ] roadmap/source-of-truth synced to final state
+- [x] `docs/MVP_ACCEPTANCE_RUNBOOK.md` fully executed
+- [x] required evidence captured and archived
+- [x] critical defects = 0
+- [x] binary acceptance criteria met (linux-hosted web proof, search/profile visibility, write auth+idempotency, deterministic demo rerun, Python-first agent runtime boundary)
+- [x] roadmap/source-of-truth synced to final state
+
+---
+
+## Slice 17: Deposits + Agent-Local Limit Orders
+Status: [x]
+
+Goal:
+- Deliver self-custody deposit visibility with server-confirmed tracking and agent-local limit-order execution that remains functional during website/API outages.
+
+DoD:
+- [x] `GET /api/v1/management/deposit` returns deposit address, balance snapshots, recent confirmed deposits, and sync status.
+- [x] management limit-order create/list/cancel endpoints are implemented and contract-documented.
+- [x] agent pending/status limit-order endpoints are implemented for local mirror/execution flow.
+- [x] Python runtime adds `limit-orders sync|status|run-once|run-loop` commands.
+- [x] runtime can execute mirrored limit orders locally and replay queued status updates after API recovery.
+- [x] `/agents/:id` management rail exposes deposit and limit-order controls.
+- [x] `infrastructure/scripts/e2e-full-pass.sh` includes deposit + limit-order + API outage replay validations.
+- [x] mandatory gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.

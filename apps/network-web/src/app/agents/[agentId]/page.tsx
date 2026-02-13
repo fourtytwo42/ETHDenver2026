@@ -161,6 +161,53 @@ type ManagementViewState =
   | { phase: 'error'; message: string }
   | { phase: 'ready'; data: ManagementStatePayload };
 
+type DepositPayload = {
+  ok: boolean;
+  agentId: string;
+  chains: Array<{
+    chainKey: string;
+    depositAddress: string;
+    minConfirmations: number;
+    lastSyncedAt: string | null;
+    syncStatus: 'ok' | 'degraded';
+    syncDetail: string | null;
+    balances: Array<{
+      token: string;
+      balance: string;
+      blockNumber: number | null;
+      observedAt: string;
+    }>;
+    recentDeposits: Array<{
+      token: string;
+      amount: string;
+      txHash: string;
+      blockNumber: number;
+      confirmedAt: string;
+      status: string;
+    }>;
+    explorerBaseUrl: string | null;
+  }>;
+};
+
+type LimitOrderItem = {
+  orderId: string;
+  agentId: string;
+  chainKey: string;
+  mode: 'mock' | 'real';
+  side: 'buy' | 'sell';
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: string;
+  limitPrice: string;
+  slippageBps: number;
+  status: string;
+  expiresAt: string | null;
+  cancelledAt: string | null;
+  triggerSource: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 async function bootstrapSession(agentId: string, token: string): Promise<{ ok: true } | { ok: false; message: string }> {
   const response = await fetch('/api/v1/management/session/bootstrap', {
     method: 'POST',
@@ -224,6 +271,26 @@ async function managementPost(path: string, payload: Record<string, unknown>) {
   return json;
 }
 
+async function managementGet(path: string) {
+  const csrf = getCsrfToken();
+  const headers: Record<string, string> = {};
+  if (csrf) {
+    headers['x-csrf-token'] = csrf;
+  }
+
+  const response = await fetch(path, {
+    method: 'GET',
+    credentials: 'same-origin',
+    headers,
+    cache: 'no-store'
+  });
+  const json = (await response.json().catch(() => null)) as { message?: string } | null;
+  if (!response.ok) {
+    throw new Error(json?.message ?? 'Management request failed.');
+  }
+  return json;
+}
+
 export default function AgentPublicProfilePage() {
   const params = useParams<{ agentId: string }>();
   const router = useRouter();
@@ -241,6 +308,16 @@ export default function AgentPublicProfilePage() {
   const [stepupCode, setStepupCode] = useState('');
   const [withdrawDestination, setWithdrawDestination] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('0.1');
+  const [depositData, setDepositData] = useState<DepositPayload | null>(null);
+  const [limitOrders, setLimitOrders] = useState<LimitOrderItem[]>([]);
+  const [orderChainKey, setOrderChainKey] = useState('base_sepolia');
+  const [orderMode, setOrderMode] = useState<'mock' | 'real'>('real');
+  const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy');
+  const [orderTokenIn, setOrderTokenIn] = useState('0x4200000000000000000000000000000000000006');
+  const [orderTokenOut, setOrderTokenOut] = useState('0x036CbD53842c5426634e7929541eC2318f3dCF7e');
+  const [orderAmountIn, setOrderAmountIn] = useState('0.01');
+  const [orderLimitPrice, setOrderLimitPrice] = useState('2500');
+  const [orderSlippageBps, setOrderSlippageBps] = useState('50');
 
   function renderTxHash(hash: string | null): string {
     if (!hash) {
@@ -350,6 +427,13 @@ export default function AgentPublicProfilePage() {
           if (savedDestination) {
             setWithdrawDestination(savedDestination);
           }
+
+          const [depositPayload, limitOrderPayload] = await Promise.all([
+            managementGet(`/api/v1/management/deposit?agentId=${encodeURIComponent(agentId)}`),
+            managementGet(`/api/v1/management/limit-orders?agentId=${encodeURIComponent(agentId)}&limit=50`)
+          ]);
+          setDepositData(depositPayload as DepositPayload);
+          setLimitOrders(((limitOrderPayload as { items?: LimitOrderItem[] }).items ?? []).filter(Boolean));
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -412,6 +496,12 @@ export default function AgentPublicProfilePage() {
 
       const payload = (await managementRes.json()) as ManagementStatePayload;
       setManagement({ phase: 'ready', data: payload });
+      const [depositPayload, limitOrderPayload] = await Promise.all([
+        managementGet(`/api/v1/management/deposit?agentId=${encodeURIComponent(agentId)}`),
+        managementGet(`/api/v1/management/limit-orders?agentId=${encodeURIComponent(agentId)}&limit=50`)
+      ]);
+      setDepositData(depositPayload as DepositPayload);
+      setLimitOrders(((limitOrderPayload as { items?: LimitOrderItem[] }).items ?? []).filter(Boolean));
     } catch (loadError) {
       setManagementError(loadError instanceof Error ? loadError.message : 'Failed to refresh management state.');
     }
@@ -637,6 +727,102 @@ export default function AgentPublicProfilePage() {
 
           {management.phase === 'ready' ? (
             <div className="management-stack">
+              <article className="management-card">
+                <h3>Deposit</h3>
+                {!depositData ? <p className="muted">Loading deposit state...</p> : null}
+                {(depositData?.chains ?? []).map((chain) => (
+                  <div key={chain.chainKey} className="queue-item">
+                    <div>
+                      <strong>{chain.chainKey}</strong>
+                      <div className="muted">Address: {chain.depositAddress}</div>
+                      <div className="muted">
+                        Sync: {chain.syncStatus} {chain.syncDetail ? `(${chain.syncDetail})` : ''}
+                      </div>
+                      <div className="muted">Last sync: {formatUtc(chain.lastSyncedAt)} UTC</div>
+                      <div className="muted">Min confirmations: {chain.minConfirmations}</div>
+                    </div>
+                  </div>
+                ))}
+                {(depositData?.chains ?? []).flatMap((chain) => chain.recentDeposits).length === 0 ? (
+                  <p className="muted">No confirmed deposit events yet.</p>
+                ) : null}
+              </article>
+
+              <article className="management-card">
+                <h3>Limit Orders</h3>
+                <div className="toolbar">
+                  <input value={orderChainKey} onChange={(event) => setOrderChainKey(event.target.value)} placeholder="Chain key" />
+                  <input value={orderMode} onChange={(event) => setOrderMode(event.target.value === 'mock' ? 'mock' : 'real')} placeholder="Mode" />
+                  <input value={orderSide} onChange={(event) => setOrderSide(event.target.value === 'sell' ? 'sell' : 'buy')} placeholder="Side" />
+                </div>
+                <div className="toolbar">
+                  <input value={orderTokenIn} onChange={(event) => setOrderTokenIn(event.target.value)} placeholder="Token In" />
+                  <input value={orderTokenOut} onChange={(event) => setOrderTokenOut(event.target.value)} placeholder="Token Out" />
+                </div>
+                <div className="toolbar">
+                  <input value={orderAmountIn} onChange={(event) => setOrderAmountIn(event.target.value)} placeholder="Amount In" />
+                  <input value={orderLimitPrice} onChange={(event) => setOrderLimitPrice(event.target.value)} placeholder="Limit Price" />
+                  <input value={orderSlippageBps} onChange={(event) => setOrderSlippageBps(event.target.value)} placeholder="Slippage Bps" />
+                </div>
+                <div className="toolbar">
+                  <button
+                    type="button"
+                    className="theme-toggle"
+                    onClick={() =>
+                      void runManagementAction(
+                        () =>
+                          managementPost('/api/v1/management/limit-orders', {
+                            agentId,
+                            chainKey: orderChainKey,
+                            mode: orderMode,
+                            side: orderSide,
+                            tokenIn: orderTokenIn,
+                            tokenOut: orderTokenOut,
+                            amountIn: orderAmountIn,
+                            limitPrice: orderLimitPrice,
+                            slippageBps: Number(orderSlippageBps)
+                          }).then(() => Promise.resolve()),
+                        'Limit order created.'
+                      )
+                    }
+                  >
+                    Create Limit Order
+                  </button>
+                </div>
+                {limitOrders.length === 0 ? <p className="muted">No limit orders.</p> : null}
+                {limitOrders.map((item) => (
+                  <div key={item.orderId} className="queue-item">
+                    <div>
+                      <strong>
+                        {item.side.toUpperCase()} {item.amountIn}
+                      </strong>
+                      <div className="muted">{item.chainKey}</div>
+                      <div className="muted">Status: {item.status}</div>
+                      <div className="muted">
+                        {shortenAddress(item.tokenIn)} {'->'} {shortenAddress(item.tokenOut)} @ {item.limitPrice}
+                      </div>
+                    </div>
+                    {item.status === 'open' || item.status === 'triggered' ? (
+                      <button
+                        type="button"
+                        className="theme-toggle"
+                        onClick={() =>
+                          void runManagementAction(
+                            () =>
+                              managementPost(`/api/v1/management/limit-orders/${item.orderId}/cancel`, { agentId }).then(() =>
+                                Promise.resolve()
+                              ),
+                            `Cancelled ${item.orderId}`
+                          )
+                        }
+                      >
+                        Cancel
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </article>
+
               <article className="management-card">
                 <h3>Step-up Status</h3>
                 <p>

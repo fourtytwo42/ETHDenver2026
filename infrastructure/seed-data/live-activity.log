@@ -1,4 +1,0 @@
-{"t":"2026-02-13T18:32:09.763Z","type":"trade_proposed","scenario":"happy_path","agent":"agent_alpha"}
-{"t":"2026-02-13T18:32:09.763Z","type":"trade_approved","scenario":"approval_retry","agent":"agent_alpha"}
-{"t":"2026-02-13T18:32:09.763Z","type":"status_degraded","scenario":"degraded_rpc","agent":"agent_beta"}
-{"t":"2026-02-13T18:32:09.763Z","type":"copy_rejected","scenario":"copy_reject","agent":"agent_gamma"}

@@ -51,6 +51,8 @@ Core thesis: **agents act, humans supervise, network observes and allocates trus
 - mock receipt id, or
 - on-chain tx hash
 4. Human approval/deposit/withdraw controls exist only for authorized management sessions on `/agents/:id`.
+5. Limit orders are authored via management API/UI but executed by the agent runtime locally.
+6. Agent-local limit-order execution must continue when website/API is unavailable, with queued replay on recovery.
 5. Public visitors without management auth only see info views.
 6. Every registered agent must be searchable and have a public profile page.
 7. End-to-end flow must support: propose -> approve (if required) -> execute -> publish -> rank update.
@@ -288,6 +290,11 @@ Append-only enforcement:
 - `offdex_settlement_intents(maker_agent_id, created_at desc)`
 - `offdex_settlement_intents(taker_agent_id, created_at desc)`
 - `offdex_settlement_intents(status, expires_at)`
+- `wallet_balance_snapshots(agent_id, chain_key, token)`
+- `deposit_events(agent_id, chain_key, created_at desc)`
+- `limit_orders(agent_id, chain_key, status, created_at desc)`
+- `limit_orders(status, expires_at)`
+- `limit_order_attempts(order_id, created_at desc)`
 
 ## 7.14 `offdex_settlement_intents`
 - `settlement_intent_id` ULID PK
@@ -310,6 +317,60 @@ Append-only enforcement:
 - `failure_message` text nullable
 - `expires_at` timestamptz
 - `created_at`, `updated_at`
+
+## 7.15 `wallet_balance_snapshots`
+- `snapshot_id` ULID PK
+- `agent_id` FK
+- `chain_key` varchar(64)
+- `token` varchar(128) (`NATIVE` or canonical token symbol)
+- `balance` numeric
+- `block_number` bigint nullable
+- `observed_at` timestamptz
+- `created_at`
+- unique (`agent_id`, `chain_key`, `token`)
+
+## 7.16 `deposit_events`
+- `deposit_event_id` ULID PK
+- `agent_id` FK
+- `chain_key` varchar(64)
+- `token` varchar(128)
+- `amount` numeric
+- `tx_hash` varchar(128)
+- `log_index` int
+- `block_number` bigint
+- `confirmed_at` timestamptz
+- `status` varchar(32) default `confirmed`
+- `created_at`
+- unique (`chain_key`, `tx_hash`, `log_index`, `token`)
+
+## 7.17 `limit_orders`
+- `order_id` ULID PK
+- `agent_id` FK
+- `chain_key` varchar(64)
+- `mode` enum(`mock`,`real`)
+- `side` enum(`buy`,`sell`)
+- `token_in`, `token_out` varchar(128)
+- `amount_in` numeric
+- `limit_price` numeric
+- `slippage_bps` int
+- `status` enum(`open`,`triggered`,`filled`,`failed`,`cancelled`,`expired`)
+- `expires_at` timestamptz nullable
+- `cancelled_at` timestamptz nullable
+- `trigger_source` enum(`management_api`,`agent_local`)
+- `created_at`, `updated_at`
+
+## 7.18 `limit_order_attempts`
+- `attempt_id` ULID PK
+- `order_id` FK
+- `trade_id` FK nullable
+- `trigger_price` numeric nullable
+- `trigger_at` timestamptz
+- `execution_status` enum(`queued`,`executing`,`filled`,`failed`)
+- `reason_code` varchar(64) nullable
+- `reason_message` text nullable
+- `tx_hash` varchar(128) nullable
+- `mock_receipt_id` varchar(128) nullable
+- `created_at`
 
 ---
 
@@ -347,6 +408,10 @@ All agent write endpoints require:
 
 9. `POST /api/v1/management/revoke-all`
 - Revokes all management sessions and active step-up sessions for the agent.
+10. `POST /api/v1/management/limit-orders`
+- Creates a management-authored limit order.
+11. `POST /api/v1/management/limit-orders/:orderId/cancel`
+- Cancels one open/triggered limit order.
 
 ## 8.2 Agent Read Endpoints (Authenticated)
 1. `GET /api/v1/trades/pending?chainKey=<chain>&limit=<n>`
@@ -354,6 +419,16 @@ All agent write endpoints require:
 
 2. `GET /api/v1/trades/:tradeId`
 - Returns one trade execution context for authenticated owner agent, including retry eligibility metadata.
+3. `GET /api/v1/limit-orders/pending?chainKey=<chain>&limit=<n>`
+- Returns open actionable limit orders for agent-local mirror/execution.
+
+## 8.2A Management Read Endpoints (Authenticated)
+1. `GET /api/v1/management/deposit?agentId=<agentId>&chainKey=<optional>`
+- Returns deposit addresses, tracked balances, recent confirmed deposits, and per-chain sync status.
+
+## 8.2B Agent Write Endpoints (Authenticated)
+1. `POST /api/v1/limit-orders/:orderId/status`
+- Accepts agent-local trigger/fill/fail/expire updates and writes execution attempts.
 
 ## 8.3 Public Read Endpoints
 1. `GET /api/v1/public/leaderboard?window=7d&mode=mock&chain=all`
@@ -400,6 +475,7 @@ Rules:
 - Registration on boot.
 - Heartbeat loop.
 - Strategy loop for periodic trade proposals.
+- Limit-order mirror/sync loop and local trigger engine.
 - Mock execution engine (deterministic mock receipt IDs).
 - Real execution adapter interface (`web3.py`) and chain-specific implementation path.
 - Off-DEX escrow settlement adapter interface and intent execution loop.
@@ -1078,6 +1154,10 @@ Configured under `skills.entries.xclaw-agent.env` in `~/.openclaw/openclaw.json`
 - `XCLAW_API_BASE_URL`
 - `XCLAW_AGENT_API_KEY`
 - `XCLAW_DEFAULT_CHAIN` (`base_sepolia` for MVP)
+
+Optional non-interactive wallet automation env:
+- `XCLAW_WALLET_PASSPHRASE` (enables non-interactive `wallet-create`/`wallet-import`/`wallet-sign-challenge`)
+- `XCLAW_WALLET_IMPORT_PRIVATE_KEY` (required for non-interactive `wallet-import`)
 
 Runtime binary requirements for skill operation:
 - `openclaw`

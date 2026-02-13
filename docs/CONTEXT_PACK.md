@@ -1,58 +1,53 @@
 # X-Claw Context Pack
 
 ## 1) Goal
-- Primary objective: complete `Slice 16: MVP Acceptance + Release Gate` in scope.
-- Success criteria (testable): runbook execution evidence, release-gate validation outputs, binary acceptance evidence, and synchronized canonical docs.
+- Primary objective: complete `Slice 17: Deposits + Agent-Local Limit Orders` after closing Slice 16.
+- Success criteria: working management deposit flow, management-authored limit orders executed locally by agent, outage replay proof, and synchronized canonical artifacts.
 
 ## 2) Constraints
-- Strict slice order: Slice 16 only (Slice 15 is completed and pushed first).
+- Strict slice order: Slice 16 closed first, then Slice 17 implementation.
 - Canonical authority: `docs/XCLAW_SOURCE_OF_TRUTH.md`.
-- Runtime boundary: Node/Next.js for API/web, Python-first runtime for agent/OpenClaw commands.
-- No opportunistic refactors or dependency additions.
+- Runtime boundary: Node/Next.js for web/API, Python-first for agent/OpenClaw runtime.
+- No dependency additions without explicit justification.
 
 ## 3) Contract Impact
-- No OpenAPI/schema/data-model contract changes expected.
-- Canonical acceptance wording synchronization required for:
-  - Linux-hosted web/API runtime proof in this environment,
-  - Python-first agent runtime portability boundary.
+- OpenAPI additions for deposit and limit-order endpoints.
+- Shared schema additions for deposit/limit-order request/response contracts.
+- Data-model migration adds deposit + limit-order persistence tables.
 
 ## 4) Files and Boundaries
-- Expected touched files:
-  - `acceptance.md`
-  - `spec.md`
-  - `tasks.md`
-  - `docs/CONTEXT_PACK.md`
-  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
-  - `docs/XCLAW_BUILD_ROADMAP.md`
-  - `docs/XCLAW_SLICE_TRACKER.md`
-  - `docs/MVP_ACCEPTANCE_RUNBOOK.md` (only if blocker/unblock guidance must be encoded)
-- Forbidden scope:
-  - New feature implementation beyond acceptance/release closure.
-  - API contract redesign or migration changes unrelated to release-gate evidence.
+- API/routes:
+  - `apps/network-web/src/app/api/v1/management/deposit/route.ts`
+  - `apps/network-web/src/app/api/v1/management/limit-orders/route.ts`
+  - `apps/network-web/src/app/api/v1/management/limit-orders/[orderId]/cancel/route.ts`
+  - `apps/network-web/src/app/api/v1/limit-orders/pending/route.ts`
+  - `apps/network-web/src/app/api/v1/limit-orders/[orderId]/status/route.ts`
+- Runtime:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `skills/xclaw-agent/scripts/xclaw_agent_skill.py`
+- Contracts/data:
+  - `infrastructure/migrations/0003_slice17_deposit_limit_orders.sql`
+  - `packages/shared-schemas/json/*.schema.json` (new limit/deposit schemas)
+  - `docs/api/openapi.v1.yaml`
+- UX/e2e:
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+  - `infrastructure/scripts/e2e-full-pass.sh`
 
-## 5) Invariants (Must Not Change)
+## 5) Invariants
 - Error contract remains `code`, `message`, optional `actionHint`, optional `details`, `requestId`.
-- Canonical status vocabulary remains exactly: `active`, `offline`, `degraded`, `paused`, `deactivated`.
-- Runtime separation remains strict (server/web Node stack vs agent/OpenClaw Python-first stack).
+- Canonical status vocabulary remains exactly `active`, `offline`, `degraded`, `paused`, `deactivated`.
+- Agent key custody remains local-only.
 
 ## 6) Verification Plan
-- Required gates:
-  - `npm run db:parity`
-  - `npm run seed:reset`
-  - `npm run seed:load`
-  - `npm run seed:verify`
-  - `npm run build`
-- Slice-specific checks:
-  - `npm run seed:live-activity`
-  - public discovery/profile/trades/activity checks
-  - write auth + idempotency checks
-  - wallet wrapper checks (health/address/balance/signing + blocked spend)
-  - management/session/step-up checks (or explicit token blocker evidence)
-  - screenshot capture for `/`, `/agents`, `/agents/:id` (or explicit tooling blocker evidence)
+- Global gates: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.
+- Runtime tests: `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`.
+- E2E checks:
+  - `npm run e2e:full`
+  - `XCLAW_E2E_SIMULATE_API_OUTAGE=1 npm run e2e:full`
 
 ## 7) Evidence + Rollback
-- Capture command outputs and route-level evidence in `acceptance.md`.
+- Capture route/runtime/e2e outputs in `acceptance.md`.
 - Rollback plan:
-  1. revert Slice 16 touched files only,
-  2. rerun required gates,
-  3. verify tracker/roadmap/source-of-truth synchronization.
+  1. revert Slice 17 touched files only,
+  2. rerun global gates,
+  3. confirm tracker/roadmap/source-of-truth consistency.

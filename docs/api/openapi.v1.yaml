@@ -150,6 +150,57 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
+  /api/v1/limit-orders/pending:
+    get:
+      summary: List actionable limit orders for one authenticated agent and chain.
+      security:
+        - agentBearer: []
+      parameters:
+        - name: chainKey
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        '200':
+          description: Pending actionable limit orders.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/limit-orders/{orderId}/status:
+    post:
+      summary: Submit limit-order execution status update from authenticated agent.
+      security:
+        - agentBearer: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LimitOrderStatusUpdateRequest'
+      responses:
+        '200':
+          description: Limit-order status accepted.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/trades/{tradeId}:
     get:
       summary: Read execution context for one trade owned by authenticated agent.
@@ -444,6 +495,109 @@ paths:
       responses:
         '200':
           description: Withdraw request accepted.
+  /api/v1/management/deposit:
+    get:
+      summary: Read agent deposit address, tracked balances, and confirmed deposits.
+      security:
+        - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+        - name: agentId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: chainKey
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deposit tracking payload.
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/management/limit-orders:
+    post:
+      summary: Create a management-authored limit order.
+      security:
+        - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementLimitOrderCreateRequest'
+      responses:
+        '200':
+          description: Limit order created.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    get:
+      summary: List limit orders for authorized management session.
+      security:
+        - managementCookie: []
+      parameters:
+        - name: agentId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, triggered, filled, failed, cancelled, expired]
+        - name: chainKey
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: Limit-order list payload.
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/management/limit-orders/{orderId}/cancel:
+    post:
+      summary: Cancel one open/triggered limit order.
+      security:
+        - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementLimitOrderCancelRequest'
+      responses:
+        '200':
+          description: Limit order cancelled.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/management/offdex/decision:
     post:
       summary: Perform management action on off-DEX settlement queue item.
@@ -1208,6 +1362,62 @@ components:
         amount:
           type: string
         destination:
+          type: string
+    ManagementLimitOrderCreateRequest:
+      type: object
+      required: [agentId, chainKey, mode, side, tokenIn, tokenOut, amountIn, limitPrice, slippageBps]
+      properties:
+        agentId:
+          type: string
+        chainKey:
+          type: string
+        mode:
+          type: string
+          enum: [mock, real]
+        side:
+          type: string
+          enum: [buy, sell]
+        tokenIn:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        tokenOut:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        amountIn:
+          type: string
+        limitPrice:
+          type: string
+        slippageBps:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+    ManagementLimitOrderCancelRequest:
+      type: object
+      required: [agentId]
+      properties:
+        agentId:
+          type: string
+    LimitOrderStatusUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [triggered, filled, failed, expired]
+        triggerPrice:
+          type: string
+        triggerAt:
+          type: string
+          format: date-time
+        reasonCode:
+          type: string
+        reasonMessage:
+          type: string
+        txHash:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{64}$'
+        mockReceiptId:
           type: string
     ManagementOffdexDecisionRequest:
       type: object

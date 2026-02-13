@@ -192,17 +192,50 @@ class WalletCoreCliTests(unittest.TestCase):
             ]
         )
 
-    def test_wallet_create_non_interactive_rejected(self) -> None:
+    def test_wallet_create_non_interactive_rejected_without_env(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_home:
             code, payload = self._run("wallet", "create", "--chain", "base_sepolia", "--json", home=tmp_home)
             self.assertEqual(code, 2)
             self.assertEqual(payload["code"], "non_interactive")
 
-    def test_wallet_import_non_interactive_rejected(self) -> None:
+    def test_wallet_create_non_interactive_with_env_passphrase(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_home:
+            code, payload = self._run(
+                "wallet",
+                "create",
+                "--chain",
+                "base_sepolia",
+                "--json",
+                home=tmp_home,
+                extra_env={"XCLAW_WALLET_PASSPHRASE": "passphrase-123"},
+            )
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["code"], "ok")
+            self.assertTrue(payload["created"])
+
+    def test_wallet_import_non_interactive_rejected_without_env(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_home:
             code, payload = self._run("wallet", "import", "--chain", "base_sepolia", "--json", home=tmp_home)
             self.assertEqual(code, 2)
             self.assertEqual(payload["code"], "non_interactive")
+
+    def test_wallet_import_non_interactive_with_env_private_key_and_passphrase(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_home:
+            code, payload = self._run(
+                "wallet",
+                "import",
+                "--chain",
+                "base_sepolia",
+                "--json",
+                home=tmp_home,
+                extra_env={
+                    "XCLAW_WALLET_IMPORT_PRIVATE_KEY": "0x" + ("11" * 32),
+                    "XCLAW_WALLET_PASSPHRASE": "passphrase-123",
+                },
+            )
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["code"], "ok")
+            self.assertTrue(payload["imported"])
 
     @unittest.skipIf(os.name == "nt", "Permission mode assertions are POSIX-specific")
     def test_wallet_health_rejects_unsafe_permissions(self) -> None:

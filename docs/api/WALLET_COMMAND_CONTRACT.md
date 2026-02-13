@@ -81,7 +81,10 @@ Errors MUST be machine-parseable and human-readable:
 2. `wallet-send` validates amount is non-negative integer string.
 3. `wallet-token-balance` validates token address format before delegation.
 4. `wallet-sign-challenge` rejects empty message.
-5. `wallet-create` and `wallet-import` require interactive TTY and fail with `non_interactive` in non-interactive contexts.
+5. `wallet-create` and `wallet-import` support non-interactive automation when required env vars are provided:
+- `wallet-create`: requires `XCLAW_WALLET_PASSPHRASE`
+- `wallet-import`: requires both `XCLAW_WALLET_IMPORT_PRIVATE_KEY` and `XCLAW_WALLET_PASSPHRASE`
+  Without these env vars, non-interactive calls fail with `non_interactive`.
 6. `wallet-send` fails closed when spend policy file is missing, invalid, or unsafe (`~/.xclaw-agent/policy.json`).
 7. `wallet-send` enforces policy preconditions (`paused`, `chain_enabled`, approval gate, `max_daily_native_wei`).
 
@@ -113,8 +116,12 @@ Success payload fields for signing include:
 
 Current behavior in `apps/agent-runtime/xclaw_agent/cli.py`:
 
-1. `wallet-create` is implemented with interactive TTY passphrase prompts and encrypted-at-rest storage.
-2. `wallet-import` is implemented with interactive TTY secret intake and encrypted-at-rest storage.
+1. `wallet-create` is implemented with encrypted-at-rest storage and supports:
+   - interactive TTY passphrase prompt, or
+   - non-interactive `XCLAW_WALLET_PASSPHRASE`.
+2. `wallet-import` is implemented with encrypted-at-rest storage and supports:
+   - interactive TTY private-key + passphrase prompts, or
+   - non-interactive `XCLAW_WALLET_IMPORT_PRIVATE_KEY` + `XCLAW_WALLET_PASSPHRASE`.
 3. `wallet-address` returns active chain-bound address or `wallet_missing`.
 4. `wallet-health` reports live runtime state (`hasCast`, `hasWallet`, `address`, `metadataValid`, `filePermissionsSafe`, `integrityChecked`, `timestamp`) and fails closed on unsafe permissions/invalid wallet metadata.
 5. `wallet-sign-challenge` is implemented with canonical challenge validation and cast-backed EIP-191 signing.

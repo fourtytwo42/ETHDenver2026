@@ -1,49 +1,34 @@
-# Slice 16 Spec: MVP Acceptance + Release Gate
+# Slice 17 Spec: Deposits + Agent-Local Limit Orders
 
 ## Goal
-Execute the MVP acceptance runbook end-to-end and close the release gate with archived, reproducible evidence.
+Ship self-custody deposit visibility and agent-local limit-order execution with offline replay semantics.
 
 ## Success Criteria
-1. `docs/MVP_ACCEPTANCE_RUNBOOK.md` steps are executed with command/output evidence.
-2. Required release gates pass:
-   - `npm run db:parity`
-   - `npm run seed:reset`
-   - `npm run seed:load`
-   - `npm run seed:verify`
-   - `npm run build`
-3. Binary acceptance checks are evidenced:
-   - Linux-hosted web runtime proof,
-   - search/profile visibility,
-   - write auth + idempotency,
-   - deterministic demo rerun.
-4. Critical defects are tracked and resolved to zero before release closure.
-5. Tracker/roadmap/source-of-truth statuses are synchronized to final Slice 16 state.
+1. `GET /api/v1/management/deposit` returns addresses, balances, recent deposits, and sync status.
+2. Management limit-order APIs are live: create/list/cancel.
+3. Agent limit-order APIs are live: pending/read + status writeback.
+4. Agent runtime implements `limit-orders sync|status|run-once|run-loop` and local outbox replay.
+5. `/agents/:id` management rail exposes deposit and limit-order controls.
+6. Extended `infrastructure/scripts/e2e-full-pass.sh` validates deposit + limit-order + API-outage replay.
 
 ## Non-Goals
-1. New feature scope beyond release-gate evidence and blocker resolution.
-2. API contract redesign unrelated to acceptance/release criteria.
-3. Runtime architecture changes outside canonical Node (web/api) vs Python-first (agent) boundary.
+1. Partial-fill order model.
+2. Custodial deposit transfer API.
+3. Additional chain onboarding beyond configured chains.
 
 ## Locked Decisions
-1. Slice order remains strict; Slice 15 was completed before Slice 16.
-2. Main web/API runtime proof is Linux-hosted for release gate in this environment.
-3. Agent runtime remains Python-first and portable by design; no Node/npm dependency is introduced for agent skill paths.
-4. Any blocker preventing full runbook closure must be logged with exact unblock commands.
+1. Deposit model is self-custody address + tracking.
+2. Deposit confirmations are server-polled from chain RPC.
+3. Limit orders are authored via management API/UI and executed locally by agent runtime.
+4. Trigger model is simple IOC.
+5. Runtime boundary remains Node/Next.js for web/API and Python-first for agent runtime.
 
 ## Acceptance Checks
-1. Global required gates:
-   - `npm run db:parity`
-   - `npm run seed:reset`
-   - `npm run seed:load`
-   - `npm run seed:verify`
-   - `npm run build`
-2. Runbook checks:
-   - `npm run seed:live-activity`
-   - public/manual flow evidence for `/`, `/agents`, `/agents/:id`
-   - management auth + step-up flow evidence
-   - off-DEX lifecycle evidence
-   - wallet-layer evidence via Python skill wrapper
-3. Release docs sync:
-   - `docs/XCLAW_SLICE_TRACKER.md`
-   - `docs/XCLAW_BUILD_ROADMAP.md`
-   - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+- `npm run db:parity`
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:verify`
+- `npm run build`
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+- `npm run e2e:full`
+- `XCLAW_E2E_SIMULATE_API_OUTAGE=1 npm run e2e:full`

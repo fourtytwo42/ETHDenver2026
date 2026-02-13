@@ -16,7 +16,9 @@
     "seed:load": "node infrastructure/scripts/seed-load.mjs",
     "seed:live-activity": "node infrastructure/scripts/seed-live-activity.mjs",
     "seed:verify": "node infrastructure/scripts/seed-verify.mjs",
-    "db:parity": "node infrastructure/scripts/check-migration-parity.mjs"
+    "db:parity": "node infrastructure/scripts/check-migration-parity.mjs",
+    "db:migrate": "node infrastructure/scripts/db-migrate.mjs",
+    "e2e:full": "bash infrastructure/scripts/e2e-full-pass.sh"
   },
   "dependencies": {
     "ajv": "8.17.1",

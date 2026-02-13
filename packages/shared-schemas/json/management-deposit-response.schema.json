@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "agentId", "chains"],
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "agentId": { "type": "string" },
+    "chains": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chainKey", "depositAddress", "minConfirmations", "balances", "recentDeposits"],
+        "properties": {
+          "chainKey": { "type": "string" },
+          "depositAddress": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+          "minConfirmations": { "type": "integer", "minimum": 1 },
+          "lastSyncedAt": { "type": ["string", "null"], "format": "date-time" },
+          "syncStatus": { "type": "string", "enum": ["ok", "degraded"] },
+          "syncDetail": { "type": ["string", "null"] },
+          "balances": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["token", "balance", "blockNumber", "observedAt"],
+              "properties": {
+                "token": { "type": "string" },
+                "balance": { "type": "string" },
+                "blockNumber": { "type": ["integer", "null"] },
+                "observedAt": { "type": "string", "format": "date-time" }
+              }
+            }
+          },
+          "recentDeposits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["token", "amount", "txHash", "blockNumber", "confirmedAt", "status"],
+              "properties": {
+                "token": { "type": "string" },
+                "amount": { "type": "string" },
+                "txHash": { "type": "string", "pattern": "^0x[a-fA-F0-9]{64}$" },
+                "blockNumber": { "type": "integer" },
+                "confirmedAt": { "type": "string", "format": "date-time" },
+                "status": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

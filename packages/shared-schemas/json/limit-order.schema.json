@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "orderId",
+    "agentId",
+    "chainKey",
+    "mode",
+    "side",
+    "tokenIn",
+    "tokenOut",
+    "amountIn",
+    "limitPrice",
+    "slippageBps",
+    "status",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "orderId": { "type": "string" },
+    "agentId": { "type": "string" },
+    "chainKey": { "type": "string" },
+    "mode": { "type": "string", "enum": ["mock", "real"] },
+    "side": { "type": "string", "enum": ["buy", "sell"] },
+    "tokenIn": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+    "tokenOut": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+    "amountIn": { "type": "string" },
+    "limitPrice": { "type": "string" },
+    "slippageBps": { "type": "integer" },
+    "status": { "type": "string", "enum": ["open", "triggered", "filled", "failed", "cancelled", "expired"] },
+    "expiresAt": { "type": ["string", "null"], "format": "date-time" },
+    "cancelledAt": { "type": ["string", "null"], "format": "date-time" },
+    "triggerSource": { "type": "string", "enum": ["management_api", "agent_local"] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}

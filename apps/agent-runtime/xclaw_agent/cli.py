@@ -20,6 +20,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -45,6 +46,8 @@ APP_DIR = pathlib.Path(os.environ.get("XCLAW_AGENT_HOME", str(pathlib.Path.home(
 STATE_FILE = APP_DIR / "state.json"
 WALLET_STORE_FILE = APP_DIR / "wallets.json"
 POLICY_FILE = APP_DIR / "policy.json"
+LIMIT_ORDER_STORE_FILE = APP_DIR / "limit_orders.json"
+LIMIT_ORDER_OUTBOX_FILE = APP_DIR / "limit_orders_outbox.json"
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 CHAIN_CONFIG_DIR = REPO_ROOT / "config" / "chains"
 
@@ -62,6 +65,7 @@ MAX_TRADE_RETRIES = 3
 DEFAULT_TX_GAS_PRICE_GWEI = 5
 DEFAULT_TX_SEND_MAX_ATTEMPTS = 3
 TX_GAS_PRICE_BUMP_GWEI = 2
+LIMIT_ORDER_STORE_VERSION = 1
 
 
 class WalletStoreError(Exception):
@@ -236,6 +240,56 @@ def remove_wallet_entry(chain: str) -> bool:
         save_wallet_store(store)
 
     return existed
+
+
+def _default_limit_order_store() -> dict[str, Any]:
+    return {
+        "version": LIMIT_ORDER_STORE_VERSION,
+        "updatedAt": utc_now(),
+        "orders": [],
+    }
+
+
+def load_limit_order_store() -> dict[str, Any]:
+    ensure_app_dir()
+    _assert_secure_permissions(APP_DIR, 0o700, "directory")
+    if not LIMIT_ORDER_STORE_FILE.exists():
+        return _default_limit_order_store()
+    _assert_secure_permissions(LIMIT_ORDER_STORE_FILE, 0o600, "limit order store file")
+    payload = _read_json(LIMIT_ORDER_STORE_FILE)
+    if not isinstance(payload, dict):
+        raise WalletStoreError("Limit-order store must be a JSON object.")
+    version = payload.get("version")
+    if version != LIMIT_ORDER_STORE_VERSION:
+        raise WalletStoreError(f"Unsupported limit-order store version: {version}")
+    orders = payload.get("orders")
+    if not isinstance(orders, list):
+        raise WalletStoreError("Limit-order store missing orders array.")
+    return payload
+
+
+def save_limit_order_store(store: dict[str, Any]) -> None:
+    store["version"] = LIMIT_ORDER_STORE_VERSION
+    store["updatedAt"] = utc_now()
+    _write_json(LIMIT_ORDER_STORE_FILE, store)
+
+
+def load_limit_order_outbox() -> list[dict[str, Any]]:
+    ensure_app_dir()
+    if not LIMIT_ORDER_OUTBOX_FILE.exists():
+        return []
+    _assert_secure_permissions(LIMIT_ORDER_OUTBOX_FILE, 0o600, "limit-order outbox file")
+    payload = _read_json(LIMIT_ORDER_OUTBOX_FILE)
+    if not isinstance(payload, dict):
+        raise WalletStoreError("Limit-order outbox must be a JSON object.")
+    items = payload.get("items")
+    if not isinstance(items, list):
+        return []
+    return [entry for entry in items if isinstance(entry, dict)]
+
+
+def save_limit_order_outbox(items: list[dict[str, Any]]) -> None:
+    _write_json(LIMIT_ORDER_OUTBOX_FILE, {"items": items, "updatedAt": utc_now()})
 
 
 def is_hex_address(value: str) -> bool:
@@ -593,6 +647,28 @@ def _prompt_existing_passphrase() -> str:
     return value
 
 
+def _create_import_passphrase(chain: str) -> str:
+    env_passphrase = (os.environ.get("XCLAW_WALLET_PASSPHRASE") or "").strip()
+    if env_passphrase:
+        return env_passphrase
+    if not _interactive_required():
+        raise WalletPassphraseError(
+            f"wallet create/import requires XCLAW_WALLET_PASSPHRASE in non-interactive mode for chain '{chain}'."
+        )
+    return _prompt_passphrase()
+
+
+def _import_private_key_input(chain: str) -> str:
+    env_private_key = (os.environ.get("XCLAW_WALLET_IMPORT_PRIVATE_KEY") or "").strip()
+    if env_private_key:
+        return env_private_key
+    if not _interactive_required():
+        raise WalletPassphraseError(
+            f"wallet.import requires XCLAW_WALLET_IMPORT_PRIVATE_KEY in non-interactive mode for chain '{chain}'."
+        )
+    return getpass.getpass("Private key (hex, optional 0x): ")
+
+
 def _chain_wallet(store: dict[str, Any], chain: str) -> tuple[str | None, dict[str, Any] | None]:
     wallet_id = store.setdefault("chains", {}).get(chain)
     if not wallet_id:
@@ -783,6 +859,86 @@ def _post_trade_status(trade_id: str, from_status: str, to_status: str, extra: d
         code = str(body.get("code", "api_error"))
         message = str(body.get("message", f"trade status update failed ({status_code})"))
         raise WalletStoreError(f"{code}: {message}")
+
+
+def _parse_uint_from_cast_output(raw: str) -> int:
+    values = re.findall(r"[0-9]+", raw or "")
+    if not values:
+        raise WalletStoreError("Unable to parse uint value from cast output.")
+    return int(values[-1])
+
+
+def _quote_router_price(chain: str, token_in: str, token_out: str) -> Decimal:
+    cast_bin = _require_cast_bin()
+    router = _require_chain_contract_address(chain, "router")
+    rpc_url = _chain_rpc_url(chain)
+    proc = subprocess.run(
+        [cast_bin, "call", "--rpc-url", rpc_url, router, "getAmountsOut(uint256,address[])(uint256[])", "1000000000000000000", f"[{token_in},{token_out}]"],
+        text=True,
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        stdout = (proc.stdout or "").strip()
+        raise WalletStoreError(stderr or stdout or "cast call getAmountsOut failed.")
+    amount_out = _parse_uint_from_cast_output(proc.stdout)
+    return Decimal(amount_out) / Decimal(10**18)
+
+
+def _limit_order_triggered(side: str, current_price: Decimal, limit_price: Decimal) -> bool:
+    if side == "buy":
+        return current_price <= limit_price
+    if side == "sell":
+        return current_price >= limit_price
+    return False
+
+
+def _queue_limit_order_action(method: str, path: str, payload: dict[str, Any]) -> None:
+    items = load_limit_order_outbox()
+    items.append({"method": method, "path": path, "payload": payload, "queuedAt": utc_now()})
+    save_limit_order_outbox(items)
+
+
+def _post_limit_order_status(order_id: str, payload: dict[str, Any], queue_on_failure: bool = True) -> None:
+    try:
+        status_code, body = _api_request("POST", f"/limit-orders/{order_id}/status", payload=payload, include_idempotency=True)
+        if status_code < 200 or status_code >= 300:
+            code = str(body.get("code", "api_error"))
+            message = str(body.get("message", f"limit-order status update failed ({status_code})"))
+            raise WalletStoreError(f"{code}: {message}")
+    except Exception:
+        if queue_on_failure:
+            _queue_limit_order_action("POST", f"/limit-orders/{order_id}/status", payload)
+            return
+        raise
+
+
+def _replay_limit_order_outbox() -> tuple[int, int]:
+    queued = load_limit_order_outbox()
+    if not queued:
+        return 0, 0
+    sent = 0
+    remaining: list[dict[str, Any]] = []
+    for idx, entry in enumerate(queued):
+        method = str(entry.get("method") or "POST")
+        path = str(entry.get("path") or "")
+        payload = entry.get("payload")
+        if not path or not isinstance(payload, dict):
+            continue
+        try:
+            status_code, _ = _api_request(method, path, payload=payload, include_idempotency=True)
+            if status_code < 200 or status_code >= 300:
+                remaining.append(entry)
+                remaining.extend(queued[idx + 1 :])
+                break
+            sent += 1
+        except Exception:
+            remaining.append(entry)
+            remaining.extend(queued[idx + 1 :])
+            break
+
+    save_limit_order_outbox(remaining)
+    return sent, len(remaining)
 
 
 def _require_chain_contract_address(chain: str, key: str) -> str:
@@ -1420,6 +1576,248 @@ def cmd_offdex_settle(args: argparse.Namespace) -> int:
         return fail("offdex_settle_failed", str(exc), "Inspect runtime off-DEX settle path and retry.", {"intentId": args.intent, "chain": args.chain}, exit_code=1)
 
 
+def _sync_limit_orders(chain: str) -> tuple[int, int]:
+    status_code, body = _api_request("GET", f"/limit-orders/pending?chainKey={urllib.parse.quote(chain)}&limit=200")
+    if status_code < 200 or status_code >= 300:
+        code = str(body.get("code", "api_error"))
+        message = str(body.get("message", f"limit-orders pending failed ({status_code})"))
+        raise WalletStoreError(f"{code}: {message}")
+    items = body.get("items", [])
+    if not isinstance(items, list):
+        raise WalletStoreError("Limit-order pending response 'items' is not a list.")
+    orders = [item for item in items if isinstance(item, dict)]
+    store = _default_limit_order_store()
+    store["orders"] = orders
+    save_limit_order_store(store)
+    return len(orders), len([item for item in orders if str(item.get("status")) == "open"])
+
+
+def _execute_limit_order_real(order: dict[str, Any], chain: str) -> str:
+    store = load_wallet_store()
+    wallet_address, private_key_hex = _execution_wallet(store, chain)
+    cast_bin = _require_cast_bin()
+    rpc_url = _chain_rpc_url(chain)
+    router = _require_chain_contract_address(chain, "router")
+
+    token_in = str(order.get("tokenIn") or "")
+    token_out = str(order.get("tokenOut") or "")
+    if not is_hex_address(token_in) or not is_hex_address(token_out):
+        raise WalletStoreError("Limit-order tokenIn/tokenOut must be 0x addresses.")
+
+    amount_wei_str = _to_wei_uint(str(order.get("amountIn") or "0"))
+    amount_wei = int(amount_wei_str)
+    state, day_key, current_spend, _ = _enforce_spend_preconditions(chain, amount_wei)
+    deadline = str(int(datetime.now(timezone.utc).timestamp()) + 120)
+
+    approve_data = _cast_calldata("approve(address,uint256)(bool)", [router, amount_wei_str])
+    approve_tx_hash = _cast_rpc_send_transaction(
+        rpc_url,
+        {
+            "from": wallet_address,
+            "to": token_in,
+            "data": approve_data,
+        },
+        private_key_hex,
+    )
+    approve_receipt = subprocess.run(
+        [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, approve_tx_hash],
+        text=True,
+        capture_output=True,
+    )
+    if approve_receipt.returncode != 0:
+        stderr = (approve_receipt.stderr or "").strip()
+        stdout = (approve_receipt.stdout or "").strip()
+        raise WalletStoreError(stderr or stdout or "cast receipt failed for approve tx.")
+
+    swap_data = _cast_calldata(
+        "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)(uint256[])",
+        [amount_wei_str, "1", f"[{token_in},{token_out}]", wallet_address, deadline],
+    )
+    tx_hash = _cast_rpc_send_transaction(
+        rpc_url,
+        {
+            "from": wallet_address,
+            "to": router,
+            "data": swap_data,
+        },
+        private_key_hex,
+    )
+
+    receipt_proc = subprocess.run(
+        [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, tx_hash],
+        text=True,
+        capture_output=True,
+    )
+    if receipt_proc.returncode != 0:
+        stderr = (receipt_proc.stderr or "").strip()
+        stdout = (receipt_proc.stdout or "").strip()
+        raise WalletStoreError(stderr or stdout or "cast receipt failed.")
+    receipt_payload = json.loads((receipt_proc.stdout or "{}").strip() or "{}")
+    receipt_status = str(receipt_payload.get("status", "0x0")).lower()
+    if receipt_status not in {"0x1", "1"}:
+        raise WalletStoreError(f"On-chain receipt indicates failure status '{receipt_status}'.")
+
+    _record_spend(state, chain, day_key, current_spend + amount_wei)
+    return tx_hash
+
+
+def cmd_limit_orders_sync(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        total, open_count = _sync_limit_orders(args.chain)
+        return ok("Limit orders synced.", chain=args.chain, total=total, open=open_count)
+    except WalletStoreError as exc:
+        return fail("limit_orders_sync_failed", str(exc), "Verify API env/auth and retry.", {"chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("limit_orders_sync_failed", str(exc), "Inspect runtime limit-order sync path and retry.", {"chain": args.chain}, exit_code=1)
+
+
+def cmd_limit_orders_status(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        store = load_limit_order_store()
+        orders = [entry for entry in store.get("orders", []) if isinstance(entry, dict)]
+        by_status: dict[str, int] = {}
+        for entry in orders:
+            status = str(entry.get("status") or "unknown")
+            by_status[status] = by_status.get(status, 0) + 1
+        outbox = load_limit_order_outbox()
+        return ok("Limit-order local state loaded.", chain=args.chain, count=len(orders), byStatus=by_status, outboxCount=len(outbox))
+    except WalletStoreError as exc:
+        return fail("limit_orders_status_failed", str(exc), "Repair local limit-order store metadata and retry.", {"chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("limit_orders_status_failed", str(exc), "Inspect runtime limit-order status path and retry.", {"chain": args.chain}, exit_code=1)
+
+
+def cmd_limit_orders_run_once(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        replayed, remaining = _replay_limit_order_outbox()
+        synced = False
+        if bool(args.sync):
+            _sync_limit_orders(args.chain)
+            synced = True
+        store = load_limit_order_store()
+        orders = [entry for entry in store.get("orders", []) if isinstance(entry, dict)]
+        executed = 0
+        skipped = 0
+        now = datetime.now(timezone.utc)
+        for order in orders:
+            if str(order.get("chainKey")) != args.chain:
+                skipped += 1
+                continue
+            if str(order.get("status")) != "open":
+                skipped += 1
+                continue
+            expires_at = order.get("expiresAt")
+            if isinstance(expires_at, str) and expires_at:
+                try:
+                    expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                    if expiry <= now:
+                        _post_limit_order_status(str(order.get("orderId")), {"status": "expired", "triggerAt": utc_now()})
+                        skipped += 1
+                        continue
+                except Exception:
+                    pass
+
+            side = str(order.get("side") or "")
+            limit_price = Decimal(str(order.get("limitPrice") or "0"))
+            mode = str(order.get("mode") or "real")
+            if mode == "mock":
+                mock_price_raw = (os.environ.get("XCLAW_MOCK_LIMIT_PRICE") or "1").strip()
+                current_price = Decimal(mock_price_raw)
+            else:
+                current_price = _quote_router_price(args.chain, str(order.get("tokenIn")), str(order.get("tokenOut")))
+            if not _limit_order_triggered(side, current_price, limit_price):
+                skipped += 1
+                continue
+
+            order_id = str(order.get("orderId"))
+            _post_limit_order_status(order_id, {"status": "triggered", "triggerPrice": str(current_price), "triggerAt": utc_now()})
+            if mode == "mock":
+                mock_receipt_id = f"mrc_{hashlib.sha256(f'{order_id}:{utc_now()}'.encode('utf-8')).hexdigest()[:24]}"
+                _post_limit_order_status(
+                    order_id,
+                    {"status": "filled", "triggerPrice": str(current_price), "triggerAt": utc_now(), "mockReceiptId": mock_receipt_id},
+                )
+                executed += 1
+                continue
+
+            try:
+                tx_hash = _execute_limit_order_real(order, args.chain)
+                _post_limit_order_status(order_id, {"status": "filled", "triggerPrice": str(current_price), "triggerAt": utc_now(), "txHash": tx_hash})
+                executed += 1
+            except WalletPolicyError as exc:
+                _post_limit_order_status(
+                    order_id,
+                    {
+                        "status": "failed",
+                        "triggerPrice": str(current_price),
+                        "triggerAt": utc_now(),
+                        "reasonCode": exc.code,
+                        "reasonMessage": str(exc),
+                    },
+                )
+            except WalletStoreError as exc:
+                _post_limit_order_status(
+                    order_id,
+                    {
+                        "status": "failed",
+                        "triggerPrice": str(current_price),
+                        "triggerAt": utc_now(),
+                        "reasonCode": "rpc_unavailable",
+                        "reasonMessage": str(exc),
+                    },
+                )
+
+        return ok(
+            "Limit-order run completed.",
+            chain=args.chain,
+            synced=synced,
+            replayed=replayed,
+            outboxRemaining=remaining,
+            executed=executed,
+            skipped=skipped,
+        )
+    except WalletStoreError as exc:
+        return fail("limit_orders_run_failed", str(exc), "Verify local wallet/policy/chain setup and retry.", {"chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("limit_orders_run_failed", str(exc), "Inspect runtime limit-order loop and retry.", {"chain": args.chain}, exit_code=1)
+
+
+def cmd_limit_orders_run_loop(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    iterations = int(args.iterations)
+    interval_sec = int(args.interval_sec)
+    if iterations < 0:
+        return fail("invalid_input", "--iterations must be >= 0.", "Use 0 for infinite loop or positive count.", {"iterations": iterations}, exit_code=2)
+    if interval_sec < 1:
+        return fail("invalid_input", "--interval-sec must be >= 1.", "Provide interval in seconds >= 1.", {"intervalSec": interval_sec}, exit_code=2)
+
+    completed = 0
+    try:
+        while True:
+            nested = argparse.Namespace(chain=args.chain, json=True, sync=args.sync)
+            code = cmd_limit_orders_run_once(nested)
+            if code != 0:
+                return code
+            completed += 1
+            if iterations > 0 and completed >= iterations:
+                break
+            time.sleep(interval_sec)
+        return ok("Limit-order loop finished.", chain=args.chain, iterations=completed, intervalSec=interval_sec)
+    except KeyboardInterrupt:
+        return ok("Limit-order loop interrupted.", chain=args.chain, iterations=completed, interrupted=True)
+
+
 def cmd_wallet_health(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
@@ -1492,17 +1890,8 @@ def cmd_wallet_create(args: argparse.Namespace) -> int:
     if chk is not None:
         return chk
 
-    if not _interactive_required():
-        return fail(
-            "non_interactive",
-            "wallet.create requires an interactive TTY for secure passphrase input.",
-            "Run the command in a terminal session with TTY attached.",
-            {"chain": args.chain},
-            exit_code=2,
-        )
-
     try:
-        passphrase = _prompt_passphrase()
+        passphrase = _create_import_passphrase(args.chain)
         store = load_wallet_store()
 
         chain = args.chain
@@ -1547,6 +1936,8 @@ def cmd_wallet_create(args: argparse.Namespace) -> int:
         set_wallet_entry(chain, {"address": address, "walletId": wallet_id})
         return ok("Wallet created.", chain=chain, address=address, created=True)
 
+    except WalletPassphraseError as exc:
+        return fail("non_interactive", str(exc), "Set XCLAW_WALLET_PASSPHRASE or run with TTY attached.", {"chain": args.chain}, exit_code=2)
     except ValueError as exc:
         return fail("invalid_input", str(exc), "Provide matching non-empty passphrase values.", {"chain": args.chain}, exit_code=2)
     except WalletSecurityError as exc:
@@ -1562,17 +1953,8 @@ def cmd_wallet_import(args: argparse.Namespace) -> int:
     if chk is not None:
         return chk
 
-    if not _interactive_required():
-        return fail(
-            "non_interactive",
-            "wallet.import requires an interactive TTY for secure secret input.",
-            "Run the command in a terminal session with TTY attached.",
-            {"chain": args.chain},
-            exit_code=2,
-        )
-
     try:
-        private_key_input = getpass.getpass("Private key (hex, optional 0x): ")
+        private_key_input = _import_private_key_input(args.chain)
         private_key_hex = _normalize_private_key_hex(private_key_input)
         if private_key_hex is None:
             return fail(
@@ -1584,7 +1966,7 @@ def cmd_wallet_import(args: argparse.Namespace) -> int:
             )
 
         address = _derive_address(private_key_hex)
-        passphrase = _prompt_passphrase()
+        passphrase = _create_import_passphrase(args.chain)
 
         store = load_wallet_store()
         chain = args.chain
@@ -1633,6 +2015,8 @@ def cmd_wallet_import(args: argparse.Namespace) -> int:
         set_wallet_entry(chain, {"address": address, "walletId": wallet_id})
         return ok("Wallet imported.", chain=chain, address=address, imported=True)
 
+    except WalletPassphraseError as exc:
+        return fail("non_interactive", str(exc), "Set XCLAW_WALLET_PASSPHRASE/XCLAW_WALLET_IMPORT_PRIVATE_KEY or run with TTY attached.", {"chain": args.chain}, exit_code=2)
     except ValueError as exc:
         return fail("invalid_input", str(exc), "Provide matching non-empty passphrase values.", {"chain": args.chain}, exit_code=2)
     except WalletSecurityError as exc:
@@ -1959,6 +2343,33 @@ def build_parser() -> argparse.ArgumentParser:
     offdex_settle.add_argument("--chain", required=True)
     offdex_settle.add_argument("--json", action="store_true")
     offdex_settle.set_defaults(func=cmd_offdex_settle)
+
+    limit_orders = sub.add_parser("limit-orders")
+    limit_orders_sub = limit_orders.add_subparsers(dest="limit_orders_cmd")
+
+    lo_sync = limit_orders_sub.add_parser("sync")
+    lo_sync.add_argument("--chain", required=True)
+    lo_sync.add_argument("--json", action="store_true")
+    lo_sync.set_defaults(func=cmd_limit_orders_sync)
+
+    lo_status = limit_orders_sub.add_parser("status")
+    lo_status.add_argument("--chain", required=True)
+    lo_status.add_argument("--json", action="store_true")
+    lo_status.set_defaults(func=cmd_limit_orders_status)
+
+    lo_run_once = limit_orders_sub.add_parser("run-once")
+    lo_run_once.add_argument("--chain", required=True)
+    lo_run_once.add_argument("--sync", action="store_true")
+    lo_run_once.add_argument("--json", action="store_true")
+    lo_run_once.set_defaults(func=cmd_limit_orders_run_once)
+
+    lo_run_loop = limit_orders_sub.add_parser("run-loop")
+    lo_run_loop.add_argument("--chain", required=True)
+    lo_run_loop.add_argument("--sync", action="store_true")
+    lo_run_loop.add_argument("--interval-sec", default=10)
+    lo_run_loop.add_argument("--iterations", default=0)
+    lo_run_loop.add_argument("--json", action="store_true")
+    lo_run_loop.set_defaults(func=cmd_limit_orders_run_loop)
 
     wallet = sub.add_parser("wallet")
     wallet_sub = wallet.add_subparsers(dest="wallet_cmd")

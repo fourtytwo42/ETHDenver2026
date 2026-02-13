@@ -149,6 +149,10 @@ def main(argv: List[str]) -> int:
         "offdex-intents-poll",
         "offdex-accept",
         "offdex-settle",
+        "limit-orders-sync",
+        "limit-orders-status",
+        "limit-orders-run-once",
+        "limit-orders-run-loop",
     }
     wallet_commands = {
         "wallet-health",
@@ -258,10 +262,34 @@ def main(argv: List[str]) -> int:
     if cmd == "wallet-remove":
         return _run_agent(["wallet", "remove", "--chain", chain, "--json"])
 
+    if cmd == "limit-orders-sync":
+        return _run_agent(["limit-orders", "sync", "--chain", chain, "--json"])
+
+    if cmd == "limit-orders-status":
+        return _run_agent(["limit-orders", "status", "--chain", chain, "--json"])
+
+    if cmd == "limit-orders-run-once":
+        args = ["limit-orders", "run-once", "--chain", chain, "--json"]
+        if os.environ.get("XCLAW_LIMIT_ORDERS_SYNC_ONCE", "1") != "0":
+            args.append("--sync")
+        return _run_agent(args)
+
+    if cmd == "limit-orders-run-loop":
+        args = ["limit-orders", "run-loop", "--chain", chain, "--json"]
+        if os.environ.get("XCLAW_LIMIT_ORDERS_SYNC_LOOP", "1") != "0":
+            args.append("--sync")
+        iterations = os.environ.get("XCLAW_LIMIT_ORDERS_LOOP_ITERATIONS")
+        interval = os.environ.get("XCLAW_LIMIT_ORDERS_LOOP_INTERVAL_SEC")
+        if iterations:
+            args.extend(["--iterations", iterations])
+        if interval:
+            args.extend(["--interval-sec", interval])
+        return _run_agent(args)
+
     return _err(
         "unknown_command",
         f"Unknown command: {cmd}",
-        "Use one of: status, intents-poll, approval-check, trade-exec, report-send, offdex-intents-poll, offdex-accept, offdex-settle, wallet-health, wallet-create, wallet-import, wallet-address, wallet-sign-challenge, wallet-send, wallet-balance, wallet-token-balance, wallet-remove",
+        "Use one of: status, intents-poll, approval-check, trade-exec, report-send, offdex-intents-poll, offdex-accept, offdex-settle, limit-orders-sync, limit-orders-status, limit-orders-run-once, limit-orders-run-loop, wallet-health, wallet-create, wallet-import, wallet-address, wallet-sign-challenge, wallet-send, wallet-balance, wallet-token-balance, wallet-remove",
         exit_code=2,
     )
 

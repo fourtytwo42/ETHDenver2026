@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status"],
+  "properties": {
+    "status": { "type": "string", "enum": ["triggered", "filled", "failed", "expired"] },
+    "triggerPrice": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,18})?$" },
+    "triggerAt": { "type": "string", "format": "date-time" },
+    "reasonCode": { "type": "string", "maxLength": 64 },
+    "reasonMessage": { "type": "string", "maxLength": 500 },
+    "txHash": { "type": "string", "pattern": "^0x[a-fA-F0-9]{64}$" },
+    "mockReceiptId": { "type": "string", "maxLength": 128 }
+  }
+}

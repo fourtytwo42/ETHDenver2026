@@ -1551,3 +1551,68 @@ Issue mapping: `#16`
 
 ### Slice 16 status
 - Current state: blocked pending screenshot and management success-path evidence.
+
+## Slice 16 Closure Evidence
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 16: MVP Acceptance + Release Gate`
+
+### Core release-gate checks
+- `npm run db:parity` -> PASS
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+- `npm run build` -> PASS
+
+### End-to-end release walkthrough
+- `npm run e2e:full` -> PASS (`pass=39 fail=0 warn=0`)
+- Evidence includes:
+  - management bootstrap + csrf,
+  - approval + trade execute + report,
+  - withdraw destination + request,
+  - public pages + leaderboard + search,
+  - deposit flow endpoint success,
+  - limit-order create/sync/execute success.
+
+### Critical defects
+- critical defects at closure: `0`
+
+## Slice 17 Acceptance Evidence
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 17: Deposits + Agent-Local Limit Orders`
+
+### File-level implementation evidence
+- Migration/data contracts:
+  - `infrastructure/migrations/0003_slice17_deposit_limit_orders.sql`
+  - `infrastructure/scripts/db-migrate.mjs`
+  - `packages/shared-schemas/json/management-deposit-response.schema.json`
+  - `packages/shared-schemas/json/management-limit-order-create-request.schema.json`
+  - `packages/shared-schemas/json/management-limit-order-cancel-request.schema.json`
+  - `packages/shared-schemas/json/limit-order.schema.json`
+  - `packages/shared-schemas/json/limit-order-status-update-request.schema.json`
+- API routes:
+  - `apps/network-web/src/app/api/v1/management/deposit/route.ts`
+  - `apps/network-web/src/app/api/v1/management/limit-orders/route.ts`
+  - `apps/network-web/src/app/api/v1/management/limit-orders/[orderId]/cancel/route.ts`
+  - `apps/network-web/src/app/api/v1/limit-orders/pending/route.ts`
+  - `apps/network-web/src/app/api/v1/limit-orders/[orderId]/status/route.ts`
+- Runtime/skill/e2e/ui:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_trade_path.py`
+  - `skills/xclaw-agent/scripts/xclaw_agent_skill.py`
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+  - `infrastructure/scripts/e2e-full-pass.sh`
+  - `docs/api/openapi.v1.yaml`
+
+### Verification outputs
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS (15 tests)
+- `npm run db:parity` -> PASS (migration list includes `0003_slice17_deposit_limit_orders.sql`)
+- `npm run build` -> PASS (new routes compiled)
+- `npm run e2e:full` -> PASS (`pass=39 fail=0 warn=0`)
+- `XCLAW_E2E_SIMULATE_API_OUTAGE=1 npm run e2e:full` -> PASS (`pass=43 fail=0 warn=0`)
+  - includes `agent:limit-orders-run-once-api-down` and `agent:limit-orders-replay-after-recovery` PASS events.
+
+### Notes
+- `db:migrate` runner added to apply migrations before e2e execution in this environment.
+- Deposit tracking currently surfaces degraded status for unavailable chain RPCs (for example local hardhat offline) while preserving successful chains.

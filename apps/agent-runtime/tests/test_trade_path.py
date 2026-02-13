@@ -2,6 +2,7 @@ import argparse
 import json
 import unittest
 from unittest import mock
+from decimal import Decimal
 
 import pathlib
 import sys
@@ -257,6 +258,79 @@ class TradePathRuntimeTests(unittest.TestCase):
         ):
             code = cli.cmd_offdex_settle(args)
         self.assertEqual(code, 0)
+
+    def test_limit_orders_sync_success(self) -> None:
+        args = argparse.Namespace(chain="hardhat_local", json=True)
+        with mock.patch.object(
+            cli,
+            "_api_request",
+            return_value=(200, {"items": [{"orderId": "lmt_1", "chainKey": "hardhat_local", "status": "open"}]}),
+        ), mock.patch.object(cli, "save_limit_order_store") as save_store:
+            code = cli.cmd_limit_orders_sync(args)
+        self.assertEqual(code, 0)
+        save_store.assert_called_once()
+
+    def test_limit_orders_run_once_mock_fill(self) -> None:
+        args = argparse.Namespace(chain="hardhat_local", json=True, sync=False)
+        store = {
+            "version": 1,
+            "orders": [
+                {
+                    "orderId": "lmt_1",
+                    "chainKey": "hardhat_local",
+                    "status": "open",
+                    "side": "buy",
+                    "mode": "mock",
+                    "tokenIn": "0x1111111111111111111111111111111111111111",
+                    "tokenOut": "0x2222222222222222222222222222222222222222",
+                    "amountIn": "1",
+                    "limitPrice": "20",
+                }
+            ],
+        }
+        statuses: list[dict[str, str]] = []
+        with mock.patch.object(cli, "_replay_limit_order_outbox", return_value=(0, 0)), mock.patch.object(
+            cli, "load_limit_order_store", return_value=store
+        ), mock.patch.object(cli, "_quote_router_price", return_value=Decimal("10")), mock.patch.object(
+            cli,
+            "_post_limit_order_status",
+            side_effect=lambda order_id, payload, queue_on_failure=True: statuses.append({"orderId": order_id, "status": str(payload.get("status"))}),
+        ):
+            code = cli.cmd_limit_orders_run_once(args)
+        self.assertEqual(code, 0)
+        self.assertEqual([entry["status"] for entry in statuses], ["triggered", "filled"])
+
+    def test_limit_orders_run_once_real_failure_reports_failed(self) -> None:
+        args = argparse.Namespace(chain="hardhat_local", json=True, sync=False)
+        store = {
+            "version": 1,
+            "orders": [
+                {
+                    "orderId": "lmt_1",
+                    "chainKey": "hardhat_local",
+                    "status": "open",
+                    "side": "sell",
+                    "mode": "real",
+                    "tokenIn": "0x1111111111111111111111111111111111111111",
+                    "tokenOut": "0x2222222222222222222222222222222222222222",
+                    "amountIn": "1",
+                    "limitPrice": "1",
+                }
+            ],
+        }
+        statuses: list[str] = []
+        with mock.patch.object(cli, "_replay_limit_order_outbox", return_value=(0, 0)), mock.patch.object(
+            cli, "load_limit_order_store", return_value=store
+        ), mock.patch.object(cli, "_quote_router_price", return_value=Decimal("2")), mock.patch.object(
+            cli, "_execute_limit_order_real", side_effect=cli.WalletStoreError("rpc down")
+        ), mock.patch.object(
+            cli,
+            "_post_limit_order_status",
+            side_effect=lambda order_id, payload, queue_on_failure=True: statuses.append(str(payload.get("status"))),
+        ):
+            code = cli.cmd_limit_orders_run_once(args)
+        self.assertEqual(code, 0)
+        self.assertEqual(statuses, ["triggered", "failed"])
 
 
 if __name__ == "__main__":

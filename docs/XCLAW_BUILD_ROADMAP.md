@@ -462,3 +462,28 @@ Use this every work session:
 - [ ] Update roadmap checkbox states.
 - [ ] Commit with evidence-linked message.
 - [ ] Update source-of-truth only if behavior changed.
+
+---
+
+## 16) Slice 17: Deposits + Agent-Local Limit Orders
+
+### 16.1 Deposit tracking
+- [x] migration for `wallet_balance_snapshots` + `deposit_events` landed.
+- [x] server-side RPC polling path implemented for configured chains.
+- [x] `GET /api/v1/management/deposit` implemented with management auth + CSRF.
+- [x] management UI shows deposit address, sync status, balances, and recent deposits.
+
+### 16.2 Limit-order contracts
+- [x] migration for `limit_orders` + `limit_order_attempts` landed.
+- [x] management APIs implemented: create/list/cancel.
+- [x] agent APIs implemented: pending + status update.
+- [x] OpenAPI + shared schemas synchronized.
+
+### 16.3 Agent runtime execution
+- [x] runtime commands implemented: `limit-orders sync`, `status`, `run-once`, `run-loop`.
+- [x] local mirror store + outbox queue implemented.
+- [x] API outage replay behavior validated with deterministic e2e pass.
+
+### 16.4 Acceptance evidence
+- [x] global gates pass (`db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`).
+- [x] extended `e2e-full-pass.sh` validates deposit + limit-order + outage replay path.
