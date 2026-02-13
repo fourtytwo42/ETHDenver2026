@@ -1,20 +1,19 @@
-# Slice 04 Tasks
+# Slice 05 Tasks
 
-Active slice: `Slice 04: Wallet Core (Create/Import/Address/Health)`
+Active slice: `Slice 05: Wallet Auth + Signing`
 
 ## Checklist
 - [x] Record pre-flight objective, acceptance checks, touched-file allowlist, and slice boundary guardrails.
-- [x] Complete pre-step checkpoint: commit+push Slice 03 state and governance rule update.
-- [x] Update `docs/CONTEXT_PACK.md`, `spec.md`, and `tasks.md` for Slice 04 scope.
-- [x] Implement encrypted wallet storage (Argon2id + AES-256-GCM) in runtime CLI.
-- [x] Implement portable wallet chain binding model and address resolution.
-- [x] Implement TTY-only `wallet-create` and `wallet-import` flows.
-- [x] Upgrade `wallet-health` to real validation (permissions + ciphertext integrity + metadata).
-- [x] Add Python tests for encryption/decryption, corruption, permission checks, and CLI behavior paths.
-- [x] Add pinned Python dependency manifest for wallet crypto requirements.
-- [x] Update runtime README and wallet command contract docs for Slice 04 behavior.
+- [x] Install/unblock `cast` runtime dependency.
+- [x] Update `docs/CONTEXT_PACK.md`, `spec.md`, and `tasks.md` for Slice 05 scope.
+- [x] Implement runtime `wallet-sign-challenge` handler in `apps/agent-runtime/xclaw_agent/cli.py`.
+- [x] Enforce canonical challenge shape and TTL validation.
+- [x] Implement passphrase retrieval policy for signing (env first, then interactive TTY).
+- [x] Integrate cast-backed signing path and signature format validation.
+- [x] Add runtime tests for signing success and negative/failure paths.
+- [x] Update runtime README and wallet command contract docs for Slice 05 behavior.
 - [x] Run required global validation gates from AGENTS instructions.
-- [x] Run runtime wallet command matrix and negative security-path checks.
+- [x] Run task-specific wallet-sign challenge command matrix and negative checks.
 - [x] Add high-risk review note + rollback plan in acceptance evidence.
-- [x] Update Slice 04 status in tracker and active roadmap items in same change.
-- [x] Commit and push Slice 04 only after all validations pass.
+- [x] Update Slice 05 status in tracker and active roadmap items in same change.
+- [x] Commit, push, and post verification evidence + commit hash to issue `#5`.

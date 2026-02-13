@@ -17,8 +17,9 @@ import re
 import secrets
 import shutil
 import stat
+import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -44,6 +45,10 @@ ARGON2_TIME_COST = 3
 ARGON2_MEMORY_COST = 65536
 ARGON2_PARALLELISM = 1
 ARGON2_HASH_LEN = 32
+CHALLENGE_TTL_SECONDS = 300
+CHALLENGE_FORMAT_VERSION = "xclaw-auth-v1"
+CHALLENGE_REQUIRED_KEYS = {"domain", "chain", "nonce", "timestamp", "action"}
+CHALLENGE_ALLOWED_DOMAINS = {"xclaw.trade", "localhost", "127.0.0.1", "::1", "staging.xclaw.trade"}
 
 
 class WalletStoreError(Exception):
@@ -52,6 +57,10 @@ class WalletStoreError(Exception):
 
 class WalletSecurityError(Exception):
     """Wallet security checks failed."""
+
+
+class WalletPassphraseError(Exception):
+    """Wallet passphrase input is unavailable or invalid."""
 
 
 def utc_now() -> str:
@@ -334,6 +343,13 @@ def _prompt_passphrase() -> str:
     return first
 
 
+def _prompt_existing_passphrase() -> str:
+    value = getpass.getpass("Wallet passphrase: ").strip()
+    if not value:
+        raise WalletPassphraseError("Passphrase cannot be empty.")
+    return value
+
+
 def _chain_wallet(store: dict[str, Any], chain: str) -> tuple[str | None, dict[str, Any] | None]:
     wallet_id = store.setdefault("chains", {}).get(chain)
     if not wallet_id:
@@ -350,6 +366,98 @@ def _bind_chain_to_wallet(store: dict[str, Any], chain: str, wallet_id: str) -> 
 
 def _new_wallet_id() -> str:
     return f"wlt_{secrets.token_hex(10)}"
+
+
+def _require_wallet_passphrase_for_signing(chain: str) -> str:
+    env_passphrase = os.environ.get("XCLAW_WALLET_PASSPHRASE")
+    if isinstance(env_passphrase, str) and env_passphrase.strip():
+        return env_passphrase
+    if not _interactive_required():
+        raise WalletPassphraseError(
+            f"wallet.sign-challenge requires XCLAW_WALLET_PASSPHRASE in non-interactive mode for chain '{chain}'."
+        )
+    return _prompt_existing_passphrase()
+
+
+def _parse_challenge_timestamp(value: str) -> datetime:
+    parsed_raw = value.strip()
+    if parsed_raw.endswith("Z"):
+        parsed_raw = parsed_raw[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(parsed_raw)
+    if parsed.tzinfo is None:
+        raise ValueError("timestamp must include timezone.")
+    if parsed.utcoffset() != timedelta(0):
+        raise ValueError("timestamp must be UTC (Z or +00:00).")
+    parsed_utc = parsed.astimezone(timezone.utc)
+    return parsed_utc
+
+
+def _validate_challenge_timestamp(timestamp_value: str, now_utc: datetime | None = None) -> datetime:
+    parsed = _parse_challenge_timestamp(timestamp_value)
+    reference = now_utc or datetime.now(timezone.utc)
+    delta_seconds = abs((reference - parsed).total_seconds())
+    if delta_seconds > CHALLENGE_TTL_SECONDS:
+        raise ValueError("timestamp is outside 5-minute nonce TTL window.")
+    return parsed
+
+
+def _parse_canonical_challenge(message: str, expected_chain: str) -> dict[str, str]:
+    pairs: dict[str, str] = {}
+    for idx, raw_line in enumerate(message.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        if "=" not in line:
+            raise ValueError(f"line {idx} must use key=value format.")
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if key in pairs:
+            raise ValueError(f"duplicate key '{key}'.")
+        if key not in CHALLENGE_REQUIRED_KEYS:
+            raise ValueError(f"unexpected key '{key}'.")
+        pairs[key] = value
+
+    missing = sorted(CHALLENGE_REQUIRED_KEYS - set(pairs.keys()))
+    if missing:
+        raise ValueError(f"missing required keys: {', '.join(missing)}")
+
+    domain = pairs["domain"]
+    if domain not in CHALLENGE_ALLOWED_DOMAINS:
+        raise ValueError("domain is not in the allowlist.")
+
+    if pairs["chain"] != expected_chain:
+        raise ValueError("chain does not match command --chain.")
+
+    nonce = pairs["nonce"]
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", nonce):
+        raise ValueError("nonce must be 16..128 chars of [A-Za-z0-9_-].")
+
+    if not pairs["action"].strip():
+        raise ValueError("action cannot be empty.")
+
+    _validate_challenge_timestamp(pairs["timestamp"])
+    return pairs
+
+
+def _cast_sign_message(private_key_hex: str, message: str) -> str:
+    cast_bin = shutil.which("cast")
+    if not cast_bin:
+        raise WalletStoreError("Missing dependency: cast.")
+
+    proc = subprocess.run(
+        [cast_bin, "wallet", "sign", "--private-key", private_key_hex, message],
+        text=True,
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        raise WalletStoreError(stderr or "cast wallet sign failed.")
+
+    signature = (proc.stdout or "").strip()
+    if not re.fullmatch(r"0x[a-fA-F0-9]{130}", signature):
+        raise WalletStoreError("cast returned malformed signature output.")
+    return signature
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -631,7 +739,55 @@ def cmd_wallet_sign_challenge(args: argparse.Namespace) -> int:
             {"message": args.message},
             exit_code=2,
         )
-    return cmd_not_implemented(args, "wallet.sign-challenge")
+    chain = args.chain
+    try:
+        store = load_wallet_store()
+        _, wallet = _chain_wallet(store, chain)
+        if wallet:
+            _validate_wallet_entry_shape(wallet)
+        else:
+            return fail("wallet_missing", f"No wallet configured for chain '{chain}'.", "Run wallet create/import first.", {"chain": chain}, exit_code=1)
+
+        try:
+            _parse_canonical_challenge(args.message, chain)
+        except ValueError as exc:
+            return fail(
+                "invalid_challenge_format",
+                str(exc),
+                "Provide canonical challenge lines: domain, chain, nonce, timestamp, action.",
+                {"format": CHALLENGE_FORMAT_VERSION, "chain": chain},
+                exit_code=2,
+            )
+
+        passphrase = _require_wallet_passphrase_for_signing(chain)
+        private_key_bytes = _decrypt_private_key(wallet, passphrase)
+        signature = _cast_sign_message(private_key_bytes.hex(), args.message)
+        return ok(
+            "Challenge signed.",
+            chain=chain,
+            address=wallet.get("address"),
+            signature=signature,
+            scheme="eip191_personal_sign",
+            challengeFormat=CHALLENGE_FORMAT_VERSION,
+        )
+
+    except WalletPassphraseError as exc:
+        return fail("non_interactive", str(exc), "Set XCLAW_WALLET_PASSPHRASE or run with TTY attached.", {"chain": chain}, exit_code=2)
+    except WalletSecurityError as exc:
+        return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": chain}, exit_code=1)
+    except WalletStoreError as exc:
+        msg = str(exc)
+        if "Missing dependency: cast" in msg:
+            return fail(
+                "missing_dependency",
+                msg,
+                "Install Foundry and ensure `cast` is on PATH.",
+                {"dependency": "cast"},
+                exit_code=1,
+            )
+        return fail("sign_failed", msg, "Verify wallet passphrase and cast runtime, then retry.", {"chain": chain}, exit_code=1)
+    except Exception as exc:
+        return fail("sign_failed", str(exc), "Inspect runtime wallet/signing configuration and retry.", {"chain": chain}, exit_code=1)
 
 
 def cmd_wallet_send(args: argparse.Namespace) -> int:

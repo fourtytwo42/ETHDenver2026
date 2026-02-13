@@ -184,3 +184,88 @@ Results:
   1. revert Slice 04 touched files only,
   2. rerun required npm gates + wallet command checks,
   3. confirm tracker/roadmap/docs return to pre-Slice-04 state.
+
+## Slice 05 Acceptance Evidence
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 05: Wallet Auth + Signing`
+Issue mapping: `#5` (`Epic: Python agent runtime core (wallet + strategy + execution)`)
+
+### Objective + scope lock
+- Objective: implement `wallet-sign-challenge` for local EIP-191 auth/recovery signing with canonical challenge validation.
+- Scope guard honored: no Slice 06 command implementation, no server/web API contract changes.
+
+### File-level evidence (Slice 05)
+- Runtime implementation:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_wallet_core.py`
+  - `apps/agent-runtime/README.md`
+- Contract/docs/process:
+  - `docs/api/WALLET_COMMAND_CONTRACT.md`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+
+### Environment unblock evidence
+- Foundry installed for cast-backed signing:
+  - `curl -L https://foundry.paradigm.xyz | bash`
+  - `~/.foundry/bin/foundryup`
+- Runtime signer evidence:
+  - `~/.foundry/bin/cast --version` -> `cast 1.5.1-stable`
+
+### Unit/integration test evidence
+- `PATH="$HOME/.foundry/bin:$PATH" python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -v` -> PASS
+- Coverage includes:
+  - empty message rejection
+  - missing wallet
+  - malformed challenge shape
+  - chain mismatch
+  - stale timestamp
+  - non-interactive passphrase rejection
+  - missing cast dependency
+  - happy-path signing with signature shape + scheme assertions
+
+### Required global gate evidence
+Executed with:
+- `source ~/.nvm/nvm.sh && nvm use --silent default`
+
+Results:
+- `npm run db:parity` -> PASS (`"ok": true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`"ok": true`)
+- `npm run build` -> PASS
+
+### Runtime wallet-sign evidence
+- Signing success command:
+  - `XCLAW_WALLET_PASSPHRASE=passphrase-123 apps/agent-runtime/bin/xclaw-agent wallet sign-challenge --message "<canonical>" --chain base_sepolia --json`
+  - result: `ok:true`, `code:"ok"`, `scheme:"eip191_personal_sign"`, `challengeFormat:"xclaw-auth-v1"`, 65-byte hex signature.
+- Signature verification against address (server-side format expectation proxy):
+  - `cast wallet verify --address <address> "<canonical>" "<signature>"`
+  - result: `Validation succeeded.`
+- Invalid challenge (missing keys):
+  - result: `code:"invalid_challenge_format"`
+- Empty challenge:
+  - result: `code:"invalid_input"`
+- Non-interactive signing without passphrase:
+  - result: `code:"non_interactive"`
+- Missing cast on PATH:
+  - result: `code:"missing_dependency"`
+
+### Slice status synchronization
+- `docs/XCLAW_SLICE_TRACKER.md` Slice 05 set to `[x]` with all DoD items checked.
+- `docs/XCLAW_BUILD_ROADMAP.md` runtime checklist updated:
+  - cast backend integration for wallet/sign/send marked done.
+  - wallet challenge-signing command marked done.
+
+### High-risk review protocol
+- Security-sensitive class: wallet signing/auth path.
+- Second-opinion review pass: completed via focused re-review of challenge parsing, passphrase gating, and cast invocation error handling.
+- Rollback plan:
+  1. revert Slice 05 touched files only,
+  2. rerun unittest + required npm gates,
+  3. verify tracker/roadmap/source-of-truth return to pre-Slice-05 state.

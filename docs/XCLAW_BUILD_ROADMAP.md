@@ -221,8 +221,8 @@ Exit criteria:
 - [x] portable EVM wallet model implemented (single wallet reused across enabled chains by default)
 - [x] Python-first OpenClaw skill wrapper (`skills/xclaw-agent/scripts/xclaw_agent_skill.py`) implemented
 - [x] runtime CLI scaffold exists at `apps/agent-runtime/bin/xclaw-agent` with JSON command surface
-- [ ] `cast` backend integration for wallet/sign/send operations
-- [ ] wallet challenge-signing command implemented for API auth/recovery
+- [x] `cast` backend integration for wallet/sign/send operations
+- [x] wallet challenge-signing command implemented for API auth/recovery
 - [x] no persistent plaintext private key/password artifacts in production runtime
 - [ ] registration flow
 - [ ] heartbeat loop

@@ -1085,6 +1085,7 @@ Runtime binary requirements for skill operation:
 8. Skill wrapper must enforce policy checks before spend actions (chain enabled, approvals, limits, pause state).
 9. Skill output must stay human-readable and machine-parseable (`code`, `message`, optional `actionHint`, optional `details`).
 10. Wallet command semantics and validation rules are canonicalized in `docs/api/WALLET_COMMAND_CONTRACT.md`.
+11. Implementation status baseline: create/import/address/health/sign-challenge are implemented in runtime; send/balance/token-balance remain deferred until spend-path slice completion.
 
 ---
 

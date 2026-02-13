@@ -1,45 +1,45 @@
-# Slice 04 Spec: Wallet Core (Create/Import/Address/Health)
+# Slice 05 Spec: Wallet Auth + Signing
 
 ## Goal
-Complete Slice 04 by delivering real local wallet lifecycle operations with encrypted key storage, chain binding, and security-fail-closed behavior.
+Complete Slice 05 by implementing `wallet-sign-challenge` with local EIP-191 signing via `cast` and canonical challenge validation.
 
 ## Success Criteria
-1. `wallet-create` creates a wallet and stores encrypted private key material only.
-2. `wallet-import` imports a provided private key through secure interactive prompts only.
-3. `wallet-address` returns chain-bound wallet address and `wallet_missing` when absent.
-4. `wallet-health` reports real wallet state and fails on unsafe file permissions or corrupted encrypted payload.
-5. Slice 04 roadmap/tracker statuses are synchronized in the same change.
+1. `wallet-sign-challenge` is fully implemented in runtime CLI.
+2. Command enforces canonical challenge format fields: `domain`, `chain`, `nonce`, `timestamp`, `action`.
+3. Signing succeeds only with valid challenge + wallet/passphrase state.
+4. Success JSON includes `signature`, `scheme`, and `challengeFormat`.
+5. Slice 05 tracker/roadmap states are updated in the same change after validation passes.
 6. Required validation commands pass.
 
 ## Non-Goals
-1. `wallet-sign-challenge` implementation (Slice 05).
-2. `wallet-send`, `wallet-balance`, `wallet-token-balance`, and `wallet-remove` core completion (Slice 06).
-3. Trade/off-DEX runtime loops.
+1. `wallet-send`, `wallet-balance`, `wallet-token-balance` runtime implementation (Slice 06).
+2. Server-side recovery endpoint implementation.
+3. Trade/off-DEX runtime loop changes.
 
 ## Constraints
-1. Strict slice sequencing: Slice 04 only.
+1. Strict slice sequencing: Slice 05 only.
 2. Python-first runtime boundary preserved.
-3. TTY-only intake for `wallet-create`/`wallet-import`.
-4. Encrypted-at-rest using Argon2id + AES-256-GCM.
+3. Signer backend is `cast` (Foundry) for this slice.
+4. Challenge timestamp TTL enforcement is 5 minutes and UTC-only.
 
 ## Locked Decisions
-1. Portable wallet default: one wallet identity reused across enabled chains by default.
-2. Non-interactive create/import attempts are rejected with structured JSON.
-3. Health includes cast presence, encryption/metadata validity, and file-permission safety indicators.
-4. Dependency pins include Argon2id and Keccak support for deterministic EVM address derivation.
+1. Signature scheme is EIP-191 (`personal_sign`).
+2. Canonical challenge format version is `xclaw-auth-v1`.
+3. Non-interactive signing requires `XCLAW_WALLET_PASSPHRASE` env var.
+4. Missing `cast` returns structured `missing_dependency` failure.
 
 ## Acceptance Checks
-1. `python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -v`
+1. `PATH="$HOME/.foundry/bin:$PATH" python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -v`
 2. `npm run db:parity`
 3. `npm run seed:reset`
 4. `npm run seed:load`
 5. `npm run seed:verify`
 6. `npm run build`
-7. Runtime wallet core smoke:
-   - `apps/agent-runtime/bin/xclaw-agent wallet create --chain base_sepolia --json`
-   - `apps/agent-runtime/bin/xclaw-agent wallet address --chain base_sepolia --json`
-   - `apps/agent-runtime/bin/xclaw-agent wallet health --chain base_sepolia --json`
-8. Negative checks:
-   - non-interactive create/import rejection
-   - malformed encrypted payload rejection
-   - unsafe permission rejection
+7. Runtime signing smoke:
+   - `apps/agent-runtime/bin/xclaw-agent wallet sign-challenge --message "<canonical_message>" --chain base_sepolia --json`
+8. Runtime negative checks:
+   - empty challenge rejection
+   - malformed canonical challenge rejection
+   - stale timestamp rejection
+   - non-interactive without passphrase rejection
+   - missing cast rejection

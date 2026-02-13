@@ -73,15 +73,15 @@ DoD:
 ---
 
 ## Slice 05: Wallet Auth + Signing
-Status: [ ]
+Status: [x]
 
 Goal:
 - Wallet can sign API challenges for recovery/auth.
 
 DoD:
-- [ ] `wallet-sign-challenge` implemented
-- [ ] signature verifies server-side format expectations
-- [ ] negative tests for empty/invalid challenge
+- [x] `wallet-sign-challenge` implemented
+- [x] signature verifies server-side format expectations
+- [x] negative tests for empty/invalid challenge
 
 ---
 

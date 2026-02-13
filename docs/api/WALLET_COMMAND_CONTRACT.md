@@ -83,7 +83,31 @@ Errors MUST be machine-parseable and human-readable:
 4. `wallet-sign-challenge` rejects empty message.
 5. `wallet-create` and `wallet-import` require interactive TTY and fail with `non_interactive` in non-interactive contexts.
 
-## 6) Runtime-Behavior Alignment (Slice 04)
+## 6) Canonical Challenge Format (`wallet-sign-challenge`)
+
+`wallet-sign-challenge` requires line-based `key=value` message with exactly:
+
+1. `domain`
+2. `chain`
+3. `nonce`
+4. `timestamp`
+5. `action`
+
+Validation rules:
+- `domain` allowlist: `xclaw.trade`, `staging.xclaw.trade`, `localhost`, `127.0.0.1`, `::1`
+- `chain` must match command `--chain`
+- `nonce` regex: `[A-Za-z0-9_-]{16,128}`
+- `timestamp` must be ISO-8601 UTC (`Z` or `+00:00`) and within 5 minutes
+- `action` must be non-empty
+
+Success payload fields for signing include:
+- `signature` (65-byte hex, `0x`-prefixed)
+- `scheme: "eip191_personal_sign"`
+- `challengeFormat: "xclaw-auth-v1"`
+- `address`
+- `chain`
+
+## 7) Runtime-Behavior Alignment (Slice 05)
 
 Current behavior in `apps/agent-runtime/xclaw_agent/cli.py`:
 
@@ -91,13 +115,16 @@ Current behavior in `apps/agent-runtime/xclaw_agent/cli.py`:
 2. `wallet-import` is implemented with interactive TTY secret intake and encrypted-at-rest storage.
 3. `wallet-address` returns active chain-bound address or `wallet_missing`.
 4. `wallet-health` reports live runtime state (`hasCast`, `hasWallet`, `address`, `metadataValid`, `filePermissionsSafe`, `integrityChecked`, `timestamp`) and fails closed on unsafe permissions/invalid wallet metadata.
-5. `wallet-sign-challenge`, `wallet-send`, `wallet-balance`, and `wallet-token-balance` remain structured `not_implemented` runtime handlers pending later slices.
-6. Wrapper-level input validation executes before runtime delegation.
-7. On delegated non-zero exits, wrapper passes runtime JSON through unchanged when stdout is parseable JSON payload with `ok` and `code`; otherwise wrapper emits structured `agent_command_failed`.
+5. `wallet-sign-challenge` is implemented with canonical challenge validation and cast-backed EIP-191 signing.
+6. Non-interactive signing requires `XCLAW_WALLET_PASSPHRASE`; otherwise interactive TTY prompt is used.
+7. `wallet-send`, `wallet-balance`, and `wallet-token-balance` remain structured `not_implemented` runtime handlers pending later slices.
+8. Missing cast dependency returns structured `missing_dependency` error.
+9. Wrapper-level input validation executes before runtime delegation.
+10. On delegated non-zero exits, wrapper passes runtime JSON through unchanged when stdout is parseable JSON payload with `ok` and `code`; otherwise wrapper emits structured `agent_command_failed`.
 
-This is contract-compliant for Slice 04 because wallet core lifecycle baseline is implemented while signing and spend-path commands are deferred to later slices.
+This is contract-compliant for Slice 05 because auth signing is implemented while spend-path commands remain deferred to Slice 06.
 
-## 7) Security Rules
+## 8) Security Rules
 
 1. Never print private keys, mnemonics, or raw secret material.
 2. No persistent plaintext password stash in production runtime.
@@ -105,7 +132,7 @@ This is contract-compliant for Slice 04 because wallet core lifecycle baseline i
 4. Wallet signing is local-only; server receives signatures/tx metadata, never key material.
 5. All sensitive values in logs/output must be redacted.
 
-## 8) Exit Codes
+## 9) Exit Codes
 
 - `0`: success
 - `1`: runtime command failure
