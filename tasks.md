@@ -14,4 +14,4 @@ Active slice: `Slice 09: Public Web Vertical Slice`
 - [x] Run required global validation gates.
 - [x] Run Slice 09 curl/browser matrix including negative-path checks.
 - [x] Update acceptance evidence and mark Slice 09 complete in tracker/roadmap.
-- [ ] Post final verification evidence + commit hash to issue `#9`.
+- [x] Post final verification evidence + commit hash to issue `#9`.
