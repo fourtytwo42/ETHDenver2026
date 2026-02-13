@@ -86,16 +86,16 @@ DoD:
 ---
 
 ## Slice 06: Wallet Spend Ops (Send + Balance + Token Balance + Remove)
-Status: [ ]
+Status: [x]
 
 Goal:
 - Controlled send and balance operations through runtime.
 
 DoD:
-- [ ] `wallet-send` implemented with guardrails
-- [ ] `wallet-balance` + `wallet-token-balance` implemented
-- [ ] `wallet-remove` cleanup verified
-- [ ] spend blocked when policy preconditions fail
+- [x] `wallet-send` implemented with guardrails
+- [x] `wallet-balance` + `wallet-token-balance` implemented
+- [x] `wallet-remove` cleanup verified
+- [x] spend blocked when policy preconditions fail
 
 ---
 

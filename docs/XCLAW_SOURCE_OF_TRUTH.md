@@ -609,17 +609,22 @@ Must not show to unauthorized viewers:
 ## 16) GitHub Issue Mapping
 
 Execution map in repo issues:
-- #1 Foundation
-- #2 Shared contracts
-- #3 Data layer
-- #4 Ingest APIs
-- #5 Agent runtime core
-- #6 Agent management UI
-- #7 Public network UX
-- #8 Ranking engine
-- #9 Copy MVP
-- #10 Hardening + demo readiness
-- #11 Meta tracker
+- #1 Slice 01: Environment + Toolchain Baseline
+- #2 Slice 02: Canonical Contracts Freeze
+- #3 Slice 03: Agent Runtime CLI Scaffold
+- #4 Slice 04: Wallet Core
+- #5 Slice 05: Wallet Auth + Signing
+- #6 Slice 06: Wallet Spend Ops
+- #7 Slice 07: Hardhat Local Trading Path
+- #8 Slice 08: Off-DEX Escrow Local Path
+- #9 Slice 09: Core API Vertical Slice
+- #10 Slice 10: Auth + Management Vertical Slice
+- #11 Slice 11: Public Web Vertical Slice
+- #12 Slice 12: Management UI Vertical Slice
+- #13 Slice 13: Metrics + Leaderboard + Copy
+- #14 Slice 14: Observability + Ops
+- #15 Slice 15: Base Sepolia Promotion
+- #16 Slice 16: MVP Acceptance + Release Gate
 
 ---
 
@@ -1085,7 +1090,8 @@ Runtime binary requirements for skill operation:
 8. Skill wrapper must enforce policy checks before spend actions (chain enabled, approvals, limits, pause state).
 9. Skill output must stay human-readable and machine-parseable (`code`, `message`, optional `actionHint`, optional `details`).
 10. Wallet command semantics and validation rules are canonicalized in `docs/api/WALLET_COMMAND_CONTRACT.md`.
-11. Implementation status baseline: create/import/address/health/sign-challenge are implemented in runtime; send/balance/token-balance remain deferred until spend-path slice completion.
+11. Implementation status baseline: create/import/address/health/sign-challenge/send/balance/token-balance/remove are implemented in runtime.
+12. Slice 06 policy cap model is temporarily native-denominated (`max_daily_native_wei` in local policy) until USD-cap pipeline slices finalize canonical spend accounting.
 
 ---
 

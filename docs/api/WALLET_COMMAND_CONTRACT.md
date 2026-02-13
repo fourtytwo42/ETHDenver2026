@@ -82,6 +82,8 @@ Errors MUST be machine-parseable and human-readable:
 3. `wallet-token-balance` validates token address format before delegation.
 4. `wallet-sign-challenge` rejects empty message.
 5. `wallet-create` and `wallet-import` require interactive TTY and fail with `non_interactive` in non-interactive contexts.
+6. `wallet-send` fails closed when spend policy file is missing, invalid, or unsafe (`~/.xclaw-agent/policy.json`).
+7. `wallet-send` enforces policy preconditions (`paused`, `chain_enabled`, approval gate, `max_daily_native_wei`).
 
 ## 6) Canonical Challenge Format (`wallet-sign-challenge`)
 
@@ -107,7 +109,7 @@ Success payload fields for signing include:
 - `address`
 - `chain`
 
-## 7) Runtime-Behavior Alignment (Slice 05)
+## 7) Runtime-Behavior Alignment (Slice 06)
 
 Current behavior in `apps/agent-runtime/xclaw_agent/cli.py`:
 
@@ -117,12 +119,18 @@ Current behavior in `apps/agent-runtime/xclaw_agent/cli.py`:
 4. `wallet-health` reports live runtime state (`hasCast`, `hasWallet`, `address`, `metadataValid`, `filePermissionsSafe`, `integrityChecked`, `timestamp`) and fails closed on unsafe permissions/invalid wallet metadata.
 5. `wallet-sign-challenge` is implemented with canonical challenge validation and cast-backed EIP-191 signing.
 6. Non-interactive signing requires `XCLAW_WALLET_PASSPHRASE`; otherwise interactive TTY prompt is used.
-7. `wallet-send`, `wallet-balance`, and `wallet-token-balance` remain structured `not_implemented` runtime handlers pending later slices.
-8. Missing cast dependency returns structured `missing_dependency` error.
-9. Wrapper-level input validation executes before runtime delegation.
-10. On delegated non-zero exits, wrapper passes runtime JSON through unchanged when stdout is parseable JSON payload with `ok` and `code`; otherwise wrapper emits structured `agent_command_failed`.
+7. `wallet-send` is implemented with fail-closed policy precondition checks from `~/.xclaw-agent/policy.json` before any chain spend:
+   - `paused == false`
+   - `chains.<chain>.chain_enabled == true`
+   - if `spend.approval_required == true`, then `spend.approval_granted == true`
+   - `spend.max_daily_native_wei` not exceeded (UTC day ledger in `state.json`)
+8. `wallet-balance` is implemented via cast-backed native balance query for wallet address and chain RPC.
+9. `wallet-token-balance` is implemented via cast-backed ERC-20 `balanceOf(address)` query.
+10. Missing cast dependency returns structured `missing_dependency` error.
+11. Wrapper-level input validation executes before runtime delegation.
+12. On delegated non-zero exits, wrapper passes runtime JSON through unchanged when stdout is parseable JSON payload with `ok` and `code`; otherwise wrapper emits structured `agent_command_failed`.
 
-This is contract-compliant for Slice 05 because auth signing is implemented while spend-path commands remain deferred to Slice 06.
+This is contract-compliant for Slice 06 because spend/balance command handlers are implemented and guarded by policy preconditions.
 
 ## 8) Security Rules
 

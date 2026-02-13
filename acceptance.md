@@ -269,3 +269,80 @@ Results:
   1. revert Slice 05 touched files only,
   2. rerun unittest + required npm gates,
   3. verify tracker/roadmap/source-of-truth return to pre-Slice-05 state.
+
+## Slice 06 Acceptance Evidence
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 06: Wallet Spend Ops (Send + Balance + Token Balance + Remove)`
+Issue mapping: `#6` (`Slice 06: Wallet Spend Ops`)
+
+### Objective + scope lock
+- Objective: implement runtime wallet spend and balance operations with fail-closed policy preconditions.
+- Scope guard honored: no server/web API or migration changes, no Slice 07+ runtime loop implementation.
+
+### File-level evidence (Slice 06)
+- Runtime implementation:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_wallet_core.py`
+  - `apps/agent-runtime/README.md`
+- Contract/docs/process:
+  - `docs/api/WALLET_COMMAND_CONTRACT.md`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+
+### Unit/integration test evidence
+- `PATH="$HOME/.foundry/bin:$PATH" python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -v` -> PASS
+- Coverage includes:
+  - `wallet-send` policy fail-closed for missing policy file
+  - `wallet-send` blocked on chain disabled, paused state, approval required, and daily cap exceeded
+  - `wallet-send` success path with tx hash + ledger update
+  - `wallet-balance` and `wallet-token-balance` success paths
+  - `wallet-token-balance` invalid token rejection
+  - `wallet-remove` multi-chain cleanup semantics
+
+### Required global gate evidence
+Executed with:
+- `source ~/.nvm/nvm.sh && nvm use --silent default`
+
+Results:
+- `npm run db:parity` -> PASS (`"ok": true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`"ok": true`)
+- `npm run build` -> PASS
+
+### Task-specific runtime evidence (Hardhat-local-first)
+- Local EVM runtime:
+  - `anvil --host 127.0.0.1 --port 8545` started with chain id `31337` (Hardhat-local equivalent RPC target).
+  - `cast chain-id --rpc-url http://127.0.0.1:8545` -> `31337`
+- Wallet balance:
+  - `XCLAW_AGENT_HOME=/tmp/xclaw-s6-manual/.xclaw-agent apps/agent-runtime/bin/xclaw-agent wallet balance --chain hardhat_local --json`
+  - result: `code:"ok"`, `balanceWei:"10000000000000000000000"`
+- Wallet send:
+  - `XCLAW_WALLET_PASSPHRASE=passphrase-123 ... wallet send --to 0x70997970... --amount-wei 1000000000000000 --chain hardhat_local --json`
+  - result: `code:"ok"`, `txHash:"0x340e551eb7da5046b910948318357dc7c2becb0d39f79d9e4373889fe739878a"`, `dailySpendWei:"1000000000000000"`
+- Wallet token balance:
+  - deployed deterministic test contract (`cast send --create ...`) at `0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512`
+  - `... wallet token-balance --token 0xe7f1725E... --chain hardhat_local --json`
+  - result: `code:"ok"`, `balanceWei:"42"`
+- Policy-blocked send proof:
+  - with `spend.approval_granted=false`, send command returns:
+  - `code:"approval_required"`, `message:"Spend blocked because approval is required but not granted."`
+
+### Slice status synchronization
+- `docs/XCLAW_SLICE_TRACKER.md` Slice 06 set to `[x]` with all DoD items checked.
+- `docs/XCLAW_BUILD_ROADMAP.md` updated for implemented wallet spend ops and active spend precondition gate.
+- `docs/XCLAW_SOURCE_OF_TRUTH.md` issue mapping aligned to slice order and wallet implementation status updated for Slice 06.
+
+### High-risk review protocol
+- Security-sensitive class: wallet spend path and local policy gating.
+- Second-opinion review pass: completed via focused re-review of policy fail-closed behavior, RPC/chain config loading, and secret-handling boundaries in send flow.
+- Rollback plan:
+  1. revert Slice 06 touched files only,
+  2. rerun unittest + required npm gates,
+  3. verify tracker/roadmap/source-of-truth and wallet contract docs return to pre-Slice-06 state.

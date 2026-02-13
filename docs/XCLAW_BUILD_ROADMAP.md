@@ -223,6 +223,7 @@ Exit criteria:
 - [x] runtime CLI scaffold exists at `apps/agent-runtime/bin/xclaw-agent` with JSON command surface
 - [x] `cast` backend integration for wallet/sign/send operations
 - [x] wallet challenge-signing command implemented for API auth/recovery
+- [x] wallet spend ops (`wallet send`, `wallet balance`, `wallet token-balance`, `wallet remove`) implemented with JSON responses
 - [x] no persistent plaintext private key/password artifacts in production runtime
 - [ ] registration flow
 - [ ] heartbeat loop
@@ -237,6 +238,7 @@ Exit criteria:
 - [ ] chainId verification at startup + pre-trade
 
 ### 7.3 Policy and approval enforcement
+- [x] spend precondition gate active for wallet send (chain enabled, paused state, approval flag, daily native cap)
 - [ ] approval precedence engine
 - [ ] retry constraints (10m, ±10%, +50bps, max 3)
 - [ ] pause/resume behavior

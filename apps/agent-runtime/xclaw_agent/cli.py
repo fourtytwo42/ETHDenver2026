@@ -39,6 +39,9 @@ except Exception:  # pragma: no cover - handled by runtime dependency check
 APP_DIR = pathlib.Path(os.environ.get("XCLAW_AGENT_HOME", str(pathlib.Path.home() / ".xclaw-agent")))
 STATE_FILE = APP_DIR / "state.json"
 WALLET_STORE_FILE = APP_DIR / "wallets.json"
+POLICY_FILE = APP_DIR / "policy.json"
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
+CHAIN_CONFIG_DIR = REPO_ROOT / "config" / "chains"
 
 WALLET_STORE_VERSION = 1
 ARGON2_TIME_COST = 3
@@ -61,6 +64,16 @@ class WalletSecurityError(Exception):
 
 class WalletPassphraseError(Exception):
     """Wallet passphrase input is unavailable or invalid."""
+
+
+class WalletPolicyError(Exception):
+    """Wallet policy precondition checks failed."""
+
+    def __init__(self, code: str, message: str, action_hint: str | None = None, details: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.code = code
+        self.action_hint = action_hint
+        self.details = details or {}
 
 
 def utc_now() -> str:
@@ -230,6 +243,226 @@ def _normalize_private_key_hex(value: str) -> str | None:
 
 def cast_exists() -> bool:
     return shutil.which("cast") is not None
+
+
+def _require_cast_bin() -> str:
+    cast_bin = shutil.which("cast")
+    if not cast_bin:
+        raise WalletStoreError("Missing dependency: cast.")
+    return cast_bin
+
+
+def _load_chain_config(chain: str) -> dict[str, Any]:
+    path = CHAIN_CONFIG_DIR / f"{chain}.json"
+    if not path.exists():
+        raise WalletStoreError(f"Chain config not found for '{chain}' at '{path}'.")
+    data = _read_json(path)
+    if not isinstance(data, dict):
+        raise WalletStoreError(f"Chain config '{path}' must be a JSON object.")
+    return data
+
+
+def _chain_rpc_url(chain: str) -> str:
+    cfg = _load_chain_config(chain)
+    rpc = cfg.get("rpc")
+    if not isinstance(rpc, dict):
+        raise WalletStoreError(f"Chain config for '{chain}' is missing rpc object.")
+    primary = rpc.get("primary")
+    fallback = rpc.get("fallback")
+    for candidate in [primary, fallback]:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    raise WalletStoreError(f"Chain config for '{chain}' has no usable rpc URL.")
+
+
+def _utc_day_key(now_utc: datetime | None = None) -> str:
+    reference = now_utc or datetime.now(timezone.utc)
+    return reference.astimezone(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _parse_uint_text(value: str) -> int:
+    raw = value.strip()
+    if re.fullmatch(r"[0-9]+", raw):
+        return int(raw)
+    if re.fullmatch(r"0x[a-fA-F0-9]+", raw):
+        return int(raw, 16)
+    raise WalletStoreError(f"Unable to parse uint value: '{value}'.")
+
+
+def _extract_tx_hash(output: str) -> str:
+    trimmed = (output or "").strip()
+    if not trimmed:
+        raise WalletStoreError("cast send returned empty output.")
+    try:
+        parsed = json.loads(trimmed)
+    except json.JSONDecodeError:
+        parsed = None
+
+    candidates: list[Any] = []
+    if isinstance(parsed, dict):
+        candidates.extend([parsed.get("transactionHash"), parsed.get("txHash"), parsed.get("hash")])
+    elif isinstance(parsed, list):
+        for item in parsed:
+            if isinstance(item, dict):
+                candidates.extend([item.get("transactionHash"), item.get("txHash"), item.get("hash")])
+
+    for value in candidates:
+        if isinstance(value, str) and re.fullmatch(r"0x[a-fA-F0-9]{64}", value):
+            return value
+
+    match = re.search(r"0x[a-fA-F0-9]{64}", trimmed)
+    if match:
+        return match.group(0)
+    raise WalletStoreError("cast send output did not include a transaction hash.")
+
+
+def _load_policy_for_chain(chain: str) -> dict[str, Any]:
+    ensure_app_dir()
+    _assert_secure_permissions(APP_DIR, 0o700, "directory")
+    if not POLICY_FILE.exists():
+        raise WalletPolicyError(
+            "policy_blocked",
+            f"Policy file is missing for chain '{chain}'.",
+            "Create ~/.xclaw-agent/policy.json with chain and spend preconditions before sending funds.",
+            {"chain": chain, "policyFile": str(POLICY_FILE)},
+        )
+    _assert_secure_permissions(POLICY_FILE, 0o600, "policy file")
+    payload = _read_json(POLICY_FILE)
+    if not isinstance(payload, dict):
+        raise WalletPolicyError(
+            "policy_blocked",
+            "Policy file must be a JSON object.",
+            "Repair ~/.xclaw-agent/policy.json and retry.",
+            {"policyFile": str(POLICY_FILE)},
+        )
+    return payload
+
+
+def _enforce_spend_preconditions(chain: str, amount_wei: int) -> tuple[dict[str, Any], str, int, int]:
+    policy = _load_policy_for_chain(chain)
+
+    paused = policy.get("paused")
+    if not isinstance(paused, bool):
+        raise WalletPolicyError(
+            "policy_blocked",
+            "Policy field 'paused' must be boolean.",
+            "Set paused=true/false in ~/.xclaw-agent/policy.json.",
+            {"field": "paused", "policyFile": str(POLICY_FILE)},
+        )
+    if paused:
+        raise WalletPolicyError(
+            "agent_paused",
+            "Spend blocked because agent is paused.",
+            "Resume the agent before sending funds.",
+            {"chain": chain},
+        )
+
+    chains = policy.get("chains")
+    if not isinstance(chains, dict):
+        raise WalletPolicyError(
+            "policy_blocked",
+            "Policy field 'chains' must be an object.",
+            "Configure chain-level policy under chains.<chain>.",
+            {"field": "chains", "policyFile": str(POLICY_FILE)},
+        )
+    chain_policy = chains.get(chain)
+    if not isinstance(chain_policy, dict):
+        raise WalletPolicyError(
+            "chain_disabled",
+            f"Spend blocked because chain '{chain}' is not configured in policy.",
+            "Add chains.<chain>.chain_enabled=true to policy.",
+            {"chain": chain},
+        )
+    chain_enabled = chain_policy.get("chain_enabled")
+    if not isinstance(chain_enabled, bool):
+        raise WalletPolicyError(
+            "policy_blocked",
+            "Policy field chains.<chain>.chain_enabled must be boolean.",
+            "Set chain_enabled=true/false for the active chain.",
+            {"chain": chain, "field": "chain_enabled"},
+        )
+    if not chain_enabled:
+        raise WalletPolicyError(
+            "chain_disabled",
+            f"Spend blocked because chain '{chain}' is disabled by policy.",
+            "Enable the chain in policy before spending.",
+            {"chain": chain},
+        )
+
+    spend = policy.get("spend")
+    if not isinstance(spend, dict):
+        raise WalletPolicyError(
+            "policy_blocked",
+            "Policy field 'spend' must be an object.",
+            "Configure spend preconditions in policy.",
+            {"field": "spend", "policyFile": str(POLICY_FILE)},
+        )
+    approval_required = spend.get("approval_required")
+    approval_granted = spend.get("approval_granted")
+    max_daily_native_wei = spend.get("max_daily_native_wei")
+
+    if not isinstance(approval_required, bool) or not isinstance(approval_granted, bool):
+        raise WalletPolicyError(
+            "policy_blocked",
+            "Policy fields spend.approval_required and spend.approval_granted must be boolean.",
+            "Set approval_required and approval_granted in policy.",
+            {"field": "spend"},
+        )
+    if approval_required and not approval_granted:
+        raise WalletPolicyError(
+            "approval_required",
+            "Spend blocked because approval is required but not granted.",
+            "Grant approval before sending funds.",
+            {"chain": chain},
+        )
+    if not isinstance(max_daily_native_wei, str) or not re.fullmatch(r"[0-9]+", max_daily_native_wei):
+        raise WalletPolicyError(
+            "policy_blocked",
+            "Policy field spend.max_daily_native_wei must be a uint string.",
+            "Set max_daily_native_wei as a base-unit integer string.",
+            {"field": "spend.max_daily_native_wei"},
+        )
+
+    max_daily_wei = int(max_daily_native_wei)
+    day_key = _utc_day_key()
+    state = load_state()
+    ledger = state.setdefault("spendLedger", {})
+    if not isinstance(ledger, dict):
+        raise WalletStoreError("State field 'spendLedger' must be an object.")
+    chain_ledger = ledger.setdefault(chain, {})
+    if not isinstance(chain_ledger, dict):
+        raise WalletStoreError(f"State spend ledger for chain '{chain}' must be an object.")
+    current_raw = chain_ledger.get(day_key, "0")
+    if not isinstance(current_raw, str) or not re.fullmatch(r"[0-9]+", current_raw):
+        raise WalletStoreError(f"State spend ledger value for '{chain}' '{day_key}' must be uint string.")
+    current_spend = int(current_raw)
+
+    projected = current_spend + amount_wei
+    if projected > max_daily_wei:
+        raise WalletPolicyError(
+            "daily_cap_exceeded",
+            "Spend blocked because daily native cap would be exceeded.",
+            "Reduce amount or increase max_daily_native_wei policy cap.",
+            {
+                "chain": chain,
+                "day": day_key,
+                "currentSpendWei": str(current_spend),
+                "amountWei": str(amount_wei),
+                "maxDailyNativeWei": str(max_daily_wei),
+            },
+        )
+    return state, day_key, current_spend, max_daily_wei
+
+
+def _record_spend(state: dict[str, Any], chain: str, day_key: str, new_spend_wei: int) -> None:
+    ledger = state.setdefault("spendLedger", {})
+    if not isinstance(ledger, dict):
+        raise WalletStoreError("State field 'spendLedger' must be an object.")
+    chain_ledger = ledger.setdefault(chain, {})
+    if not isinstance(chain_ledger, dict):
+        raise WalletStoreError(f"State spend ledger for chain '{chain}' must be an object.")
+    chain_ledger[day_key] = str(new_spend_wei)
+    save_state(state)
 
 
 def _derive_address(private_key_hex: str) -> str:
@@ -798,14 +1031,111 @@ def cmd_wallet_send(args: argparse.Namespace) -> int:
         return fail("invalid_input", "Invalid recipient address format.", "Use 0x-prefixed 20-byte hex address.", {"to": args.to}, exit_code=2)
     if not re.fullmatch(r"[0-9]+", args.amount_wei):
         return fail("invalid_input", "Invalid amount-wei format.", "Use base-unit integer string.", {"amountWei": args.amount_wei}, exit_code=2)
-    return cmd_not_implemented(args, "wallet.send")
+
+    chain = args.chain
+    amount_wei = int(args.amount_wei)
+    try:
+        store = load_wallet_store()
+        _, wallet = _chain_wallet(store, chain)
+        if wallet is None:
+            return fail("wallet_missing", f"No wallet configured for chain '{chain}'.", "Run wallet create/import first.", {"chain": chain}, exit_code=1)
+        _validate_wallet_entry_shape(wallet)
+
+        state, day_key, current_spend, max_daily_wei = _enforce_spend_preconditions(chain, amount_wei)
+        passphrase = _require_wallet_passphrase_for_signing(chain)
+        private_key_hex = _decrypt_private_key(wallet, passphrase).hex()
+        cast_bin = _require_cast_bin()
+        rpc_url = _chain_rpc_url(chain)
+
+        proc = subprocess.run(
+            [cast_bin, "send", "--json", "--rpc-url", rpc_url, "--private-key", private_key_hex, args.to, args.amount_wei],
+            text=True,
+            capture_output=True,
+        )
+        if proc.returncode != 0:
+            stderr = (proc.stderr or "").strip()
+            stdout = (proc.stdout or "").strip()
+            raise WalletStoreError(stderr or stdout or "cast send failed.")
+
+        tx_hash = _extract_tx_hash(proc.stdout)
+        _record_spend(state, chain, day_key, current_spend + amount_wei)
+
+        return ok(
+            "Wallet send executed.",
+            chain=chain,
+            to=args.to,
+            amountWei=args.amount_wei,
+            txHash=tx_hash,
+            day=day_key,
+            dailySpendWei=str(current_spend + amount_wei),
+            maxDailyNativeWei=str(max_daily_wei),
+        )
+    except WalletPolicyError as exc:
+        return fail(exc.code, str(exc), exc.action_hint, exc.details, exit_code=1)
+    except WalletPassphraseError as exc:
+        return fail("non_interactive", str(exc), "Set XCLAW_WALLET_PASSPHRASE or run with TTY attached.", {"chain": chain}, exit_code=2)
+    except WalletSecurityError as exc:
+        return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": chain}, exit_code=1)
+    except WalletStoreError as exc:
+        msg = str(exc)
+        if "Missing dependency: cast" in msg:
+            return fail(
+                "missing_dependency",
+                msg,
+                "Install Foundry and ensure `cast` is on PATH.",
+                {"dependency": "cast"},
+                exit_code=1,
+            )
+        if "Chain config" in msg:
+            return fail("chain_config_invalid", msg, "Repair config/chains/<chain>.json and retry.", {"chain": chain}, exit_code=1)
+        return fail("send_failed", msg, "Verify wallet passphrase, policy, RPC connectivity, and retry.", {"chain": chain}, exit_code=1)
+    except Exception as exc:
+        return fail("send_failed", str(exc), "Inspect runtime send configuration and retry.", {"chain": chain}, exit_code=1)
 
 
 def cmd_wallet_balance(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
         return chk
-    return cmd_not_implemented(args, "wallet.balance")
+    chain = args.chain
+    try:
+        store = load_wallet_store()
+        _, wallet = _chain_wallet(store, chain)
+        if wallet is None:
+            return fail("wallet_missing", f"No wallet configured for chain '{chain}'.", "Run wallet create/import first.", {"chain": chain}, exit_code=1)
+        _validate_wallet_entry_shape(wallet)
+        address = str(wallet.get("address"))
+        cast_bin = _require_cast_bin()
+        rpc_url = _chain_rpc_url(chain)
+        proc = subprocess.run(
+            [cast_bin, "balance", address, "--rpc-url", rpc_url],
+            text=True,
+            capture_output=True,
+        )
+        if proc.returncode != 0:
+            stderr = (proc.stderr or "").strip()
+            stdout = (proc.stdout or "").strip()
+            raise WalletStoreError(stderr or stdout or "cast balance failed.")
+        output = (proc.stdout or "").strip().splitlines()
+        parsed = _parse_uint_text(output[-1] if output else "")
+        return ok("Wallet balance fetched.", chain=chain, address=address, balanceWei=str(parsed))
+    except WalletSecurityError as exc:
+        return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": chain}, exit_code=1)
+    except WalletStoreError as exc:
+        msg = str(exc)
+        if "Missing dependency: cast" in msg:
+            return fail(
+                "missing_dependency",
+                msg,
+                "Install Foundry and ensure `cast` is on PATH.",
+                {"dependency": "cast"},
+                exit_code=1,
+            )
+        if "Chain config" in msg:
+            return fail("chain_config_invalid", msg, "Repair config/chains/<chain>.json and retry.", {"chain": chain}, exit_code=1)
+        return fail("balance_failed", msg, "Verify wallet and RPC connectivity, then retry.", {"chain": chain}, exit_code=1)
+    except Exception as exc:
+        return fail("balance_failed", str(exc), "Inspect runtime balance configuration and retry.", {"chain": chain}, exit_code=1)
 
 
 def cmd_wallet_token_balance(args: argparse.Namespace) -> int:
@@ -814,7 +1144,45 @@ def cmd_wallet_token_balance(args: argparse.Namespace) -> int:
         return chk
     if not is_hex_address(args.token):
         return fail("invalid_input", "Invalid token address format.", "Use 0x-prefixed 20-byte hex address.", {"token": args.token}, exit_code=2)
-    return cmd_not_implemented(args, "wallet.token-balance")
+    chain = args.chain
+    try:
+        store = load_wallet_store()
+        _, wallet = _chain_wallet(store, chain)
+        if wallet is None:
+            return fail("wallet_missing", f"No wallet configured for chain '{chain}'.", "Run wallet create/import first.", {"chain": chain}, exit_code=1)
+        _validate_wallet_entry_shape(wallet)
+        address = str(wallet.get("address"))
+        cast_bin = _require_cast_bin()
+        rpc_url = _chain_rpc_url(chain)
+        proc = subprocess.run(
+            [cast_bin, "call", args.token, "balanceOf(address)(uint256)", address, "--rpc-url", rpc_url],
+            text=True,
+            capture_output=True,
+        )
+        if proc.returncode != 0:
+            stderr = (proc.stderr or "").strip()
+            stdout = (proc.stdout or "").strip()
+            raise WalletStoreError(stderr or stdout or "cast call balanceOf failed.")
+        output = (proc.stdout or "").strip().splitlines()
+        parsed = _parse_uint_text(output[-1] if output else "")
+        return ok("Wallet token balance fetched.", chain=chain, address=address, token=args.token, balanceWei=str(parsed))
+    except WalletSecurityError as exc:
+        return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": chain}, exit_code=1)
+    except WalletStoreError as exc:
+        msg = str(exc)
+        if "Missing dependency: cast" in msg:
+            return fail(
+                "missing_dependency",
+                msg,
+                "Install Foundry and ensure `cast` is on PATH.",
+                {"dependency": "cast"},
+                exit_code=1,
+            )
+        if "Chain config" in msg:
+            return fail("chain_config_invalid", msg, "Repair config/chains/<chain>.json and retry.", {"chain": chain}, exit_code=1)
+        return fail("token_balance_failed", msg, "Verify wallet, token, and RPC connectivity, then retry.", {"chain": chain, "token": args.token}, exit_code=1)
+    except Exception as exc:
+        return fail("token_balance_failed", str(exc), "Inspect runtime token balance configuration and retry.", {"chain": chain, "token": args.token}, exit_code=1)
 
 
 def cmd_wallet_remove(args: argparse.Namespace) -> int:
