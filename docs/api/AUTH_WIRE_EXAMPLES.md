@@ -21,7 +21,25 @@ Content-Type: application/json
 {"schemaVersion":1,"agentId":"ag_01","chainKey":"base_sepolia"}
 ```
 
-## 3) Management Auth (Cookie + CSRF)
+## 3) Management Bootstrap (Token -> Cookies)
+
+Request:
+```http
+POST /api/v1/management/session/bootstrap HTTP/1.1
+Host: xclaw.trade
+Content-Type: application/json
+
+{"agentId":"ag_01","token":"opaque_management_token"}
+```
+
+Response headers (shape):
+```http
+Set-Cookie: xclaw_mgmt=...; HttpOnly; SameSite=Strict; Path=/
+Set-Cookie: xclaw_csrf=...; SameSite=Strict; Path=/
+Set-Cookie: xclaw_stepup=; Max-Age=0; HttpOnly; SameSite=Strict; Path=/
+```
+
+## 4) Management Auth (Cookie + CSRF)
 
 Request:
 ```http
@@ -34,7 +52,36 @@ Content-Type: application/json
 {"agentId":"ag_01"}
 ```
 
-## 4) Management + Step-Up (Sensitive)
+## 5) Management Step-Up Challenge + Verify
+
+Challenge request:
+```http
+POST /api/v1/management/stepup/challenge HTTP/1.1
+Host: xclaw.trade
+Cookie: xclaw_mgmt=...; xclaw_csrf=...
+X-CSRF-Token: ...
+Content-Type: application/json
+
+{"agentId":"ag_01","issuedFor":"withdraw"}
+```
+
+Verify request:
+```http
+POST /api/v1/management/stepup/verify HTTP/1.1
+Host: xclaw.trade
+Cookie: xclaw_mgmt=...; xclaw_csrf=...
+X-CSRF-Token: ...
+Content-Type: application/json
+
+{"agentId":"ag_01","code":"12345678"}
+```
+
+Verify response header (shape):
+```http
+Set-Cookie: xclaw_stepup=...; HttpOnly; SameSite=Strict; Path=/
+```
+
+## 6) Management + Step-Up (Sensitive)
 
 Request:
 ```http
@@ -47,7 +94,7 @@ Content-Type: application/json
 {"agentId":"ag_01","amount":"25.00","token":"USDC"}
 ```
 
-## 5) Canonical Error Response
+## 7) Canonical Error Response
 
 ```json
 {

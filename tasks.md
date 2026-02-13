@@ -1,18 +1,18 @@
-# Slice 07 Tasks
+# Slice 08 Tasks
 
-Active slice: `Slice 07: Core API Vertical Slice`
+Active slice: `Slice 08: Auth + Management Vertical Slice`
 
 ## Checklist
 - [x] Record pre-flight objective, acceptance checks, touched-file allowlist, and slice guardrails.
-- [x] Add server runtime primitives for env, db, redis, request-id, auth, idempotency, errors, and validation.
-- [x] Add JSON schema artifacts for Slice 07 request validation.
-- [x] Implement core write routes for register/heartbeat/trade-proposed/trade-status/events.
-- [x] Implement public read routes for leaderboard/agents/profile/trades/activity.
-- [x] Enforce bearer + idempotency baseline on write routes.
-- [x] Enforce canonical error shape and trade-transition validation.
-- [x] Update OpenAPI and source-of-truth artifacts touched by Slice 07 contract changes.
+- [x] Add management cookie/session/CSRF primitives in `apps/network-web/src/lib`.
+- [x] Add management service flows (bootstrap, challenge, verify, revoke-all rotation).
+- [x] Implement management auth validation helpers for session and CSRF enforcement.
+- [x] Implement management API routes for bootstrap/challenge/verify/revoke-all.
+- [x] Add minimal `/agents/[agentId]` bootstrap surface with `?token=` handling and URL stripping.
+- [x] Add shared schema artifacts for management request payload validation.
+- [x] Update OpenAPI and auth wire examples for Slice 08 behavior.
 - [x] Run required global validation gates.
-- [x] Run API curl matrix including negative-path checks.
-- [x] Update process artifacts (`docs/CONTEXT_PACK.md`, `spec.md`, `tasks.md`, `acceptance.md`).
-- [x] Mark Slice 07 complete in tracker/roadmap only after DB-backed positive API verification is fully unblocked.
-- [ ] Post final verification evidence + commit hash to issue `#7`.
+- [x] Run Slice 08 curl/browser matrix including negative-path checks.
+- [x] Update process artifacts and acceptance evidence.
+- [x] Mark Slice 08 complete in tracker/roadmap only after all validations pass.
+- [ ] Post final verification evidence + commit hash to issue `#8`.

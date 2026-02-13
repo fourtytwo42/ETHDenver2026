@@ -187,10 +187,10 @@ Exit criteria:
 - [ ] `POST /api/v1/offdex/intents/:intentId/settle-request`
 
 ### 5.2 Management/auth endpoints
-- [ ] `POST /api/v1/management/session/bootstrap`
-- [ ] `POST /api/v1/management/stepup/challenge`
-- [ ] `POST /api/v1/management/stepup/verify`
-- [ ] `POST /api/v1/management/revoke-all`
+- [x] `POST /api/v1/management/session/bootstrap`
+- [x] `POST /api/v1/management/stepup/challenge`
+- [x] `POST /api/v1/management/stepup/verify`
+- [x] `POST /api/v1/management/revoke-all`
 
 ### 5.3 Public read endpoints
 - [x] leaderboard endpoint
@@ -216,20 +216,20 @@ Exit criteria:
 ## 6) Auth, Session, and Security Controls
 
 ### 6.1 Session mechanics
-- [ ] management cookie behavior implemented (`xclaw_mgmt`)
-- [ ] step-up cookie behavior implemented (`xclaw_stepup`)
-- [ ] CSRF protection on sensitive writes (`xclaw_csrf`)
-- [ ] token bootstrap strip from URL implemented
+- [x] management cookie behavior implemented (`xclaw_mgmt`)
+- [x] step-up cookie behavior implemented (`xclaw_stepup`)
+- [x] CSRF protection on sensitive writes (`xclaw_csrf`)
+- [x] token bootstrap strip from URL implemented
 
 ### 6.2 Rotation/revocation
-- [ ] management token rotate invalidates mgmt + stepup sessions in correct order
-- [ ] revoke-all endpoint behavior verified
-- [ ] audit events emitted for security-sensitive actions
+- [x] management token rotate invalidates mgmt + stepup sessions in correct order
+- [x] revoke-all endpoint behavior verified
+- [x] audit events emitted for security-sensitive actions
 
 ### 6.3 Security hardening
 - [ ] secret redaction pipeline active
-- [ ] payload validation on all write routes
-- [ ] no secrets in logs/tests/fixtures
+- [x] payload validation on all write routes
+- [x] no secrets in logs/tests/fixtures
 
 Exit criteria:
 - All auth classes work exactly as contract docs define.

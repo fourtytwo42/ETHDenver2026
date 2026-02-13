@@ -592,3 +592,84 @@ Final Slice 7 curl matrix (all expected outcomes met):
 Revalidated gates after fixes:
 - `npm run db:parity` -> PASS
 - `npm run build` -> PASS
+
+## Slice 08 Acceptance Evidence
+
+Date (UTC): 2026-02-13  
+Active slice: `Slice 08: Auth + Management Vertical Slice`  
+Issue mapping: `#8` (`https://github.com/fourtytwo42/ETHDenver2026/issues/8`)
+
+### Objective + scope lock
+- Objective: implement management session bootstrap, step-up auth, revoke-all rotation, CSRF enforcement, and `/agents/:id?token=...` bootstrap behavior.
+- Scope guard honored: no Slice 09 public-data UX implementation and no Slice 10 management controls implementation.
+
+### File-level evidence (Slice 08)
+- Runtime/server implementation:
+  - `apps/network-web/src/lib/env.ts`
+  - `apps/network-web/src/lib/management-cookies.ts`
+  - `apps/network-web/src/lib/management-auth.ts`
+  - `apps/network-web/src/lib/management-service.ts`
+  - `apps/network-web/src/app/api/v1/management/session/bootstrap/route.ts`
+  - `apps/network-web/src/app/api/v1/management/stepup/challenge/route.ts`
+  - `apps/network-web/src/app/api/v1/management/stepup/verify/route.ts`
+  - `apps/network-web/src/app/api/v1/management/revoke-all/route.ts`
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+- Shared schemas:
+  - `packages/shared-schemas/json/management-bootstrap-request.schema.json`
+  - `packages/shared-schemas/json/stepup-challenge-request.schema.json`
+  - `packages/shared-schemas/json/stepup-verify-request.schema.json`
+  - `packages/shared-schemas/json/agent-scoped-request.schema.json`
+- Contracts/docs/process:
+  - `docs/api/openapi.v1.yaml`
+  - `docs/api/AUTH_WIRE_EXAMPLES.md`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `acceptance.md`
+
+### Required global gate evidence
+Executed with:
+- `source ~/.nvm/nvm.sh && nvm use --silent default`
+
+Results:
+- `npm run db:parity` -> PASS (`"ok": true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`"ok": true`)
+- `XCLAW_MANAGEMENT_TOKEN_ENC_KEY='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' npm run build` -> PASS
+
+### Slice 08 setup evidence
+- Seeded test agent and active management token for bootstrap matrix:
+  - inserted `agents.agent_id='ag_slice8'`
+  - inserted active `management_tokens` row with encrypted ciphertext + fingerprint for token `slice8-bootstrap-token-001`
+- Dev server launch command:
+  - `DATABASE_URL=postgresql://xclaw_app:xclaw_local_dev_pw@127.0.0.1:55432/xclaw_db REDIS_URL=redis://127.0.0.1:6379 XCLAW_AGENT_API_KEYS='{"ag_slice7":"slice7_token_abc12345"}' XCLAW_IDEMPOTENCY_TTL_SEC=86400 XCLAW_MANAGEMENT_TOKEN_ENC_KEY='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' npm run dev -- --port 3210`
+
+### Slice 08 curl matrix evidence
+Status and contract outcomes:
+- `POST /api/v1/management/session/bootstrap` valid token -> `200` + `ok:true` + `xclaw_mgmt`/`xclaw_csrf` cookies
+- `POST /api/v1/management/session/bootstrap` invalid token -> `401` + `code:"auth_invalid"`
+- `POST /api/v1/management/session/bootstrap` malformed body -> `400` + `code:"payload_invalid"`
+- `POST /api/v1/management/stepup/challenge` missing CSRF header -> `401` + `code:"csrf_invalid"`
+- `POST /api/v1/management/stepup/challenge` valid auth+csrf -> `200` + `challengeId` + one-time `code` + `expiresAt`
+- `POST /api/v1/management/stepup/verify` wrong code -> `401` + `code:"stepup_invalid"`
+- `POST /api/v1/management/stepup/verify` valid code -> `200` + `xclaw_stepup` cookie set
+- `POST /api/v1/management/revoke-all` valid auth+csrf -> `200` + revoked session counts + `newManagementToken`
+- post-revoke old management cookie -> `401` (`auth_invalid`)
+- post-rotate old bootstrap token -> `401` (`auth_invalid`)
+- post-rotate new bootstrap token -> `200` bootstrap success
+
+### URL token-strip behavior evidence
+- `/agents/ag_slice8?token=<token>` renders Slice 08 bootstrap client surface and uses client-side bootstrap + `router.replace('/agents/ag_slice8')` to strip query token after validation.
+- Environment limitation: no browser automation runtime (Playwright/chromium unavailable), so URL-strip proof is implementation-path + manual browser verification path rather than headless artifact.
+
+### High-risk review protocol
+- Security-sensitive class: auth/session/cookie/CSRF/token-rotation.
+- Second-opinion review pass: completed via focused re-read of token encryption/fingerprint logic, session cookie hash validation, and revocation ordering semantics.
+- Rollback plan:
+  1. revert Slice 08 touched files only,
+  2. rerun required gates + Slice 08 curl matrix,
+  3. confirm tracker/roadmap/source-of-truth sync returns to pre-Slice-08 state.

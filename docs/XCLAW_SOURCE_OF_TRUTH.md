@@ -510,7 +510,7 @@ Must not show to unauthorized viewers:
 - `CHAIN_RPC_<CHAIN_KEY>`
 - `CHAIN_RPC_<CHAIN_KEY>_FALLBACK` (optional but recommended)
 - `RPC_PROVIDER_NAME` (e.g. `public`, `alchemy`, `ankr`, `quicknode`)
-- optional auth variables if later added
+- `XCLAW_MANAGEMENT_TOKEN_ENC_KEY` (required; base64-encoded 32-byte key for management token encryption-at-rest + fingerprint/cookie hashing)
 - VM-local default values for this environment:
   - `DATABASE_URL=postgresql://xclaw_app:xclaw_local_dev_pw@127.0.0.1:5432/xclaw_db`
   - `REDIS_URL=redis://127.0.0.1:6379`

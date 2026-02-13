@@ -5,6 +5,7 @@ export type AppEnv = {
   redisUrl: string;
   agentApiKeys: AgentApiKeyMap;
   idempotencyTtlSec: number;
+  managementTokenEncKey: string;
 };
 
 let cachedEnv: AppEnv | null = null;
@@ -72,7 +73,26 @@ export function getEnv(): AppEnv {
     databaseUrl,
     redisUrl,
     agentApiKeys: parseAgentApiKeys(process.env.XCLAW_AGENT_API_KEYS),
-    idempotencyTtlSec: parsePositiveInt(process.env.XCLAW_IDEMPOTENCY_TTL_SEC, 24 * 60 * 60)
+    idempotencyTtlSec: parsePositiveInt(process.env.XCLAW_IDEMPOTENCY_TTL_SEC, 24 * 60 * 60),
+    managementTokenEncKey: (() => {
+      const raw = process.env.XCLAW_MANAGEMENT_TOKEN_ENC_KEY;
+      if (!raw) {
+        throw new Error('Missing required env: XCLAW_MANAGEMENT_TOKEN_ENC_KEY');
+      }
+
+      let decoded: Buffer;
+      try {
+        decoded = Buffer.from(raw, 'base64');
+      } catch {
+        throw new Error('XCLAW_MANAGEMENT_TOKEN_ENC_KEY must be valid base64');
+      }
+
+      if (decoded.length !== 32) {
+        throw new Error('XCLAW_MANAGEMENT_TOKEN_ENC_KEY must decode to exactly 32 bytes');
+      }
+
+      return raw;
+    })()
   };
 
   return cachedEnv;

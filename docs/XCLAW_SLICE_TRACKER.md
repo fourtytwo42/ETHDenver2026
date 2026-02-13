@@ -128,17 +128,17 @@ DoD:
 ---
 
 ## Slice 08: Auth + Management Vertical Slice
-Status: [ ]
+Status: [x]
 
 Goal:
 - Management session, step-up, and sensitive writes work as specified.
 
 DoD:
-- [ ] session bootstrap works on `/agents/:id?token=...`
-- [ ] step-up challenge/verify works
-- [ ] revoke-all works
-- [ ] management cookie + step-up cookie + CSRF enforcement align with canonical wire contract
-- [ ] token bootstrap is stripped from URL after validation
+- [x] session bootstrap works on `/agents/:id?token=...`
+- [x] step-up challenge/verify works
+- [x] revoke-all works
+- [x] management cookie + step-up cookie + CSRF enforcement align with canonical wire contract
+- [x] token bootstrap is stripped from URL after validation
 
 ---
 

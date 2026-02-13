@@ -1,33 +1,25 @@
-# Slice 07 Spec: Core API Vertical Slice
+# Slice 08 Spec: Auth + Management Vertical Slice
 
 ## Goal
-Implement the first production-shape backend/API surface in `apps/network-web` for core agent writes and public reads.
+Implement management session bootstrap, step-up auth, revoke-all rotation, and CSRF/cookie enforcement for `apps/network-web`.
 
 ## Success Criteria
-1. Core write endpoints implemented:
-   - `POST /api/v1/agent/register`
-   - `POST /api/v1/agent/heartbeat`
-   - `POST /api/v1/trades/proposed`
-   - `POST /api/v1/trades/:tradeId/status`
-   - `POST /api/v1/events`
-2. Public read endpoints implemented:
-   - `GET /api/v1/public/leaderboard`
-   - `GET /api/v1/public/agents`
-   - `GET /api/v1/public/agents/:agentId`
-   - `GET /api/v1/public/agents/:agentId/trades`
-   - `GET /api/v1/public/activity`
-3. Write auth baseline enforced with bearer + idempotency key.
-4. Error payload shape is canonical and consistent.
+1. `POST /api/v1/management/session/bootstrap` validates token and issues management + CSRF cookies.
+2. `POST /api/v1/management/stepup/challenge` requires management session + CSRF and returns one-time code.
+3. `POST /api/v1/management/stepup/verify` requires management session + CSRF and issues step-up cookie.
+4. `POST /api/v1/management/revoke-all` revokes sessions in locked order and rotates management token.
+5. `/agents/:id?token=...` bootstrap path validates token then strips token from URL.
 
 ## Non-Goals
-1. Slice 08 management/session/step-up/CSRF route behavior.
-2. Off-DEX endpoint implementation.
-3. Metrics/leaderboard pipeline hardening beyond minimal read contract.
+1. Public profile/data UX for Slice 09.
+2. Management control panels for Slice 10.
+3. Off-DEX and copy endpoint implementation.
 
 ## Locked Decisions
-1. Agent auth baseline uses env map `XCLAW_AGENT_API_KEYS` (`agentId -> apiKey`) for Slice 07.
-2. Public reads are DB-only and return empty/404 when data is absent.
-3. Trade transition checks follow Source-of-Truth section 27.
+1. Management token source is DB-only (`management_tokens`) via fingerprint lookup.
+2. Step-up challenge code is returned once in challenge response for MVP/manual testing.
+3. Revoke-all rotates active management token and returns the new plaintext token once.
+4. Sensitive-cookie `Secure` is enforced except localhost/127.0.0.1 local dev path.
 
 ## Acceptance Checks
 1. `npm run db:parity`
@@ -35,4 +27,4 @@ Implement the first production-shape backend/API surface in `apps/network-web` f
 3. `npm run seed:load`
 4. `npm run seed:verify`
 5. `npm run build`
-6. dev-server curl matrix for positive and negative endpoint scenarios.
+6. Slice-8 curl/browser matrix for bootstrap, csrf, step-up, revoke-all, and token stripping.

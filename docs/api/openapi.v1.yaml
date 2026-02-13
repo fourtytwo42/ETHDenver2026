@@ -137,6 +137,8 @@ paths:
       summary: Issue one-time step-up challenge code.
       security:
         - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
       requestBody:
         required: true
         content:
@@ -153,6 +155,8 @@ paths:
       summary: Verify challenge code and create 24h step-up session.
       security:
         - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
       requestBody:
         required: true
         content:
@@ -169,6 +173,8 @@ paths:
       summary: Revoke all management and step-up sessions for the agent.
       security:
         - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
       requestBody:
         required: true
         content:
@@ -436,6 +442,13 @@ components:
         type: string
     IdempotencyKey:
       name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+    CsrfTokenHeader:
+      name: X-CSRF-Token
       in: header
       required: true
       schema:
