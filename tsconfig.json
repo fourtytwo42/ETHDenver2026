@@ -19,11 +19,11 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./apps/network-web/src/*"]
     }
   },
   "include": [
-    "next-env.d.ts",
+    "apps/network-web/next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",

@@ -382,3 +382,80 @@ Results:
 - `docs/XCLAW_SLICE_TRACKER.md`
 - `docs/XCLAW_SOURCE_OF_TRUTH.md`
 - `acceptance.md`
+
+## Slice 06A Acceptance Evidence
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 06A: Foundation Alignment Backfill (Post-06 Prereq)`
+Issue mapping: `#18` (`Slice 06A: Foundation Alignment Backfill (Post-06 Prereq)`)
+
+### Objective + scope lock
+- Objective: align server/web runtime location to canonical `apps/network-web` before Slice 07 API implementation.
+- Scope guard honored: no Slice 07 endpoint/auth business logic was implemented.
+
+### File-level evidence (Slice 06A)
+- Web runtime alignment:
+  - `apps/network-web/src/app/layout.tsx`
+  - `apps/network-web/src/app/page.tsx`
+  - `apps/network-web/src/app/globals.css`
+  - `apps/network-web/src/app/page.module.css`
+  - `apps/network-web/public/next.svg`
+  - `apps/network-web/next.config.ts`
+  - `apps/network-web/next-env.d.ts`
+  - `apps/network-web/tsconfig.json`
+- Tooling/config:
+  - `package.json`
+  - `tsconfig.json`
+- Canonical/process synchronization:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+
+### Validation commands and outcomes
+Executed with:
+- `source ~/.nvm/nvm.sh`
+
+Required gates:
+- `npm run db:parity` -> PASS (`"ok": true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`"ok": true`)
+- `npm run build` -> PASS (`next build apps/network-web`)
+
+Slice-specific checks:
+- `npm run dev -- --port 3100` + local HTTP probe -> PASS (`200`, server ready)
+- `npm run start -- --port 3101` + local HTTP probe -> PASS (`200`, server ready)
+- `test -d apps/network-web/src/app` -> PASS
+- `test ! -d src` -> PASS
+- `test ! -d public` -> PASS
+- negative check `npx next build` (repo root without app dir) -> expected FAIL (`Couldn't find any pages or app directory`)
+- runtime boundary smoke: `apps/agent-runtime/bin/xclaw-agent status --json` -> PASS (`ok: true`, scaffold healthy)
+
+### Canonical synchronization evidence
+- Tracker updated with new prerequisite slice and completion:
+  - `docs/XCLAW_SLICE_TRACKER.md` Slice 06A status `[x]` and DoD boxes `[x]`.
+- Roadmap updated to include 06A prerequisite and completion checklist:
+  - `docs/XCLAW_BUILD_ROADMAP.md` sections `0.3` and `0.4`.
+- Source-of-truth updated for sequence + issue mapping inclusion:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md` section `15.1` and section `16`.
+
+### Issue mapping and traceability
+- Dedicated issue created for this slice:
+  - `https://github.com/fourtytwo42/ETHDenver2026/issues/18`
+- Note: `#17` already existed (closed, mapped to Slice 16), so Slice 06A mapping was assigned to `#18`.
+
+### High-risk review mode note
+- This slice touched runtime/build path and execution sequencing (operational risk class).
+- Second-pass review performed on:
+  - script path targets,
+  - canonical path assumptions,
+  - boundary preservation (Node/web vs Python/agent).
+
+### Rollback plan
+1. Revert Slice 06A touched files only.
+2. Restore root app path (`src/`, `public/`) and script targets.
+3. Re-run required gates (`db:parity`, `seed:*`, `build`) and structural smoke checks.

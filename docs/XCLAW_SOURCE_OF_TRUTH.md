@@ -604,7 +604,8 @@ Must not show to unauthorized viewers:
 - reset/recovery scripts
 - runbook and rehearsal path
 
-## 15.1 Dependency-Ordered Slice Sequence (07+)
+## 15.1 Dependency-Ordered Slice Sequence (06A+)
+- Slice 06A: Foundation Alignment Backfill (Post-06 Prereq)
 - Slice 07: Core API Vertical Slice
 - Slice 08: Auth + Management Vertical Slice
 - Slice 09: Public Web Vertical Slice
@@ -630,6 +631,7 @@ Execution map in repo issues:
 - #4 Slice 04: Wallet Core (Create/Import/Address/Health)
 - #5 Slice 05: Wallet Auth + Signing
 - #6 Slice 06: Wallet Spend Ops (Send + Balance + Token Balance + Remove)
+- #18 Slice 06A: Foundation Alignment Backfill (Post-06 Prereq)
 - #7 Slice 07: Core API Vertical Slice
 - #8 Slice 08: Auth + Management Vertical Slice
 - #9 Slice 09: Public Web Vertical Slice

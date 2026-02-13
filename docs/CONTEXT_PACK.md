@@ -1,70 +1,73 @@
 # X-Claw Context Pack
 
 ## 1) Goal
-- Primary objective: Complete Slice 06 (Wallet Spend Ops) by implementing runtime spend operations (`wallet-send`, `wallet-balance`, `wallet-token-balance`) and enforcing fail-closed policy preconditions before spend.
-- Success criteria (testable): spend and balance commands return deterministic JSON; spend is blocked when policy preconditions fail; wallet-remove cleanup behavior remains correct with portable wallet mapping.
-- Non-goals (explicitly out of scope): server/web auth endpoints, trade/off-DEX runtime loops, full approval engine and USD policy pipeline beyond Slice 06 guardrails.
+- Primary objective: Complete Slice 06A (Foundation Alignment Backfill) by moving the Next.js web/API runtime to canonical `apps/network-web` before Slice 07 endpoint work.
+- Success criteria (testable): canonical app path exists and is active; root scripts (`dev/build/start/lint`) target `apps/network-web`; root legacy `src/` and `public/` are removed.
+- Non-goals: Slice 07 API endpoint implementation, auth/business logic changes, schema/migration changes, dependency additions.
 
 ## 2) Constraints
-- Python-first agent runtime boundary remains intact (no Node wallet libraries in runtime/skill path).
-- `cast` is canonical backend for send and balance operations.
-- Command surface and JSON envelope remain canonical and backward-compatible.
-- Single-slice scope: Slice 06 only.
-- Spend-cap enforcement in this slice uses provisional native-wei cap (`max_daily_native_wei`) with explicit documentation note.
+- Strict slice order: Slice 06A only.
+- Canonical authority: `docs/XCLAW_SOURCE_OF_TRUTH.md` and aligned tracker/roadmap updates in same change.
+- Runtime separation must remain explicit: Node/Next.js for server/web and Python-first for agent runtime.
+- Keep diffs reviewable and avoid opportunistic refactors.
 
 ## 3) Contract Impact
-- Public API routes affected: none.
+- Public API routes affected: none (path/location alignment only).
 - Schema files affected: none.
 - Migration files affected: none.
-- Source-of-truth sections affected: wallet spend command implementation status and provisional local spend-cap precondition model.
-- Breaking change expected? No.
+- Source-of-truth sections affected: dependency-ordered slice sequence and issue mapping (adding Slice 06A prerequisite).
+- Breaking runtime behavior expected: no API behavior changes; CLI script targets change to canonical app path.
 
 ## 4) Files and Boundaries
 - Expected touched files list:
+  - `apps/network-web/src/**`
+  - `apps/network-web/public/**`
+  - `apps/network-web/next.config.ts`
+  - `apps/network-web/next-env.d.ts`
+  - `apps/network-web/tsconfig.json`
+  - `package.json`
+  - `tsconfig.json`
   - `docs/CONTEXT_PACK.md`
   - `spec.md`
   - `tasks.md`
   - `acceptance.md`
-  - `apps/agent-runtime/xclaw_agent/cli.py`
-  - `apps/agent-runtime/tests/test_wallet_core.py`
-  - `apps/agent-runtime/README.md`
-  - `docs/api/WALLET_COMMAND_CONTRACT.md`
   - `docs/XCLAW_SOURCE_OF_TRUTH.md`
-  - `docs/XCLAW_SLICE_TRACKER.md`
   - `docs/XCLAW_BUILD_ROADMAP.md`
-- Forbidden files/areas for this change: OpenAPI, DB migrations, server/web API behavior, Slice 07+ runtime command implementations.
-- New dependencies required? No (unless runtime implementation proves unavoidable).
+  - `docs/XCLAW_SLICE_TRACKER.md`
+- Forbidden scope:
+  - Slice 07 endpoint code and auth logic
+  - `docs/api/openapi.v1.yaml`
+  - `infrastructure/migrations/*`
+  - `apps/agent-runtime/*` implementation changes
 
 ## 5) Invariants (Must Not Change)
-- Private keys remain local and never emitted.
-- No persistent plaintext secret material.
-- Wrapper/runtime command names remain canonical.
-- Structured JSON error contract remains `ok/code/message` with optional `actionHint`/`details`.
+- API contract behavior remains unchanged.
+- Agent runtime command surface and Python-first execution path remain unchanged.
+- No new dependency or workspace model introduced.
 
 ## 6) Verification Plan
-- Commands to run:
-  - `PATH="$HOME/.foundry/bin:$PATH" python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -v`
-  - `npm run db:parity`
-  - `npm run seed:reset`
-  - `npm run seed:load`
-  - `npm run seed:verify`
-  - `npm run build`
-  - runtime wallet spend/balance command matrix including policy-failure checks
-- Expected outputs:
-  - tests pass;
-  - required npm gates exit 0;
-  - send/balance/token-balance success paths return deterministic JSON payloads;
-  - policy precondition failures return deterministic structured error codes.
-- Rollback plan:
-  - revert only Slice 06 touched files,
-  - rerun validation matrix,
-  - confirm tracker/roadmap/doc sync restored.
+- Required gates:
+  - `source ~/.nvm/nvm.sh && npm run db:parity`
+  - `source ~/.nvm/nvm.sh && npm run seed:reset`
+  - `source ~/.nvm/nvm.sh && npm run seed:load`
+  - `source ~/.nvm/nvm.sh && npm run seed:verify`
+  - `source ~/.nvm/nvm.sh && npm run build`
+- Slice-specific checks:
+  - `source ~/.nvm/nvm.sh && timeout 25s npm run dev -- --port 3100`
+  - `source ~/.nvm/nvm.sh && timeout 25s npm run start -- --port 3101`
+  - `test -d apps/network-web/src/app`
+  - `test ! -d src`
+  - `test ! -d public`
+  - `apps/agent-runtime/bin/xclaw-agent status --json`
+- Expected outcomes:
+  - all commands exit 0 (except timeout returns 124 after successful startup log validation)
+  - build/start/dev use canonical app directory
+  - runtime boundary remains intact.
 
 ## 7) Evidence
 - Record in `acceptance.md`:
-  - verification command outcomes + exit codes,
-  - send/balance/token-balance success and failure-path JSON evidence,
-  - policy-blocked spend evidence,
-  - tracker/roadmap status synchronization,
-  - high-risk second-pass note and rollback steps,
-  - issue mapping evidence for `#6`.
+  - command outputs and exit codes,
+  - structural verification evidence,
+  - tracker/roadmap/source-of-truth synchronization,
+  - issue linkage to `#18`,
+  - rollback plan and high-risk review note.

@@ -99,6 +99,20 @@ DoD:
 
 ---
 
+## Slice 06A: Foundation Alignment Backfill (Post-06 Prereq)
+Status: [x]
+
+Goal:
+- Reconcile foundational server/web structure gaps from Slices 01-06 so Slice 07+ executes on canonical architecture.
+
+DoD:
+- [x] `apps/network-web` exists as canonical Next.js App Router surface for web+API.
+- [x] Root scripts/tooling invoke canonical web app path (no hidden dependency on non-canonical root `src/app` layout).
+- [x] Runtime separation remains explicit: Node/Next.js for server/web, Python-first for agent/OpenClaw.
+- [x] Roadmap/tracker/source-of-truth are synchronized on this prerequisite before any Slice 07 endpoint implementation.
+
+---
+
 ## Slice 07: Core API Vertical Slice
 Status: [ ]
 
@@ -106,9 +120,10 @@ Goal:
 - Minimal production-shape API for register/heartbeat/trade/event + public reads.
 
 DoD:
-- [ ] write endpoints functional with idempotency
-- [ ] read endpoints functional
-- [ ] error contract (`code/message/actionHint`) consistent
+- [ ] core write endpoints functional: `POST /api/v1/agent/register`, `POST /api/v1/agent/heartbeat`, `POST /api/v1/trades/proposed`, `POST /api/v1/trades/:tradeId/status`, `POST /api/v1/events`
+- [ ] public read endpoints functional: leaderboard, agents search, profile, trades, activity
+- [ ] agent write auth baseline enforced (`Authorization: Bearer` + `Idempotency-Key`)
+- [ ] error contract is consistent (`code`, `message`, optional `actionHint`, optional `details`, `requestId`)
 
 ---
 
@@ -122,7 +137,8 @@ DoD:
 - [ ] session bootstrap works on `/agents/:id?token=...`
 - [ ] step-up challenge/verify works
 - [ ] revoke-all works
-- [ ] CSRF enforcement on sensitive writes
+- [ ] management cookie + step-up cookie + CSRF enforcement align with canonical wire contract
+- [ ] token bootstrap is stripped from URL after validation
 
 ---
 
@@ -133,9 +149,10 @@ Goal:
 - Public users can browse dashboard/agents/profile with correct visibility rules.
 
 DoD:
-- [ ] `/`, `/agents`, `/agents/:id` show expected data
+- [ ] `/`, `/agents`, `/agents/:id`, `/status` show expected data
 - [ ] management controls hidden when unauthorized
 - [ ] mock vs real visual separation present
+- [ ] canonical status vocabulary used exactly: `active`, `offline`, `degraded`, `paused`, `deactivated`
 
 ---
 
@@ -149,6 +166,7 @@ DoD:
 - [ ] approval queue works
 - [ ] policy controls + pause/resume work
 - [ ] withdraw controls work with step-up requirements
+- [ ] off-DEX settlement queue/controls and audit log panel work
 - [ ] global header dropdown + logout behavior correct
 
 ---
@@ -162,7 +180,7 @@ Goal:
 DoD:
 - [ ] local DEX contracts deployed
 - [ ] `config/chains/hardhat_local.json` updated with addresses
-- [ ] lifecycle passes with evidence
+- [ ] lifecycle passes with evidence (including retry constraints and management/step-up checks for touched flows)
 
 ---
 
@@ -175,7 +193,7 @@ Goal:
 DoD:
 - [ ] off-DEX intent endpoints/runtime hooks active
 - [ ] escrow flow status transitions verified
-- [ ] public activity trail shows settlement lifecycle
+- [ ] public activity/profile shows redacted intent metadata + settlement tx links
 
 ---
 
@@ -187,7 +205,8 @@ Goal:
 
 DoD:
 - [ ] mode-separated leaderboards (Mock/Real)
-- [ ] copy intent lifecycle + rejection reasons implemented
+- [ ] metrics pipeline updates snapshots/caches per contract windows
+- [ ] copy subscription + copy intent lifecycle + rejection reasons implemented
 - [ ] self vs copied breakdown visible in profile
 
 ---
@@ -201,6 +220,7 @@ Goal:
 DoD:
 - [ ] `/api/health` + `/api/status` working
 - [ ] structured logs + core alerts active
+- [ ] rate limits + correlation IDs + degraded/offline observability verified
 - [ ] backup + restore drill completed
 
 ---
@@ -213,7 +233,7 @@ Goal:
 
 DoD:
 - [ ] test DEX/escrow contracts deployed and verified
-- [ ] `config/chains/base_sepolia.json` finalized with evidence
+- [ ] `config/chains/base_sepolia.json` finalized with `factory/router/quoter/escrow` + evidence links + `deploymentStatus=deployed`
 - [ ] real-mode path passes testnet acceptance
 
 ---
@@ -228,4 +248,5 @@ DoD:
 - [ ] `docs/MVP_ACCEPTANCE_RUNBOOK.md` fully executed
 - [ ] required evidence captured and archived
 - [ ] critical defects = 0
+- [ ] binary acceptance criteria met (agent portability, search/profile visibility, write auth+idempotency, deterministic demo rerun)
 - [ ] roadmap/source-of-truth synced to final state

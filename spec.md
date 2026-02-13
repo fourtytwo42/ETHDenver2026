@@ -1,47 +1,41 @@
-# Slice 06 Spec: Wallet Spend Ops + Policy Guardrails
+# Slice 06A Spec: Foundation Alignment Backfill (`apps/network-web`)
 
 ## Goal
-Complete Slice 06 by implementing runtime wallet spend/balance commands and enforcing fail-closed policy preconditions for spend actions.
+Complete Slice 06A by moving the web/API Next.js runtime to canonical `apps/network-web` and aligning scripts/tooling/docs before Slice 07.
 
 ## Success Criteria
-1. `wallet-send` is fully implemented in runtime CLI and performs policy precondition checks.
-2. `wallet-balance` and `wallet-token-balance` are fully implemented with cast-backed chain reads.
-3. `wallet-send` returns transaction metadata on success and deterministic policy/security errors on failure.
-4. `wallet-remove` cleanup behavior is verified for multi-chain portable-wallet bindings.
-5. Slice 06 tracker/roadmap states are updated in the same change after validation passes.
-6. Required validation commands pass.
+1. Canonical app path exists at `apps/network-web` and is active.
+2. Root scripts (`dev`, `build`, `start`, `lint`) target `apps/network-web`.
+3. Root legacy `src/` and `public/` paths are removed.
+4. Source-of-truth, roadmap, tracker, and process artifacts are synchronized for Slice 06A.
+5. Required validations pass and evidence is captured in `acceptance.md`.
 
 ## Non-Goals
-1. Server/web approval endpoints or full policy engine implementation.
-2. Trade/off-DEX runtime loop implementation.
-3. USD pricing pipeline for spend caps (native-wei cap is provisional for Slice 06).
+1. Slice 07 API endpoint implementation.
+2. Any auth/session/business logic implementation.
+3. API/schema/migration contract modifications.
 
 ## Constraints
-1. Strict slice sequencing: Slice 06 only.
-2. Python-first runtime boundary preserved.
-3. Chain RPC resolution must read canonical chain config (`config/chains/<chain>.json`).
-4. Spending preconditions must fail closed if policy configuration is missing/invalid.
+1. Strict slice sequencing: complete 06A before Slice 07.
+2. Preserve Node/web vs Python/agent runtime boundary.
+3. Do not add dependencies or workspace toolchain changes.
+4. Keep app behavior baseline equivalent after path migration.
 
 ## Locked Decisions
-1. Policy source for spend checks is local `~/.xclaw-agent/policy.json`.
-2. Required spend preconditions: chain enabled, not paused, approval allowed, daily native-wei cap not exceeded.
-3. Daily cap model is provisional `max_daily_native_wei` until later USD policy pipeline slices.
-4. GitHub evidence issue for this slice is `#6`.
+1. Canonical web/API location is `apps/network-web`.
+2. Root scripts will call Next CLI with directory argument (`apps/network-web`).
+3. Slice 06A GitHub evidence issue is `#18`.
+4. `docs/XCLAW_SOURCE_OF_TRUTH.md` issue mapping and sequence include Slice 06A.
 
 ## Acceptance Checks
-1. `PATH="$HOME/.foundry/bin:$PATH" python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -v`
-2. `npm run db:parity`
-3. `npm run seed:reset`
-4. `npm run seed:load`
-5. `npm run seed:verify`
-6. `npm run build`
-7. Runtime spend-path smoke:
-   - `apps/agent-runtime/bin/xclaw-agent wallet balance --chain hardhat_local --json`
-   - `apps/agent-runtime/bin/xclaw-agent wallet token-balance --token <token> --chain hardhat_local --json`
-   - `apps/agent-runtime/bin/xclaw-agent wallet send --to <address> --amount-wei <amount> --chain hardhat_local --json`
-8. Runtime negative checks:
-   - missing policy file
-   - chain disabled
-   - paused agent
-   - approval required but not granted
-   - daily cap exceeded
+1. `source ~/.nvm/nvm.sh && npm run db:parity`
+2. `source ~/.nvm/nvm.sh && npm run seed:reset`
+3. `source ~/.nvm/nvm.sh && npm run seed:load`
+4. `source ~/.nvm/nvm.sh && npm run seed:verify`
+5. `source ~/.nvm/nvm.sh && npm run build`
+6. `source ~/.nvm/nvm.sh && timeout 25s npm run dev -- --port 3100`
+7. `source ~/.nvm/nvm.sh && timeout 25s npm run start -- --port 3101`
+8. `test -d apps/network-web/src/app`
+9. `test ! -d src`
+10. `test ! -d public`
+11. `apps/agent-runtime/bin/xclaw-agent status --json`

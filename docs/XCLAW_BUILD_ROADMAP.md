@@ -37,8 +37,9 @@ If roadmap conflicts with source-of-truth, source-of-truth wins.
 Exit criteria:
 - Governance files present, scripts runnable, issue mapping confirmed.
 
-### 0.3 Slice 07+ execution order (dependency-aligned)
-Roadmap sections are capability checklists; for implementation sequence, execute Slice 07+ in this order:
+### 0.3 Slice 06A+ execution order (dependency-aligned)
+Roadmap sections are capability checklists; for implementation sequence, execute Slice 06A+ in this order:
+- Slice 06A -> prerequisite alignment checkpoint before roadmap section `5) Network App Backend (API + Persistence)`
 - Slice 07 -> roadmap section `5) Network App Backend (API + Persistence)`
 - Slice 08 -> roadmap section `6) Auth, Session, and Security Controls`
 - Slice 09 -> roadmap section `8) Public Web UX (Unauthenticated)`
@@ -49,6 +50,12 @@ Roadmap sections are capability checklists; for implementation sequence, execute
 - Slice 14 -> roadmap section `12) Observability and Operations`
 - Slice 15 -> roadmap section `4) Test DEX Deployment on Base Sepolia`
 - Slice 16 -> roadmap sections `13) Test, QA, and Demo Readiness` + `14) Release and Post-Release Stabilization`
+
+### 0.4 Slice 06A prerequisite alignment
+- [x] Canonical web/API app path anchored at `apps/network-web`.
+- [x] Root Next scripts target `apps/network-web`.
+- [x] Legacy root app paths removed (`src/`, `public/`).
+- [x] Sequence/issue mapping synchronized across source-of-truth + tracker + roadmap.
 
 ---
 
