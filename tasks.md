@@ -15,4 +15,4 @@ Active slice: `Slice 08: Auth + Management Vertical Slice`
 - [x] Run Slice 08 curl/browser matrix including negative-path checks.
 - [x] Update process artifacts and acceptance evidence.
 - [x] Mark Slice 08 complete in tracker/roadmap only after all validations pass.
-- [ ] Post final verification evidence + commit hash to issue `#8`.
+- [x] Post final verification evidence + commit hash to issue `#8`.

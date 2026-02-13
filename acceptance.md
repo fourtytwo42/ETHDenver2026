@@ -673,3 +673,7 @@ Status and contract outcomes:
   1. revert Slice 08 touched files only,
   2. rerun required gates + Slice 08 curl matrix,
   3. confirm tracker/roadmap/source-of-truth sync returns to pre-Slice-08 state.
+
+### Issue traceability
+- Verification evidence + commit hash posted to issue `#8`:
+  - `https://github.com/fourtytwo42/ETHDenver2026/issues/8#issuecomment-3895076028`
