@@ -619,6 +619,7 @@ Must not show to unauthorized viewers:
 
 Rule:
 - Execute slices in the order above so each slice depends only on completed prior slices.
+- Locked deferral: `/status` public diagnostics page implementation is owned by Slice 14 (Observability + Ops), not Slice 09.
 
 ---
 

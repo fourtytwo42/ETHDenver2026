@@ -1,57 +1,58 @@
 # X-Claw Context Pack
 
 ## 1) Goal
-- Primary objective: complete Slice 08 Auth + Management Vertical Slice in `apps/network-web`.
-- Success criteria (testable): management bootstrap/session, step-up challenge/verify, revoke-all rotation, CSRF enforcement, and `/agents/:id?token=...` URL-strip flow are functional and contract-compliant.
-- Non-goals: Slice 09 public UX/data rendering and Slice 10 management UI controls.
+- Primary objective: complete Slice 09 Public Web Vertical Slice in `apps/network-web`.
+- Success criteria (testable): `/`, `/agents`, and `/agents/:id` render public data with no unauthorized management controls, mock/real visual separation, canonical status vocabulary, and dark-default persistent theme.
+- Scope lock: `/status` page ownership deferred to Slice 14 and synchronized in canonical docs first.
 
 ## 2) Constraints
-- Strict slice order: Slice 08 only.
+- Strict slice order: Slice 09 only.
 - Canonical authority: `docs/XCLAW_SOURCE_OF_TRUTH.md`.
-- Keep runtime boundary intact: Node/Next for server-web only, Python-first for agent runtime.
-- No opportunistic refactors.
+- Runtime boundary: Node/Next.js scope only; no Python/runtime changes.
+- No opportunistic refactors or dependency additions.
 
 ## 3) Contract Impact
-- Runtime implementation for:
-  - `POST /api/v1/management/session/bootstrap`
-  - `POST /api/v1/management/stepup/challenge`
-  - `POST /api/v1/management/stepup/verify`
-  - `POST /api/v1/management/revoke-all`
-- Cookie contract enforced for `xclaw_mgmt`, `xclaw_stepup`, `xclaw_csrf`.
-- Shared schema artifacts added for management payload validation.
-- Source-of-truth env contract updated with `XCLAW_MANAGEMENT_TOKEN_ENC_KEY`.
-- No migration changes.
+- Public web route implementation:
+  - `/`
+  - `/agents`
+  - `/agents/:id`
+- Public API additive refinements:
+  - `GET /api/v1/public/agents` supports `sort`, `status`, `includeDeactivated`, `pageSize`, `total` metadata.
+  - `GET /api/v1/public/leaderboard` supports `includeDeactivated` and validates query enums.
+- Canonical docs synchronized for `/status` deferral from Slice 09 to Slice 14.
 
 ## 4) Files and Boundaries
 - Expected touched files:
-  - `apps/network-web/src/lib/env.ts`
-  - `apps/network-web/src/lib/management-cookies.ts`
-  - `apps/network-web/src/lib/management-auth.ts`
-  - `apps/network-web/src/lib/management-service.ts`
-  - `apps/network-web/src/app/api/v1/management/**/route.ts`
+  - `apps/network-web/src/app/layout.tsx`
+  - `apps/network-web/src/app/globals.css`
+  - `apps/network-web/src/app/page.tsx`
+  - `apps/network-web/src/app/agents/page.tsx`
   - `apps/network-web/src/app/agents/[agentId]/page.tsx`
-  - `packages/shared-schemas/json/management-bootstrap-request.schema.json`
-  - `packages/shared-schemas/json/stepup-challenge-request.schema.json`
-  - `packages/shared-schemas/json/stepup-verify-request.schema.json`
-  - `packages/shared-schemas/json/agent-scoped-request.schema.json`
-  - `docs/api/openapi.v1.yaml`
-  - `docs/api/AUTH_WIRE_EXAMPLES.md`
-  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
-  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `apps/network-web/src/app/api/v1/public/agents/route.ts`
+  - `apps/network-web/src/app/api/v1/public/leaderboard/route.ts`
+  - `apps/network-web/src/components/public-shell.tsx`
+  - `apps/network-web/src/components/theme-toggle.tsx`
+  - `apps/network-web/src/components/public-status-badge.tsx`
+  - `apps/network-web/src/components/mode-badge.tsx`
+  - `apps/network-web/src/lib/public-format.ts`
+  - `apps/network-web/src/lib/public-types.ts`
   - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/api/openapi.v1.yaml`
   - `docs/CONTEXT_PACK.md`
   - `spec.md`
   - `tasks.md`
   - `acceptance.md`
 - Forbidden scope:
-  - Slice 09 public route rendering/data composition
-  - Slice 10 management interaction panels
-  - Off-DEX endpoint implementation
+  - Slice 10 management control implementation
+  - Slice 14 `/api/status` endpoint implementation
+  - Off-DEX/write endpoint changes
 
 ## 5) Invariants (Must Not Change)
-- Error contract shape remains `code`, `message`, optional `actionHint`, optional `details`, `requestId`.
-- Agent write route auth baseline from Slice 07 remains unchanged.
-- Canonical status vocabulary remains unchanged.
+- Error contract remains `code`, `message`, optional `actionHint`, optional `details`, `requestId`.
+- Canonical status vocabulary remains exactly: `active`, `offline`, `degraded`, `paused`, `deactivated`.
+- Unauthorized viewers must not see management controls on `/agents/:id`.
 
 ## 6) Verification Plan
 - Required gates:
@@ -61,16 +62,14 @@
   - `npm run seed:verify`
   - `npm run build`
 - Slice-specific checks:
-  - dev server management auth curl matrix (positive + negative)
-  - `/agents/:id?token=...` bootstrap redirect/strip check
-- Expected outcomes:
-  - bootstrap sets mgmt + csrf cookies
-  - challenge/verify enforce mgmt+csrf and issue step-up cookie
-  - revoke-all rotates token and invalidates prior sessions
+  - `curl -i http://localhost:3000/`
+  - `curl -s "http://localhost:3000/api/v1/public/agents?query=agent&sort=last_activity&page=1"`
+  - `curl -i "http://localhost:3000/api/v1/public/agents?sort=bad_value"`
+  - `curl -i http://localhost:3000/agents/<seed-agent-id>`
 
 ## 7) Evidence + Rollback
-- Capture command outputs and response samples in `acceptance.md`.
+- Capture command outputs and route/API verification snippets in `acceptance.md`.
 - Rollback plan:
-  1. revert Slice 08 touched files only,
+  1. revert Slice 09 touched files only,
   2. rerun required gates,
-  3. confirm tracker/roadmap/source-of-truth alignment.
+  3. verify tracker/roadmap/source-of-truth stay synchronized.

@@ -143,16 +143,16 @@ DoD:
 ---
 
 ## Slice 09: Public Web Vertical Slice
-Status: [ ]
+Status: [x]
 
 Goal:
 - Public users can browse dashboard/agents/profile with correct visibility rules.
 
 DoD:
-- [ ] `/`, `/agents`, `/agents/:id`, `/status` show expected data
-- [ ] management controls hidden when unauthorized
-- [ ] mock vs real visual separation present
-- [ ] canonical status vocabulary used exactly: `active`, `offline`, `degraded`, `paused`, `deactivated`
+- [x] `/`, `/agents`, `/agents/:id` show expected data
+- [x] management controls hidden when unauthorized
+- [x] mock vs real visual separation present
+- [x] canonical status vocabulary used exactly: `active`, `offline`, `degraded`, `paused`, `deactivated`
 
 ---
 
@@ -219,6 +219,7 @@ Goal:
 
 DoD:
 - [ ] `/api/health` + `/api/status` working
+- [ ] `/status` diagnostics page implemented with public-safe health visibility
 - [ ] structured logs + core alerts active
 - [ ] rate limits + correlation IDs + degraded/offline observability verified
 - [ ] backup + restore drill completed

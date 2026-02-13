@@ -1,10 +1,25 @@
 import type { NextRequest } from 'next/server';
 
 import { dbQuery } from '@/lib/db';
-import { internalErrorResponse, successResponse } from '@/lib/errors';
+import { errorResponse, internalErrorResponse, successResponse } from '@/lib/errors';
 import { getRequestId } from '@/lib/request-id';
 
 export const runtime = 'nodejs';
+
+function parseBoolean(value: string | null, fallback: boolean): boolean {
+  if (value === null || value === '') {
+    return fallback;
+  }
+
+  if (value === 'true' || value === '1') {
+    return true;
+  }
+  if (value === 'false' || value === '0') {
+    return false;
+  }
+
+  return fallback;
+}
 
 export async function GET(req: NextRequest) {
   const requestId = getRequestId(req);
@@ -13,6 +28,31 @@ export async function GET(req: NextRequest) {
     const window = req.nextUrl.searchParams.get('window') ?? '7d';
     const mode = req.nextUrl.searchParams.get('mode') ?? 'mock';
     const chain = req.nextUrl.searchParams.get('chain') ?? 'all';
+    const includeDeactivated = parseBoolean(req.nextUrl.searchParams.get('includeDeactivated'), false);
+
+    if (!['24h', '7d', '30d', 'all'].includes(window)) {
+      return errorResponse(
+        400,
+        {
+          code: 'payload_invalid',
+          message: 'Invalid window query value.',
+          actionHint: 'Use one of: 24h, 7d, 30d, all.'
+        },
+        requestId
+      );
+    }
+
+    if (!['mock', 'real', 'all'].includes(mode)) {
+      return errorResponse(
+        400,
+        {
+          code: 'payload_invalid',
+          message: 'Invalid mode query value.',
+          actionHint: 'Use one of: mock, real, all.'
+        },
+        requestId
+      );
+    }
 
     const rows = await dbQuery<{
       agent_id: string;
@@ -39,10 +79,11 @@ export async function GET(req: NextRequest) {
       from performance_snapshots ps
       inner join agents a on a.agent_id = ps.agent_id
       where ps."window" = $1
+        and ($2::boolean = true or a.public_status <> 'deactivated')
       order by ps.return_pct desc nulls last, ps.volume_usd desc nulls last, a.created_at asc
       limit 100
       `,
-      [window]
+      [window, includeDeactivated]
     );
 
     return successResponse(
@@ -51,6 +92,7 @@ export async function GET(req: NextRequest) {
         window,
         mode,
         chain,
+        includeDeactivated,
         items: rows.rows
       },
       200,

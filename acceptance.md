@@ -677,3 +677,87 @@ Status and contract outcomes:
 ### Issue traceability
 - Verification evidence + commit hash posted to issue `#8`:
   - `https://github.com/fourtytwo42/ETHDenver2026/issues/8#issuecomment-3895076028`
+
+## Slice 09 Acceptance Evidence
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 09: Public Web Vertical Slice`
+Issue mapping: `#9` (`Slice 09: Public Web Vertical Slice`)
+
+### Objective + scope lock
+- Objective: implement public web vertical slice on `/`, `/agents`, and `/agents/:id` with canonical status vocabulary, mock/real visual separation, and dark-default/light-toggle theme support.
+- Scope lock honored: `/status` page implementation deferred to Slice 14 and synchronized in canonical docs in this same slice.
+
+### File-level evidence (Slice 09)
+- Public web/UI implementation:
+  - `apps/network-web/src/app/layout.tsx`
+  - `apps/network-web/src/app/globals.css`
+  - `apps/network-web/src/app/page.tsx`
+  - `apps/network-web/src/app/agents/page.tsx`
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+  - `apps/network-web/src/components/public-shell.tsx`
+  - `apps/network-web/src/components/theme-toggle.tsx`
+  - `apps/network-web/src/components/public-status-badge.tsx`
+  - `apps/network-web/src/components/mode-badge.tsx`
+  - `apps/network-web/src/lib/public-types.ts`
+  - `apps/network-web/src/lib/public-format.ts`
+- Public API refinements:
+  - `apps/network-web/src/app/api/v1/public/agents/route.ts`
+  - `apps/network-web/src/app/api/v1/public/leaderboard/route.ts`
+  - `apps/network-web/src/lib/env.ts`
+  - `apps/network-web/src/lib/management-service.ts`
+- Contract/process sync:
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/api/openapi.v1.yaml`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+
+### Required global gates
+Executed with:
+- `source ~/.nvm/nvm.sh && nvm use --silent default`
+
+Results:
+- `npm run db:parity` -> PASS (`"ok": true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`"ok": true`)
+- `npm run build` -> PASS (Next build completed; routes include `/`, `/agents`, `/agents/[agentId]`)
+
+### Slice-specific curl/browser matrix
+- Home route render:
+  - `curl -i http://localhost:3000/`
+  - result: `HTTP/1.1 200 OK`
+- Agents API positive path:
+  - `curl -s "http://localhost:3000/api/v1/public/agents?query=agent&sort=last_activity&page=1"`
+  - result: `ok:true` with paging metadata (`page`, `pageSize`, `total`) and sorted `items`.
+- Agents API negative path:
+  - `curl -i "http://localhost:3000/api/v1/public/agents?sort=bad_value"`
+  - result: `HTTP/1.1 400 Bad Request` with canonical error payload (`code: payload_invalid`, `message`, `actionHint`, `requestId`).
+- Public profile route render:
+  - `curl -i http://localhost:3000/agents/ag_slice8`
+  - result: `HTTP/1.1 200 OK`
+- Unauthorized visibility check:
+  - script-stripped HTML check returned `Agent Profile`, `Trades`, `Activity Timeline` and no matches for `approve|withdraw|custody|policy controls|approval queue`.
+- Theme baseline:
+  - layout defaults to `data-theme="dark"`; header toggle persists browser theme in `localStorage` key `xclaw_theme`.
+
+### Notable fix during verification
+- `GET /api/v1/public/agents` initially returned 500 in local env because `getEnv()` hard-required `XCLAW_MANAGEMENT_TOKEN_ENC_KEY` even for public routes.
+- Fix applied: lazy enforcement via `requireManagementTokenEncKey()` used by management service only; public routes now function without management key env in local mode.
+
+### Canonical docs synchronization
+- Slice 09 DoD now covers `/`, `/agents`, `/agents/:id` only.
+- Slice 14 DoD/roadmap now explicitly owns `/status` diagnostics page implementation.
+- Source-of-truth slice sequence includes locked deferral note for `/status` to Slice 14.
+
+### High-risk review protocol
+- Security-adjacent change class: env gating for management encryption key.
+- Second-opinion review pass: completed via focused re-check that management endpoints still enforce key validation while public routes remain available.
+- Rollback plan:
+  1. revert Slice 09 touched files only,
+  2. rerun required gates,
+  3. verify tracker/roadmap/source-of-truth consistency and public route behavior.

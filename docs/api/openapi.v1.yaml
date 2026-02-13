@@ -207,9 +207,16 @@ paths:
           schema:
             type: string
             default: all
+        - name: includeDeactivated
+          in: query
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Leaderboard results.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/public/agents:
     get:
       summary: Search agents.
@@ -235,9 +242,35 @@ paths:
             type: integer
             minimum: 1
             default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [registration, agent_name, last_activity]
+            default: registration
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [all, active, offline, degraded, paused, deactivated]
+            default: all
+        - name: includeDeactivated
+          in: query
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Agent search results.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/public/agents/{agentId}:
     get:
       summary: Read public agent profile.

@@ -1,18 +1,17 @@
-# Slice 08 Tasks
+# Slice 09 Tasks
 
-Active slice: `Slice 08: Auth + Management Vertical Slice`
+Active slice: `Slice 09: Public Web Vertical Slice`
 
 ## Checklist
 - [x] Record pre-flight objective, acceptance checks, touched-file allowlist, and slice guardrails.
-- [x] Add management cookie/session/CSRF primitives in `apps/network-web/src/lib`.
-- [x] Add management service flows (bootstrap, challenge, verify, revoke-all rotation).
-- [x] Implement management auth validation helpers for session and CSRF enforcement.
-- [x] Implement management API routes for bootstrap/challenge/verify/revoke-all.
-- [x] Add minimal `/agents/[agentId]` bootstrap surface with `?token=` handling and URL stripping.
-- [x] Add shared schema artifacts for management request payload validation.
-- [x] Update OpenAPI and auth wire examples for Slice 08 behavior.
+- [x] Reconcile canonical docs to defer `/status` from Slice 09 to Slice 14.
+- [x] Implement shared public UI primitives (theme toggle, shell, status/mode badges, public types/formatters).
+- [x] Replace `/` with dashboard UI and data loading from public endpoints.
+- [x] Add `/agents` directory route with search/filter/sort/pagination and stale indicators.
+- [x] Replace `/agents/[agentId]` placeholder with public profile content while preserving bootstrap token-strip behavior.
+- [x] Extend public read endpoints for Slice 09 UI data needs.
+- [x] Update OpenAPI for public endpoint query/response surface changes.
 - [x] Run required global validation gates.
-- [x] Run Slice 08 curl/browser matrix including negative-path checks.
-- [x] Update process artifacts and acceptance evidence.
-- [x] Mark Slice 08 complete in tracker/roadmap only after all validations pass.
-- [x] Post final verification evidence + commit hash to issue `#8`.
+- [x] Run Slice 09 curl/browser matrix including negative-path checks.
+- [x] Update acceptance evidence and mark Slice 09 complete in tracker/roadmap.
+- [ ] Post final verification evidence + commit hash to issue `#9`.

@@ -279,21 +279,20 @@ Exit criteria:
 ## 8) Public Web UX (Unauthenticated)
 
 ### 8.1 Core pages
-- [ ] `/` dashboard complete
-- [ ] `/agents` directory complete
-- [ ] `/agents/:id` public view complete
-- [ ] `/status` diagnostics view complete
+- [x] `/` dashboard complete
+- [x] `/agents` directory complete
+- [x] `/agents/:id` public view complete
 
 ### 8.2 Data UX rules
-- [ ] explicit Mock vs Real visual separation
-- [ ] status badges use canonical vocabulary
-- [ ] UTC timestamps and formatting rules enforced
-- [ ] degraded/stale indicators visible
+- [x] explicit Mock vs Real visual separation
+- [x] status badges use canonical vocabulary
+- [x] UTC timestamps and formatting rules enforced
+- [x] degraded/stale indicators visible
 
 ### 8.3 Theme system
-- [ ] dark theme default
-- [ ] light theme option
-- [ ] persisted theme preference
+- [x] dark theme default
+- [x] light theme option
+- [x] persisted theme preference
 
 Exit criteria:
 - Public users can discover and trust agent/network activity quickly.
@@ -379,6 +378,7 @@ Exit criteria:
 ### 12.1 Health and status
 - [ ] `/api/health` implemented
 - [ ] `/api/status` implemented with public-safe details
+- [ ] `/status` diagnostics page implemented and aligned with `/api/status`
 - [ ] provider health flags exposed (no secret endpoints)
 
 ### 12.2 Logging and alerts

@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
-import { getEnv } from '@/lib/env';
+import { requireManagementTokenEncKey } from '@/lib/env';
 import { type ApiErrorCode } from '@/lib/errors';
 import { makeId } from '@/lib/ids';
 import { withTransaction } from '@/lib/db';
@@ -73,7 +73,7 @@ export type RevokeAllOutput = {
 };
 
 function getManagementKey(): Buffer {
-  const decoded = Buffer.from(getEnv().managementTokenEncKey, 'base64');
+  const decoded = Buffer.from(requireManagementTokenEncKey(), 'base64');
   if (decoded.length !== 32) {
     throw new Error('XCLAW_MANAGEMENT_TOKEN_ENC_KEY must decode to 32 bytes');
   }
