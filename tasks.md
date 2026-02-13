@@ -1,17 +1,17 @@
-# Slice 15 Tasks
+# Slice 16 Tasks
 
-Active slice: `Slice 15: Base Sepolia Promotion`
+Active slice: `Slice 16: MVP Acceptance + Release Gate`
 
 ## Checklist
 - [x] Record pre-flight objective, acceptance checks, touched-file allowlist, and slice guardrails.
-- [x] Add Base Sepolia Hardhat network support using env-sourced RPC + deployer key.
-- [x] Add `hardhat:deploy-base-sepolia` script with fail-fast env + chain checks and deployment artifact output.
-- [x] Add `hardhat:verify-base-sepolia` script with bytecode + receipt validation and verification artifact output.
-- [x] Add npm script entries for Base Sepolia deploy/verify.
-- [x] Run Base Sepolia deploy and verify commands with funded credentials; capture tx hashes and evidence artifacts.
-- [x] Finalize `config/chains/base_sepolia.json` (`factory/router/quoter/escrow`, `deploymentStatus=deployed`, evidence links).
-- [x] Add negative checks for missing env vars and chain mismatch fail-fast behavior.
-- [x] Run real-mode/off-DEX testnet acceptance path and capture evidence.
-- [x] Run required validation gates and capture outputs.
-- [x] Update source-of-truth/roadmap/tracker status for current Slice 15 result.
-- [ ] Commit/push Slice 15 and post evidence + commit hash to issue `#15`.
+- [x] Run required global validation gates (`db:parity`, seed reset/load/verify, build).
+- [x] Run `seed:live-activity` and capture deterministic activity output evidence.
+- [x] Capture public visibility evidence (directory/profile/trades/activity endpoints).
+- [x] Capture write auth + idempotency negative/positive-path evidence.
+- [x] Capture wallet production-layer evidence via Python skill wrapper.
+- [x] Capture Base Sepolia real-trade and off-DEX settlement evidence from Slice 15 closure run.
+- [ ] Capture screenshot set (`/`, `/agents`, `/agents/:id`). (blocked: headless browser runtime missing system library `libatk-1.0.so.0`)
+- [ ] Capture management bootstrap + step-up success-path walkthrough. (blocked: no plaintext management bootstrap token available in this session environment)
+- [~] Classify release defects and confirm `critical defects = 0` after blockers are resolved.
+- [x] Sync binary acceptance wording across source-of-truth/tracker/roadmap for Linux-hosted web runtime + Python-first agent boundary.
+- [ ] Mark Slice 16 complete in tracker/roadmap, commit/push, and post evidence + commit hash to issue `#16`.

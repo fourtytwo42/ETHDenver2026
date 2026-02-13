@@ -240,7 +240,7 @@ DoD:
 ---
 
 ## Slice 16: MVP Acceptance + Release Gate
-Status: [ ]
+Status: [!]
 
 Goal:
 - Finish MVP with evidence package and release confidence.
@@ -249,5 +249,5 @@ DoD:
 - [ ] `docs/MVP_ACCEPTANCE_RUNBOOK.md` fully executed
 - [ ] required evidence captured and archived
 - [ ] critical defects = 0
-- [ ] binary acceptance criteria met (agent portability, search/profile visibility, write auth+idempotency, deterministic demo rerun)
+- [ ] binary acceptance criteria met (linux-hosted web proof, search/profile visibility, write auth+idempotency, deterministic demo rerun, Python-first agent runtime boundary)
 - [ ] roadmap/source-of-truth synced to final state

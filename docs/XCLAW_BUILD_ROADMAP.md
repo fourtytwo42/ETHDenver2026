@@ -404,23 +404,23 @@ Exit criteria:
 ## 13) Test, QA, and Demo Readiness
 
 ### 13.1 Automated checks
-- [ ] schema and parity checks pass
-- [ ] seed scripts pass
-- [ ] build passes
-- [ ] critical unit/integration tests pass
+- [x] schema and parity checks pass
+- [x] seed scripts pass
+- [x] build passes
+- [x] critical unit/integration tests pass
 
 ### 13.2 Manual walkthroughs
-- [ ] public discovery flow verified
-- [ ] management authorization flow verified
-- [ ] step-up sensitive action flow verified
-- [ ] copy flow verified
-- [ ] off-DEX settlement flow verified end-to-end
+- [x] public discovery flow verified
+- [ ] management authorization flow verified (blocked: bootstrap token unavailable in session)
+- [ ] step-up sensitive action flow verified (blocked: bootstrap token unavailable in session)
+- [x] copy flow verified
+- [x] off-DEX settlement flow verified end-to-end
 
 ### 13.3 Evidence package
-- [ ] test report snapshot
-- [ ] status snapshot
-- [ ] seed verify output
-- [ ] demo script + screenshots
+- [x] test report snapshot
+- [x] status snapshot
+- [x] seed verify output
+- [ ] demo script + screenshots (blocked: headless browser dependency `libatk-1.0.so.0` unavailable)
 
 Canonical runbook:
 - [ ] `docs/MVP_ACCEPTANCE_RUNBOOK.md` executed completely

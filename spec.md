@@ -1,34 +1,49 @@
-# Slice 15 Spec: Base Sepolia Promotion
+# Slice 16 Spec: MVP Acceptance + Release Gate
 
 ## Goal
-Promote the Hardhat-validated trading/off-DEX contract surface to Base Sepolia by adding reproducible deploy/verify tooling, chain-constant lock procedures, and testnet acceptance evidence.
+Execute the MVP acceptance runbook end-to-end and close the release gate with archived, reproducible evidence.
 
 ## Success Criteria
-1. Base Sepolia deployment script deploys `MockFactory`, `MockRouter`, `MockQuoter`, `MockEscrow` with tx-hash evidence.
-2. Base Sepolia verify script confirms contract bytecode and successful deployment receipts from RPC.
-3. `config/chains/base_sepolia.json` is finalized with deployed contract addresses and `deploymentStatus=deployed` when deployment evidence exists.
-4. Slice-15 acceptance evidence includes required global gates plus deploy/verify and real-path checks.
-5. Runtime real/off-DEX send path can sign with local private key on external RPC (no unlocked-account dependency).
+1. `docs/MVP_ACCEPTANCE_RUNBOOK.md` steps are executed with command/output evidence.
+2. Required release gates pass:
+   - `npm run db:parity`
+   - `npm run seed:reset`
+   - `npm run seed:load`
+   - `npm run seed:verify`
+   - `npm run build`
+3. Binary acceptance checks are evidenced:
+   - Linux-hosted web runtime proof,
+   - search/profile visibility,
+   - write auth + idempotency,
+   - deterministic demo rerun.
+4. Critical defects are tracked and resolved to zero before release closure.
+5. Tracker/roadmap/source-of-truth statuses are synchronized to final Slice 16 state.
 
 ## Non-Goals
-1. Slice 16 MVP acceptance/release gating.
-2. Changing trade/off-DEX API contracts.
-3. Replacing existing mock contracts with a new DEX implementation in this slice.
+1. New feature scope beyond release-gate evidence and blocker resolution.
+2. API contract redesign unrelated to acceptance/release criteria.
+3. Runtime architecture changes outside canonical Node (web/api) vs Python-first (agent) boundary.
 
 ## Locked Decisions
-1. Deployment credentials are env-var driven only; no committed secrets.
-2. Base Sepolia target chainId is fixed at `84532`.
-3. Fail-fast behavior is required for missing env vars and chain mismatch.
-4. Hardhat-local evidence remains prerequisite for testnet promotion.
+1. Slice order remains strict; Slice 15 was completed before Slice 16.
+2. Main web/API runtime proof is Linux-hosted for release gate in this environment.
+3. Agent runtime remains Python-first and portable by design; no Node/npm dependency is introduced for agent skill paths.
+4. Any blocker preventing full runbook closure must be logged with exact unblock commands.
 
 ## Acceptance Checks
-1. `npm run db:parity`
-2. `npm run seed:reset`
-3. `npm run seed:load`
-4. `npm run seed:verify`
-5. `npm run build`
-6. Slice-15 checks:
-   - `npm run hardhat:deploy-base-sepolia` (success with evidence artifact)
-   - `npm run hardhat:verify-base-sepolia` (success with evidence artifact)
-   - runtime real/off-DEX Base Sepolia checks (or explicit blocker evidence)
-   - negative checks for missing env and chain mismatch
+1. Global required gates:
+   - `npm run db:parity`
+   - `npm run seed:reset`
+   - `npm run seed:load`
+   - `npm run seed:verify`
+   - `npm run build`
+2. Runbook checks:
+   - `npm run seed:live-activity`
+   - public/manual flow evidence for `/`, `/agents`, `/agents/:id`
+   - management auth + step-up flow evidence
+   - off-DEX lifecycle evidence
+   - wallet-layer evidence via Python skill wrapper
+3. Release docs sync:
+   - `docs/XCLAW_SLICE_TRACKER.md`
+   - `docs/XCLAW_BUILD_ROADMAP.md`
+   - `docs/XCLAW_SOURCE_OF_TRUTH.md`

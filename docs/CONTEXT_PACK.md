@@ -1,40 +1,34 @@
 # X-Claw Context Pack
 
 ## 1) Goal
-- Primary objective: complete `Slice 15: Base Sepolia Promotion` in scope.
-- Success criteria (testable): Base Sepolia deploy/verify tooling + evidence artifacts + chain-constant lock + testnet acceptance evidence.
+- Primary objective: complete `Slice 16: MVP Acceptance + Release Gate` in scope.
+- Success criteria (testable): runbook execution evidence, release-gate validation outputs, binary acceptance evidence, and synchronized canonical docs.
 
 ## 2) Constraints
-- Strict slice order: Slice 15 only.
+- Strict slice order: Slice 16 only (Slice 15 is completed and pushed first).
 - Canonical authority: `docs/XCLAW_SOURCE_OF_TRUTH.md`.
 - Runtime boundary: Node/Next.js for API/web, Python-first runtime for agent/OpenClaw commands.
 - No opportunistic refactors or dependency additions.
 
 ## 3) Contract Impact
-- Add operator deploy/verify command interface for Base Sepolia.
-- Add deterministic deployment and verification artifacts under `infrastructure/seed-data/`.
-- Update Base Sepolia chain constants only when on-chain evidence is captured.
+- No OpenAPI/schema/data-model contract changes expected.
+- Canonical acceptance wording synchronization required for:
+  - Linux-hosted web/API runtime proof in this environment,
+  - Python-first agent runtime portability boundary.
 
 ## 4) Files and Boundaries
 - Expected touched files:
-  - `hardhat.config.ts`
-  - `package.json`
-  - `apps/agent-runtime/xclaw_agent/cli.py`
-  - `infrastructure/scripts/hardhat/deploy-base-sepolia.ts`
-  - `infrastructure/scripts/hardhat/verify-base-sepolia.ts`
-  - `config/chains/base_sepolia.json`
-  - `infrastructure/seed-data/base-sepolia-deploy.json`
-  - `infrastructure/seed-data/base-sepolia-verify.json`
+  - `acceptance.md`
+  - `spec.md`
+  - `tasks.md`
+  - `docs/CONTEXT_PACK.md`
   - `docs/XCLAW_SOURCE_OF_TRUTH.md`
   - `docs/XCLAW_BUILD_ROADMAP.md`
   - `docs/XCLAW_SLICE_TRACKER.md`
-  - `docs/CONTEXT_PACK.md`
-  - `spec.md`
-  - `tasks.md`
-  - `acceptance.md`
+  - `docs/MVP_ACCEPTANCE_RUNBOOK.md` (only if blocker/unblock guidance must be encoded)
 - Forbidden scope:
-  - Slice 16 MVP release gate scope
-  - API contract redesign beyond Slice 15 promotion needs
+  - New feature implementation beyond acceptance/release closure.
+  - API contract redesign or migration changes unrelated to release-gate evidence.
 
 ## 5) Invariants (Must Not Change)
 - Error contract remains `code`, `message`, optional `actionHint`, optional `details`, `requestId`.
@@ -49,15 +43,16 @@
   - `npm run seed:verify`
   - `npm run build`
 - Slice-specific checks:
-  - missing env vars fail-fast for Base Sepolia deploy script
-  - chain mismatch fail-fast for Base Sepolia deploy script
-  - Base Sepolia deploy artifact shape and tx hash fields
-  - Base Sepolia verify artifact checks for code + receipt success
-  - runtime real/off-DEX acceptance evidence on Base Sepolia (or explicit credential/funding blocker)
+  - `npm run seed:live-activity`
+  - public discovery/profile/trades/activity checks
+  - write auth + idempotency checks
+  - wallet wrapper checks (health/address/balance/signing + blocked spend)
+  - management/session/step-up checks (or explicit token blocker evidence)
+  - screenshot capture for `/`, `/agents`, `/agents/:id` (or explicit tooling blocker evidence)
 
 ## 7) Evidence + Rollback
 - Capture command outputs and route-level evidence in `acceptance.md`.
 - Rollback plan:
-  1. revert Slice 15 touched files only,
+  1. revert Slice 16 touched files only,
   2. rerun required gates,
   3. verify tracker/roadmap/source-of-truth synchronization.

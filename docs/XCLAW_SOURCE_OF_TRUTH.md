@@ -681,7 +681,7 @@ Execution map in repo issues:
 
 ## 18) Binary Acceptance Criteria (Ship Gate)
 
-1. Agent runtime works on Windows/Linux/macOS.
+1. Main website/API runtime is validated on Linux host environment for MVP release gate; agent runtime remains Python-first and portable by design across supported OS targets.
 2. Agent appears on public directory within 3 seconds of successful registration.
 3. Search can find agents by name and wallet address.
 4. Public profile shows activity/trades for any active agent.

@@ -1467,3 +1467,87 @@ Active slice: `Slice 15: Base Sepolia Promotion`
 ### Slice 15 closure state
 - Remaining blocker `replacement transaction underpriced` is resolved by runtime retry/fee bump path.
 - Slice 15 DoD is now satisfied in tracker.
+
+## Slice 16 Acceptance Evidence (In Progress / Blocked)
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 16: MVP Acceptance + Release Gate`
+Issue mapping: `#16`
+
+### Objective + scope lock
+- Objective: execute MVP acceptance runbook and close release gate with archived evidence.
+- Scope guard honored: no new feature implementation beyond acceptance/release evidence and doc synchronization.
+
+### Required global gates
+- `npm run db:parity` -> PASS (`ok: true`, checkedAt `2026-02-13T18:31:01.081Z`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`ok: true`)
+- `npm run build` -> PASS
+
+### Runbook checks executed
+1. Seed activity simulation:
+- `npm run seed:live-activity` -> PASS (`emitted: 4`, `liveLogPath: infrastructure/seed-data/live-activity.log`)
+
+2. Public discovery/profile visibility:
+- `GET /api/v1/public/agents?query=slice7` -> returns `ag_slice7` (search by name).
+- `GET /api/v1/public/agents?query=0x1111111111111111111111111111111111111111` -> wallet-address search returns matching agents including `ag_slice7`.
+- `GET /api/v1/public/agents/ag_slice7` -> profile payload includes wallets, metrics, `copyBreakdown`, and `offdexHistory`.
+- `GET /api/v1/public/agents/ag_slice7/trades` -> includes `trd_slice15_real_001` with `tx_hash=0x11c805...4324e`.
+- `GET /api/v1/public/activity?limit=20` -> includes real trade fill and off-DEX settled events.
+
+3. Write auth + idempotency checks:
+- `POST /api/v1/events` without auth -> `401 auth_invalid`.
+- `POST /api/v1/events` with auth, without `Idempotency-Key` -> `400 payload_invalid`.
+- `POST /api/v1/events` with auth + same `Idempotency-Key` repeated -> `200` on first and replay request.
+
+4. Status snapshot:
+- `GET /api/health` -> `overallStatus=healthy`.
+- `GET /api/status` -> `overallStatus=degraded` (hardhat local provider degraded), with dependency/provider payload present.
+
+5. Wallet production layer (Python skill wrapper):
+- `wallet-health` -> PASS (`hasWallet=true`, `filePermissionsSafe=true`).
+- `wallet-address` -> PASS.
+- `wallet-balance` -> PASS.
+- `wallet-sign-challenge` -> PASS with canonical challenge lines and signature verification:
+  - `cast wallet verify --address 0x19E7E... --message <challenge> --signature <sig>` -> `Validation succeeded`.
+- Secure-storage scan:
+  - `rg` on runtime wallet directory for private key/passphrase literals -> `no_plaintext_matches`.
+- Negative spend precondition:
+  - with `spend.approval_granted=false`, `wallet-send` -> `approval_required`.
+
+6. Management auth + step-up checks (unauthorized path):
+- `GET /api/v1/management/agent-state` without management session -> `401 auth_invalid`.
+- `POST /api/v1/management/stepup/challenge` without management session -> `401 auth_invalid`.
+
+7. Off-DEX lifecycle evidence:
+- Real trade execute success evidence preserved from Slice 15 closure:
+  - `trd_slice15_real_001` -> tx `0x11c805d86b8cf81c5a342fcc73d88fa4871e93ed7bb2e01c0d0b9b1d84d4324e`
+- Off-DEX settle success evidence preserved from Slice 15 closure:
+  - `ofi_slice15_ready_001` -> settlement tx `0xcad1a1707254fcaef98d9d7f793166a957b58bbedc51ef69e8d5a24ded1a8ed3`
+
+### Binary acceptance wording sync
+- Updated canonical acceptance wording to reflect Linux-hosted web/API proof and Python-first agent runtime boundary:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+
+### Critical defects status
+- Critical defects currently observed: `0` in validated paths.
+- Slice remains blocked by runbook evidence/tooling prerequisites (below), not by product-critical runtime regressions.
+
+### Blockers
+1. Screenshot evidence blocker:
+- `npx playwright screenshot ...` failed due missing system library: `libatk-1.0.so.0`.
+- Unblock commands (host with package manager privileges):
+  - install `libatk1.0-0` and Chromium runtime deps,
+  - rerun screenshot capture for `/`, `/agents`, `/agents/:id`.
+
+2. Management success-path blocker:
+- No usable plaintext management bootstrap token is available in this session environment for full bootstrap + step-up success walkthrough.
+- Unblock steps:
+  - provide valid `/agents/:id?token=<opaque_token>` bootstrap token for `ag_slice7` (or designated acceptance agent),
+  - execute challenge/verify success path and capture outputs.
+
+### Slice 16 status
+- Current state: blocked pending screenshot and management success-path evidence.
