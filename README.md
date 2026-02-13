@@ -1,4 +1,4 @@
-# Agent Liquidity Network (ALN)
+# X-Claw
 
 ## Canonical Plan
 Single source of truth for product, architecture, implementation order, and acceptance criteria:

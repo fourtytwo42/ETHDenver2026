@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/trade-status.schema.json",
+  "title": "TradeStatusTransition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tradeId", "fromStatus", "toStatus", "at"],
+  "properties": {
+    "tradeId": { "type": "string", "minLength": 1 },
+    "fromStatus": {
+      "enum": [
+        "proposed",
+        "approval_pending",
+        "approved",
+        "rejected",
+        "executing",
+        "verifying",
+        "filled",
+        "failed",
+        "expired",
+        "verification_timeout"
+      ]
+    },
+    "toStatus": {
+      "enum": [
+        "proposed",
+        "approval_pending",
+        "approved",
+        "rejected",
+        "executing",
+        "verifying",
+        "filled",
+        "failed",
+        "expired",
+        "verification_timeout"
+      ]
+    },
+    "reasonCode": {
+      "type": ["string", "null"],
+      "enum": [
+        "approval_rejected",
+        "approval_expired",
+        "policy_denied",
+        "pair_not_enabled",
+        "global_not_enabled",
+        "daily_cap_exceeded",
+        "chain_mismatch",
+        "slippage_exceeded",
+        "rpc_unavailable",
+        "verification_timeout",
+        null
+      ]
+    },
+    "reasonMessage": { "type": ["string", "null"] },
+    "at": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,0 +1,338 @@
+#!/usr/bin/env python3
+"""X-Claw agent runtime CLI scaffold.
+
+This CLI provides the command surface required by the X-Claw skill wrapper.
+Wallet commands are scaffolded for production integration and return structured JSON.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import pathlib
+import re
+import shutil
+import sys
+from datetime import datetime, timezone
+
+APP_DIR = pathlib.Path.home() / ".xclaw-agent"
+STATE_FILE = APP_DIR / "state.json"
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def emit(payload: dict) -> int:
+    print(json.dumps(payload, separators=(",", ":")))
+    return 0
+
+
+def ok(message: str, **extra: object) -> int:
+    payload = {"ok": True, "code": "ok", "message": message}
+    payload.update(extra)
+    return emit(payload)
+
+
+def fail(code: str, message: str, action_hint: str | None = None, details: dict | None = None, exit_code: int = 1) -> int:
+    payload: dict[str, object] = {"ok": False, "code": code, "message": message}
+    if action_hint:
+        payload["actionHint"] = action_hint
+    if details:
+        payload["details"] = details
+    emit(payload)
+    return exit_code
+
+
+def require_json_flag(args: argparse.Namespace) -> int | None:
+    if getattr(args, "json", False):
+        return None
+    return fail("missing_flag", "This command requires --json output mode.", "Re-run with --json.", exit_code=2)
+
+
+def load_state() -> dict:
+    if not STATE_FILE.exists():
+        return {}
+    try:
+        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_state(state: dict) -> None:
+    APP_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    os.chmod(STATE_FILE, 0o600)
+
+
+def ensure_wallet_entry(chain: str) -> tuple[dict, dict]:
+    state = load_state()
+    wallets = state.setdefault("wallets", {})
+    wallet = wallets.get(chain)
+    return state, wallet or {}
+
+
+def set_wallet_entry(chain: str, wallet: dict) -> None:
+    state = load_state()
+    wallets = state.setdefault("wallets", {})
+    wallets[chain] = wallet
+    save_state(state)
+
+
+def remove_wallet_entry(chain: str) -> bool:
+    state = load_state()
+    wallets = state.setdefault("wallets", {})
+    existed = chain in wallets
+    if existed:
+        wallets.pop(chain, None)
+        save_state(state)
+    return existed
+
+
+def is_hex_address(value: str) -> bool:
+    return bool(re.fullmatch(r"0x[a-fA-F0-9]{40}", value))
+
+
+def cast_exists() -> bool:
+    return shutil.which("cast") is not None
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    return ok("Agent runtime scaffold is healthy.", status="ready", timestamp=utc_now(), scaffold=True)
+
+
+def cmd_not_implemented(args: argparse.Namespace, name: str) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    return fail(
+        "not_implemented",
+        f"{name} is scaffolded but not fully implemented yet.",
+        "Implement runtime handler in apps/agent-runtime/xclaw_agent/cli.py and re-test.",
+        {"command": name, "scaffold": True},
+        exit_code=1,
+    )
+
+
+def cmd_wallet_health(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    chain = args.chain
+    _, wallet = ensure_wallet_entry(chain)
+    return ok(
+        "Wallet health checked.",
+        chain=chain,
+        hasCast=cast_exists(),
+        hasWallet=bool(wallet),
+        address=wallet.get("address"),
+        timestamp=utc_now(),
+    )
+
+
+def cmd_wallet_create(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    return cmd_not_implemented(args, "wallet.create")
+
+
+def cmd_wallet_import(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    return cmd_not_implemented(args, "wallet.import")
+
+
+def cmd_wallet_address(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    chain = args.chain
+    _, wallet = ensure_wallet_entry(chain)
+    addr = wallet.get("address")
+    if not addr:
+        return fail("wallet_missing", f"No wallet configured for chain '{chain}'.", "Run wallet create/import first.", {"chain": chain}, exit_code=1)
+    return ok("Wallet address fetched.", chain=chain, address=addr)
+
+
+def cmd_wallet_sign_challenge(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    if not args.message.strip():
+        return fail(
+            "invalid_input",
+            "Challenge message cannot be empty.",
+            "Provide a non-empty message string.",
+            {"message": args.message},
+            exit_code=2,
+        )
+    return cmd_not_implemented(args, "wallet.sign-challenge")
+
+
+def cmd_wallet_send(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    if not is_hex_address(args.to):
+        return fail("invalid_input", "Invalid recipient address format.", "Use 0x-prefixed 20-byte hex address.", {"to": args.to}, exit_code=2)
+    if not re.fullmatch(r"[0-9]+", args.amount_wei):
+        return fail("invalid_input", "Invalid amount-wei format.", "Use base-unit integer string.", {"amountWei": args.amount_wei}, exit_code=2)
+    return cmd_not_implemented(args, "wallet.send")
+
+
+def cmd_wallet_balance(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    return cmd_not_implemented(args, "wallet.balance")
+
+
+def cmd_wallet_token_balance(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    if not is_hex_address(args.token):
+        return fail("invalid_input", "Invalid token address format.", "Use 0x-prefixed 20-byte hex address.", {"token": args.token}, exit_code=2)
+    return cmd_not_implemented(args, "wallet.token-balance")
+
+
+def cmd_wallet_remove(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    existed = remove_wallet_entry(args.chain)
+    return ok("Wallet removed." if existed else "No wallet existed for chain.", chain=args.chain, removed=existed)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="xclaw-agent", add_help=True)
+    sub = p.add_subparsers(dest="top")
+
+    st = sub.add_parser("status")
+    st.add_argument("--json", action="store_true")
+    st.set_defaults(func=cmd_status)
+
+    intents = sub.add_parser("intents")
+    intents_sub = intents.add_subparsers(dest="intents_cmd")
+    intents_poll = intents_sub.add_parser("poll")
+    intents_poll.add_argument("--chain", required=True)
+    intents_poll.add_argument("--json", action="store_true")
+    intents_poll.set_defaults(func=lambda a: cmd_not_implemented(a, "intents.poll"))
+
+    approvals = sub.add_parser("approvals")
+    approvals_sub = approvals.add_subparsers(dest="approvals_cmd")
+    approvals_check = approvals_sub.add_parser("check")
+    approvals_check.add_argument("--intent", required=True)
+    approvals_check.add_argument("--chain", required=True)
+    approvals_check.add_argument("--json", action="store_true")
+    approvals_check.set_defaults(func=lambda a: cmd_not_implemented(a, "approvals.check"))
+
+    trade = sub.add_parser("trade")
+    trade_sub = trade.add_subparsers(dest="trade_cmd")
+    trade_exec = trade_sub.add_parser("execute")
+    trade_exec.add_argument("--intent", required=True)
+    trade_exec.add_argument("--chain", required=True)
+    trade_exec.add_argument("--json", action="store_true")
+    trade_exec.set_defaults(func=lambda a: cmd_not_implemented(a, "trade.execute"))
+
+    report = sub.add_parser("report")
+    report_sub = report.add_subparsers(dest="report_cmd")
+    report_send = report_sub.add_parser("send")
+    report_send.add_argument("--trade", required=True)
+    report_send.add_argument("--json", action="store_true")
+    report_send.set_defaults(func=lambda a: cmd_not_implemented(a, "report.send"))
+
+    offdex = sub.add_parser("offdex")
+    offdex_sub = offdex.add_subparsers(dest="offdex_cmd")
+
+    offdex_intents = offdex_sub.add_parser("intents")
+    offdex_intents_sub = offdex_intents.add_subparsers(dest="offdex_intents_cmd")
+    offdex_intents_poll = offdex_intents_sub.add_parser("poll")
+    offdex_intents_poll.add_argument("--chain", required=True)
+    offdex_intents_poll.add_argument("--json", action="store_true")
+    offdex_intents_poll.set_defaults(func=lambda a: cmd_not_implemented(a, "offdex.intents.poll"))
+
+    offdex_accept = offdex_sub.add_parser("accept")
+    offdex_accept.add_argument("--intent", required=True)
+    offdex_accept.add_argument("--chain", required=True)
+    offdex_accept.add_argument("--json", action="store_true")
+    offdex_accept.set_defaults(func=lambda a: cmd_not_implemented(a, "offdex.accept"))
+
+    offdex_settle = offdex_sub.add_parser("settle")
+    offdex_settle.add_argument("--intent", required=True)
+    offdex_settle.add_argument("--chain", required=True)
+    offdex_settle.add_argument("--json", action="store_true")
+    offdex_settle.set_defaults(func=lambda a: cmd_not_implemented(a, "offdex.settle"))
+
+    wallet = sub.add_parser("wallet")
+    wallet_sub = wallet.add_subparsers(dest="wallet_cmd")
+
+    w_health = wallet_sub.add_parser("health")
+    w_health.add_argument("--chain", required=True)
+    w_health.add_argument("--json", action="store_true")
+    w_health.set_defaults(func=cmd_wallet_health)
+
+    w_create = wallet_sub.add_parser("create")
+    w_create.add_argument("--chain", required=True)
+    w_create.add_argument("--json", action="store_true")
+    w_create.set_defaults(func=cmd_wallet_create)
+
+    w_import = wallet_sub.add_parser("import")
+    w_import.add_argument("--chain", required=True)
+    w_import.add_argument("--json", action="store_true")
+    w_import.set_defaults(func=cmd_wallet_import)
+
+    w_addr = wallet_sub.add_parser("address")
+    w_addr.add_argument("--chain", required=True)
+    w_addr.add_argument("--json", action="store_true")
+    w_addr.set_defaults(func=cmd_wallet_address)
+
+    w_sign = wallet_sub.add_parser("sign-challenge")
+    w_sign.add_argument("--message", required=True)
+    w_sign.add_argument("--chain", required=True)
+    w_sign.add_argument("--json", action="store_true")
+    w_sign.set_defaults(func=cmd_wallet_sign_challenge)
+
+    w_send = wallet_sub.add_parser("send")
+    w_send.add_argument("--to", required=True)
+    w_send.add_argument("--amount-wei", required=True)
+    w_send.add_argument("--chain", required=True)
+    w_send.add_argument("--json", action="store_true")
+    w_send.set_defaults(func=cmd_wallet_send)
+
+    w_bal = wallet_sub.add_parser("balance")
+    w_bal.add_argument("--chain", required=True)
+    w_bal.add_argument("--json", action="store_true")
+    w_bal.set_defaults(func=cmd_wallet_balance)
+
+    w_tbal = wallet_sub.add_parser("token-balance")
+    w_tbal.add_argument("--token", required=True)
+    w_tbal.add_argument("--chain", required=True)
+    w_tbal.add_argument("--json", action="store_true")
+    w_tbal.set_defaults(func=cmd_wallet_token_balance)
+
+    w_remove = wallet_sub.add_parser("remove")
+    w_remove.add_argument("--chain", required=True)
+    w_remove.add_argument("--json", action="store_true")
+    w_remove.set_defaults(func=cmd_wallet_remove)
+
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not hasattr(args, "func"):
+        parser.print_help()
+        return 2
+    return int(args.func(args))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

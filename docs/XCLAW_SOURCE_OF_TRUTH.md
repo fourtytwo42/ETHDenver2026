@@ -2,7 +2,7 @@
 ## Source of Truth (Canonical Build + Execution Spec)
 
 **Status:** Canonical and authoritative  
-**Last updated:** 2026-02-12  
+**Last updated:** 2026-02-13  
 **Owner:** X-Claw core team  
 **Purpose:** This is the only planning/build document to execute from.
 
@@ -25,9 +25,11 @@ X-Claw is an **agent-first liquidity and trading network** with:
 
 1. **Agent Runtime (Python, OpenClaw-compatible):**
 - Runs on Windows, Linux, and macOS.
+- Runs independently from the network server runtime and connects outbound to server APIs.
 - Owns wallet keys locally.
 - Proposes and executes mock/real trades.
 - Polls server for approvals/copy intents and executes locally.
+- Supports off-DEX agent-to-agent settlement intents and local escrow execution.
 
 2. **Main Website + API (Next.js + Postgres + Redis):**
 - Public website + API layer.
@@ -35,6 +37,7 @@ X-Claw is an **agent-first liquidity and trading network** with:
 - Ranks agents by performance.
 - Supports search and drill-down for any agent profile.
 - Uses the same `/agents/:id` route for public info and management controls (when authorized).
+- Tracks off-DEX settlement lifecycle and publishes auditable escrow events.
 
 Core thesis: **agents act, humans supervise, network observes and allocates trust.**
 
@@ -51,6 +54,7 @@ Core thesis: **agents act, humans supervise, network observes and allocates trus
 5. Public visitors without management auth only see info views.
 6. Every registered agent must be searchable and have a public profile page.
 7. End-to-end flow must support: propose -> approve (if required) -> execute -> publish -> rank update.
+8. Off-DEX agent-to-agent settlement must be escrow-backed on-chain, never trust-only.
 
 ---
 
@@ -64,6 +68,7 @@ Core thesis: **agents act, humans supervise, network observes and allocates trus
 - Public dashboard, agent directory, and agent profile pages.
 - Leaderboard and activity feed.
 - Copy-subscription MVP with follower execution attempts.
+- Off-DEX settlement MVP using escrow contract flow (intent -> accept -> fund -> settle).
 - Security baseline (auth + idempotency + rate limiting + payload validation).
 
 ### 4.2 Out of Scope (MVP)
@@ -103,6 +108,7 @@ Core thesis: **agents act, humans supervise, network observes and allocates trus
 6. Agent reports status and execution result.
 7. Network app updates event feed, profile history, and leaderboard.
 8. Copy-subscription logic can issue follower copy intents.
+9. Agent-to-agent off-DEX intents are negotiated through API and settled via escrow contract transactions executed by agent wallets.
 
 ---
 
@@ -142,6 +148,10 @@ Core thesis: **agents act, humans supervise, network observes and allocates trus
 - `address` varchar(128)
 - `custody` enum(`agent_local`)
 - unique (`agent_id`, `chain_key`)
+Wallet model note:
+- Agent identity uses one portable EVM wallet by default.
+- Same wallet address may be reused across enabled EVM chains.
+- Policies/approvals/execution remain chain-scoped even when address is shared.
 
 ## 7.3 `agent_policy_snapshots`
 - `snapshot_id` ULID PK
@@ -158,7 +168,7 @@ Core thesis: **agents act, humans supervise, network observes and allocates trus
 - `agent_id` FK
 - `chain_key` varchar(64)
 - `is_mock` boolean
-- `status` enum(`proposed`,`approved`,`rejected`,`executing`,`filled`,`failed`)
+- `status` enum(`proposed`,`approval_pending`,`approved`,`rejected`,`executing`,`verifying`,`filled`,`failed`,`expired`,`verification_timeout`)
 - `token_in`, `token_out` varchar(128)
 - `pair` varchar(128)
 - `amount_in`, `amount_out` numeric
@@ -179,10 +189,15 @@ Core thesis: **agents act, humans supervise, network observes and allocates trus
 - `event_type` enum(
   `heartbeat`,
   `trade_proposed`,
+  `trade_approval_pending`,
   `trade_approved`,
   `trade_rejected`,
+  `trade_executing`,
+  `trade_verifying`,
   `trade_filled`,
   `trade_failed`,
+  `trade_expired`,
+  `trade_verification_timeout`,
   `policy_changed`
 )
 - `payload` jsonb
@@ -270,6 +285,31 @@ Append-only enforcement:
 - `management_sessions(agent_id, expires_at)`
 - `stepup_challenges(agent_id, expires_at, consumed_at)`
 - `management_audit_log(agent_id, created_at desc)`
+- `offdex_settlement_intents(maker_agent_id, created_at desc)`
+- `offdex_settlement_intents(taker_agent_id, created_at desc)`
+- `offdex_settlement_intents(status, expires_at)`
+
+## 7.14 `offdex_settlement_intents`
+- `settlement_intent_id` ULID PK
+- `chain_key` varchar(64)
+- `maker_agent_id` FK
+- `taker_agent_id` FK nullable (null until accepted/public intent fill)
+- `maker_wallet_address` varchar(128)
+- `taker_wallet_address` varchar(128) nullable
+- `maker_token` varchar(128)
+- `taker_token` varchar(128)
+- `maker_amount` numeric
+- `taker_amount` numeric
+- `escrow_contract` varchar(128)
+- `escrow_deal_id` varchar(128) nullable
+- `maker_fund_tx_hash` varchar(128) nullable
+- `taker_fund_tx_hash` varchar(128) nullable
+- `settlement_tx_hash` varchar(128) nullable
+- `status` enum(`proposed`,`accepted`,`maker_funded`,`taker_funded`,`ready_to_settle`,`settling`,`settled`,`cancelled`,`expired`,`failed`)
+- `failure_code` varchar(64) nullable
+- `failure_message` text nullable
+- `expires_at` timestamptz
+- `created_at`, `updated_at`
 
 ---
 
@@ -320,12 +360,27 @@ All agent write endpoints require:
 2. `PATCH /api/v1/copy/subscriptions/:subscriptionId`
 3. `GET /api/v1/copy/subscriptions`
 
+## 8.5 Off-DEX Settlement Endpoints
+1. `POST /api/v1/offdex/intents`
+2. `POST /api/v1/offdex/intents/:intentId/accept`
+3. `POST /api/v1/offdex/intents/:intentId/cancel`
+4. `POST /api/v1/offdex/intents/:intentId/status`
+5. `POST /api/v1/offdex/intents/:intentId/settle-request`
+6. `GET /api/v1/offdex/intents?agentId=<agentId>&status=<status>&chain=<chain>`
+
 ## 8.4 Error Contract
 - Use consistent JSON error shape:
 - `code`
 - `message`
 - `details` (optional)
 - `requestId`
+- `actionHint` (optional, short human-readable next step for agent/human operator)
+
+Rules:
+- `message` must be human-readable and directly actionable.
+- `code` remains stable for programmatic handling.
+- `details` may include structured diagnostics, but never replaces readable `message`.
+- For expected operator flows, include `actionHint` text suitable for agent prompt/tool guidance.
 
 ---
 
@@ -340,6 +395,7 @@ All agent write endpoints require:
 - Strategy loop for periodic trade proposals.
 - Mock execution engine (deterministic mock receipt IDs).
 - Real execution adapter interface (`web3.py`) and chain-specific implementation path.
+- Off-DEX escrow settlement adapter interface and intent execution loop.
 - Local state persistence for restart-safe behavior.
 
 ## 9.2 Website Management Surface
@@ -350,6 +406,7 @@ Required controls:
 - mode and policy controls
 - withdraw destination and withdraw initiation
 - pause/resume
+- off-DEX settlement approvals and settlement-request controls
 - audit log view
 
 Security defaults:
@@ -379,6 +436,7 @@ Must show:
 - identity and wallet summary
 - metrics cards (PnL/return/volume/trades)
 - trade history
+- off-DEX settlement history (maker/taker role + escrow tx links)
 - activity timeline
 - copy-subscription visibility block
 
@@ -418,6 +476,15 @@ Must not show to unauthorized viewers:
 5. Follower executes and reports independently.
 6. Public profile and activity feed show follower result and lineage.
 
+## 12.1 Off-DEX Settlement MVP
+
+1. Maker agent creates settlement intent with pair/amount/expiry and escrow contract reference.
+2. Taker agent accepts intent (or intent expires/cancels).
+3. Both agents fund escrow from their local wallets.
+4. Agent runtime confirms escrow readiness and requests settlement.
+5. Settlement executes on-chain and both agents report outcomes to server.
+6. Public profile/activity shows redacted intent metadata and settlement tx links.
+
 ---
 
 ## 13) Security and Reliability Baseline
@@ -445,7 +512,7 @@ Must not show to unauthorized viewers:
 - `RPC_PROVIDER_NAME` (e.g. `public`, `alchemy`, `ankr`, `quicknode`)
 - optional auth variables if later added
 - VM-local default values for this environment:
-  - `DATABASE_URL=postgresql://aln_app:aln_local_dev_pw@127.0.0.1:5432/aln_db`
+  - `DATABASE_URL=postgresql://xclaw_app:xclaw_local_dev_pw@127.0.0.1:5432/xclaw_db`
   - `REDIS_URL=redis://127.0.0.1:6379`
 
 ## 14.2 Agent Runtime
@@ -460,23 +527,41 @@ Must not show to unauthorized viewers:
 - `XCLAW_APPROVAL_MODE`
 - `XCLAW_WALLET_PATH`
 
-## 14.3 Testnet and RPC Requirements (Mandatory)
+## 14.3 Local and Testnet RPC Requirements (Mandatory)
 
-1. MVP must run on at least one configured **testnet** end-to-end.
-2. Each agent must create and persist at least one local wallet per enabled chain.
-3. Agent runtime must use configured testnet RPC(s) for:
+1. Development and feature validation must run on local Hardhat first, then on configured testnet.
+2. MVP must run on at least one configured **testnet** end-to-end.
+3. Each agent must create and persist at least one local wallet.
+4. For EVM chains, default model is one portable wallet reused across enabled chains unless explicitly overridden.
+5. Agent runtime must use configured RPC(s) for:
 - nonce/balance reads
 - gas estimation
 - tx broadcast (real mode)
 - tx receipt/status polling
-4. Network app must have an RPC provider path for each enabled chain for:
+6. Network app must have an RPC provider path for each enabled chain for:
 - tx hash validation/enrichment
 - explorer-link correctness checks
 - optional on-chain metadata reads used in public profile/trade views
-5. Public RPC is acceptable for MVP; provider-backed RPC is recommended for finals reliability.
-6. If primary RPC fails, system should degrade gracefully:
+7. Public RPC is acceptable for MVP testnet; provider-backed RPC is recommended for finals reliability.
+8. If primary RPC fails, system should degrade gracefully:
 - use fallback RPC if configured
 - otherwise mark affected chain status degraded and continue mock-mode operation
+9. Promotion rule:
+- no Base Sepolia deployment/testing is considered valid until Hardhat local acceptance checks pass for the same feature set.
+
+## 14.4 Chain Configuration Model (Canonical)
+
+1. Multi-chain support uses one JSON file per chain.
+2. Canonical location:
+- `config/chains/<chain_key>.json` (for example `config/chains/base_sepolia.json`)
+3. Both network app and agent runtime consume the same chain JSON artifacts (no per-app constant drift).
+4. Core smart contract constants are stored in chain config:
+- chain identity (`chainId`, `chainKey`, explorer base URL)
+- core DEX/settlement contracts (router/quoter/factory/escrow and other immutable protocol contracts)
+- canonical RPC defaults and optional fallback endpoints
+5. DEX/token/pool addresses beyond core contracts are discovered dynamically from the DEX using on-chain/DEX discovery paths at runtime.
+6. Runtime must not hardcode token/pool addresses in code for chain execution logic.
+7. Startup must validate chain config schema and fail fast on invalid config.
 
 ---
 
@@ -622,14 +707,17 @@ This section supersedes any earlier conflicting statements in this file.
 - Rotating agent API token immediately hard-cuts active sessions using old token.
 - Tokens use minimum 256-bit randomness.
 - Token storage at rest is encrypted.
+- Runtime separation is strict: Node/Next.js stack is server/web-only, and OpenClaw skill execution is agent-host Python-first only.
 - Sensitive write actions require CSRF protection in addition to auth cookies.
 - Public agent pages are indexable/searchable.
 - `/manage/*` routes are non-indexable/non-crawlable if present.
 - Base Sepolia is the primary launch chain for MVP.
-- DEX-first integration is Aerodrome.
+- Hardhat local chain is mandatory first validation environment for all new trading-path features.
+- DEX-first integration is Uniswap-compatible execution (adapter-first), with Aerodrome as the Base mainnet target integration.
+- For MVP testnet on Base Sepolia, use self-deployed Uniswap-compatible fork contracts.
 - Chain model is separated per chain (no cross-chain trading).
 - Chain controls are visible now; Base Sepolia enabled and other chains shown disabled/coming-soon.
-- Exactly one Base Sepolia wallet per agent in MVP.
+- One portable EVM wallet per agent is the default model in MVP; same address can be reused across chains.
 - One wallet maps to one agent identity.
 - Agent identity source of truth is wallet ownership.
 - Recovery flow uses wallet signature proof and reissues new agent token while invalidating old one.
@@ -717,6 +805,8 @@ This section supersedes any earlier conflicting statements in this file.
 - Seed/demo data must be explicitly tagged and separated from runtime data.
 - Timestamps display in UTC.
 - USD display formatting is `<$1` => 4 decimals, `>= $1` => 2 decimals.
+- Canonical chain-configuration contract is defined in Section 26 and artifact files listed in Section 36.
+- Canonical human-readable error contract is defined in Section 28 and corresponding schema artifact in Section 36.
 - Real trade rows show explorer links.
 - Mock trades show mock receipt IDs.
 - Full raw event payload JSON is stored.
@@ -742,7 +832,8 @@ This section defines launch-level operational decisions for X-Claw MVP.
 
 ### 22.2 Deployment Topology
 - Single VM deployment for MVP.
-- Main website/API, Postgres, Redis, and agent runtime run on this VM.
+- Main website/API, Postgres, and Redis run on this VM.
+- Agent runtime/OpenClaw host runs independently and calls the server over HTTPS.
 - VM-native services only (no Docker).
 
 ### 22.3 SLO and Performance Targets
@@ -889,7 +980,9 @@ X-Claw agent operations must be exposed to OpenClaw through a dedicated skill pa
 Repository-local scaffold location:
 
 - `skills/xclaw-agent/SKILL.md`
+- `skills/xclaw-agent/scripts/xclaw_agent_skill.py`
 - `skills/xclaw-agent/scripts/xclaw-safe.sh`
+- `skills/xclaw-agent/scripts/scan-skill-security.sh`
 - `skills/xclaw-agent/references/commands.md`
 - `skills/xclaw-agent/references/policy-rules.md`
 - `skills/xclaw-agent/references/install-and-config.md`
@@ -898,18 +991,54 @@ Repository-local scaffold location:
 
 - `xclaw-agentd` owns wallet operations, signing, and policy enforcement locally.
 - `xclaw-agent` is the CLI interface used by OpenClaw skill instructions.
-- Skill instructions must call CLI commands only; do not embed direct private-key workflows in prompts.
+- Repository scaffold binary path for local development: `apps/agent-runtime/bin/xclaw-agent`.
+- Skill instructions are Python-first via `xclaw_agent_skill.py`, which delegates to local `xclaw-agent` CLI.
+- OpenClaw + skill execution are agent-host concerns and are not part of the Node server runtime.
+- `xclaw-safe.sh` remains compatibility wrapper and must call the Python wrapper.
+- Do not embed direct private-key workflows in prompts.
 - No private key or seed material may pass through skill outputs.
 
 ### 24.3 Required Agent CLI Surface (MVP)
 
-The following commands are required (JSON output contract):
+The skill wrapper commands below are required (JSON output contract):
+
+- `python3 scripts/xclaw_agent_skill.py status`
+- `python3 scripts/xclaw_agent_skill.py intents-poll`
+- `python3 scripts/xclaw_agent_skill.py approval-check <intent_id>`
+- `python3 scripts/xclaw_agent_skill.py trade-exec <intent_id>`
+- `python3 scripts/xclaw_agent_skill.py report-send <trade_id>`
+- `python3 scripts/xclaw_agent_skill.py offdex-intents-poll`
+- `python3 scripts/xclaw_agent_skill.py offdex-accept <intent_id>`
+- `python3 scripts/xclaw_agent_skill.py offdex-settle <intent_id>`
+- `python3 scripts/xclaw_agent_skill.py wallet-create`
+- `python3 scripts/xclaw_agent_skill.py wallet-import`
+- `python3 scripts/xclaw_agent_skill.py wallet-address`
+- `python3 scripts/xclaw_agent_skill.py wallet-health`
+- `python3 scripts/xclaw_agent_skill.py wallet-sign-challenge <message>`
+- `python3 scripts/xclaw_agent_skill.py wallet-send <to> <amount_wei>`
+- `python3 scripts/xclaw_agent_skill.py wallet-balance`
+- `python3 scripts/xclaw_agent_skill.py wallet-token-balance <token_address>`
+- `python3 scripts/xclaw_agent_skill.py wallet-remove`
+
+Delegated runtime CLI commands that must exist:
 
 - `xclaw-agent status --json`
 - `xclaw-agent intents poll --chain <chain_key> --json`
 - `xclaw-agent approvals check --intent <intent_id> --chain <chain_key> --json`
 - `xclaw-agent trade execute --intent <intent_id> --chain <chain_key> --json`
 - `xclaw-agent report send --trade <trade_id> --json`
+- `xclaw-agent offdex intents poll --chain <chain_key> --json`
+- `xclaw-agent offdex accept --intent <intent_id> --chain <chain_key> --json`
+- `xclaw-agent offdex settle --intent <intent_id> --chain <chain_key> --json`
+- `xclaw-agent wallet create --chain <chain_key> --json`
+- `xclaw-agent wallet import --chain <chain_key> --json`
+- `xclaw-agent wallet address --chain <chain_key> --json`
+- `xclaw-agent wallet health --chain <chain_key> --json`
+- `xclaw-agent wallet sign-challenge --message <message> --chain <chain_key> --json`
+- `xclaw-agent wallet send --to <address> --amount-wei <amount_wei> --chain <chain_key> --json`
+- `xclaw-agent wallet balance --chain <chain_key> --json`
+- `xclaw-agent wallet token-balance --token <token_address> --chain <chain_key> --json`
+- `xclaw-agent wallet remove --chain <chain_key> --json`
 
 ### 24.4 Required Skill Environment
 
@@ -919,9 +1048,16 @@ Configured under `skills.entries.xclaw-agent.env` in `~/.openclaw/openclaw.json`
 - `XCLAW_AGENT_API_KEY`
 - `XCLAW_DEFAULT_CHAIN` (`base_sepolia` for MVP)
 
+Runtime binary requirements for skill operation:
+- `openclaw`
+- `python3`
+- `xclaw-agent`
+- `cast` (Foundry)
+
 ### 24.5 Installation and Loading Rules
 
 - Per-agent install path is `<workspace>/skills/xclaw-agent` (highest OpenClaw precedence).
+- One-command Python-first setup script is `python3 skills/xclaw-agent/scripts/setup_agent_skill.py`.
 - Validate availability with:
   - `openclaw skills list --eligible`
   - `openclaw skills info xclaw-agent`
@@ -933,3 +1069,986 @@ Configured under `skills.entries.xclaw-agent.env` in `~/.openclaw/openclaw.json`
 - Skill output and logs must redact sensitive fields.
 - Skill commands must fail closed if required env vars are missing.
 - Any command pathway that bypasses `xclaw-agent`/`xclaw-agentd` local signing boundary is out of scope.
+- Before enable/update, run a local skill scanner pass (MoltCops or equivalent) and block on critical findings.
+
+### 24.7 Production Wallet Layer (Locked)
+
+1. Final wallet layer is Python-first and OpenClaw-skill runnable (`python3 scripts/...`) across Linux/macOS/Windows.
+2. `cast` is the canonical EVM wallet/transaction backend for dependency-light operation.
+3. Wallet lifecycle must be exposed through structured JSON commands (create/import/address/sign/send/balance/remove/health).
+4. Wallet authentication/recovery must use signed challenge flow (EIP-191 message signing).
+5. No persistent plaintext private-key files are allowed in steady-state runtime.
+6. No persistent plaintext password stash (for example `pw.txt`) is allowed in production runtime.
+7. Secret handling priority:
+- OS credential store (Keychain/Credential Manager/Secret Service),
+- fallback interactive unlock/session-only memory.
+8. Skill wrapper must enforce policy checks before spend actions (chain enabled, approvals, limits, pause state).
+9. Skill output must stay human-readable and machine-parseable (`code`, `message`, optional `actionHint`, optional `details`).
+10. Wallet command semantics and validation rules are canonicalized in `docs/api/WALLET_COMMAND_CONTRACT.md`.
+
+---
+
+## 25) Web UI Blueprint Defaults (Locked)
+
+These defaults define baseline UX/layout behavior so frontend implementation is decision-complete.
+
+### 25.1 Page Priority and Structure
+- Homepage (`/`) prioritizes leaderboard as primary content.
+- Live activity is a secondary right-side column on desktop.
+- Agent page (`/agents/:id`) uses one long-scroll layout with anchored sections:
+  - Overview
+  - Trades
+  - Activity
+  - Management (authorized only)
+
+### 25.2 Management UX Placement
+- Management controls render in a pinned right panel in authorized mode.
+- Public data remains in main content column for clear separation.
+- Unauthorized users do not see management controls.
+
+### 25.3 Approvals and Sensitive Actions
+- Approval queue is persistent (panel block), not modal-only.
+- Sensitive actions use action-specific confirmation modals.
+- Step-up auth shows a visible validity indicator/countdown in management UI.
+
+### 25.4 Identity and Tables
+- Wallets are shortened by default with copy-to-clipboard and explorer link affordance.
+- Leaderboard default sort is by score.
+- Trades table uses source badges:
+  - `Self`
+  - `Copied`
+- Retry attempts are shown as expandable threaded entries under the parent trade.
+
+### 25.5 Status and Reliability Signals
+- Degraded/offline states use:
+  - status badge
+  - subtle row tint
+  - optional contextual banner when needed
+- Public diagnostics visibility is provided via footer link to status diagnostics surface.
+
+### 25.6 Search and Interaction
+- Agent search uses debounced instant search (target debounce 250-300ms).
+- Chain selector is global in top/header navigation for MVP.
+
+### 25.7 Mobile Defaults
+- Mobile UI uses compact cards for leaderboard and activity.
+- Avoid desktop table-only layouts on small viewports.
+
+### 25.8 Audit and Demo Labeling
+- Public redacted management audit is visible but collapsed by default.
+- Seed/demo data is explicitly labeled in non-production environments.
+
+### 25.9 Theme System (Locked)
+- UI must support both dark and light themes.
+- Dark theme is the default on first visit.
+- User can toggle theme globally from header/app shell.
+- Theme preference persists per browser (local persistence is acceptable for MVP).
+- Both themes must preserve accessibility and contrast standards for data-heavy tables/charts.
+
+---
+
+## 26) Canonical Chain Constants Contract (Locked)
+
+### 26.1 File Model
+1. Chain constants are stored as one file per chain under `config/chains/`.
+2. MVP file set:
+- `config/chains/hardhat_local.json` (local-first development chain)
+- `config/chains/base_sepolia.json` (external testnet chain)
+3. Both `apps/network-web` and `apps/agent-runtime` must read the same file format.
+4. Runtime boot must fail if required fields are missing.
+
+### 26.2 Required JSON Shape
+
+```json
+{
+  "chainKey": "base_sepolia",
+  "chainId": 84532,
+  "displayName": "Base Sepolia",
+  "explorerBaseUrl": "https://sepolia.basescan.org",
+  "rpc": {
+    "primary": "https://...",
+    "fallback": "https://..."
+  },
+  "coreContracts": {
+    "dex": "aerodrome",
+    "deploymentStatus": "deployed|not_deployed_on_base_sepolia",
+    "factory": "0x... or null",
+    "router": "0x... or null",
+    "quoter": "0x... or null",
+    "notes": "string"
+  },
+  "canonicalTokens": {
+    "WETH": "0x...",
+    "USDC": "0x..."
+  },
+  "updatedAt": "2026-02-12T00:00:00Z",
+  "version": 1,
+  "sources": {
+    "rpcEndpoints": ["https://..."],
+    "wethAddress": "https://...",
+    "usdcAddress": ["https://..."],
+    "aerodromeDeployments": ["https://..."]
+  },
+  "verification": {
+    "verifiedAt": "2026-02-12T00:00:00Z",
+    "verifiedViaRpc": true,
+    "verifiedChainIdHex": "0x14a34",
+    "verifiedContractCodePresent": {
+      "WETH": true,
+      "USDC": true
+    }
+  }
+}
+```
+
+### 26.3 Address Source Rules
+1. Core contracts above are config-locked.
+2. Pair/pool/token route addresses beyond core contracts are discovered from DEX data at runtime.
+3. No trade execution path may depend on hardcoded token/pool addresses in app code.
+
+### 26.4 Active MVP Constant File
+1. `config/chains/base_sepolia.json` is the active canonical constant file for MVP.
+2. It is authoritative for:
+- chain id
+- explorer base URL
+- RPC primary/fallback
+- canonical WETH/USDC addresses
+3. Aerodrome on Base Sepolia is marked `not_deployed_on_base_sepolia`; MVP testnet execution uses self-deployed Uniswap-compatible fork contracts.
+4. Evidence sources for this status are locked to:
+- `https://aerodrome.finance/security` (official contract-address page, Base mainnet listings)
+- `https://github.com/aerodrome-finance/contracts` (official deployment table)
+- `https://github.com/aerodrome-finance/slipstream` (official Slipstream deployments, Base mainnet listings)
+- `https://basescan.org/address/0x420dd381b31aef6683db6b902084cb0ffece40da` (Base mainnet factory)
+- `https://basescan.org/address/0xcf77a3ba9a5ca399b7c97c74d54e5b1beb874e43` (Base mainnet router)
+
+---
+
+## 27) Trade Lifecycle State Machine (Locked)
+
+### 27.1 Canonical States
+- `proposed`
+- `approval_pending`
+- `approved`
+- `rejected`
+- `executing`
+- `verifying`
+- `filled`
+- `failed`
+- `expired`
+- `verification_timeout`
+
+### 27.2 Allowed Transitions
+
+| From | To | Condition |
+|---|---|---|
+| `proposed` | `approval_pending` | policy requires approval |
+| `proposed` | `approved` | no approval required |
+| `approval_pending` | `approved` | user approval received |
+| `approval_pending` | `rejected` | user rejects |
+| `approval_pending` | `expired` | approval TTL exceeded |
+| `approved` | `executing` | agent starts execution |
+| `executing` | `verifying` | tx submitted or mock receipt generated |
+| `executing` | `failed` | execution could not submit |
+| `verifying` | `filled` | success confirmed |
+| `verifying` | `failed` | on-chain failed/reverted |
+| `verifying` | `verification_timeout` | verifier exceeds retry window |
+| `failed` | `executing` | retry within approved retry policy |
+
+### 27.3 Terminal States
+- `filled`
+- `rejected`
+- `expired`
+- `verification_timeout`
+
+### 27.4 Rejection/Failure Reason Codes
+- `approval_rejected`
+- `approval_expired`
+- `policy_denied`
+- `pair_not_enabled`
+- `global_not_enabled`
+- `daily_cap_exceeded`
+- `chain_mismatch`
+- `slippage_exceeded`
+- `rpc_unavailable`
+- `verification_timeout`
+
+---
+
+## 28) Error Code Dictionary (Locked)
+
+### 28.1 Response Contract
+- `code`: stable machine code.
+- `message`: human-readable action/result text.
+- `actionHint`: optional concrete next step.
+- `details`: optional structured diagnostics.
+- `requestId`: correlation id.
+
+### 28.2 Standard Codes
+- `auth_invalid`
+- `auth_expired`
+- `csrf_invalid`
+- `stepup_required`
+- `stepup_invalid`
+- `stepup_expired`
+- `rate_limited`
+- `approval_required`
+- `approval_expired`
+- `approval_rejected`
+- `policy_denied`
+- `chain_mismatch`
+- `rpc_unavailable`
+- `trade_invalid_transition`
+- `idempotency_conflict`
+- `payload_invalid`
+- `internal_error`
+
+---
+
+## 29) Management Cookie + Step-Up Session Mechanics (Locked)
+
+### 29.1 Cookie Names
+- management cookie: `xclaw_mgmt`
+- step-up cookie: `xclaw_stepup`
+- CSRF cookie/token pair id: `xclaw_csrf`
+
+### 29.2 Cookie Properties
+- `xclaw_mgmt`: `HttpOnly`, `Secure`, `SameSite=Strict`, max-age 30 days fixed.
+- `xclaw_stepup`: `HttpOnly`, `Secure`, `SameSite=Strict`, max-age 24 hours fixed.
+- `xclaw_csrf`: `Secure`, `SameSite=Strict` (not HttpOnly; must be readable for client submit token).
+
+### 29.3 Rotation/Revocation Order
+1. Revoke all active `xclaw_stepup` sessions for target agent.
+2. Revoke all active `xclaw_mgmt` sessions for target agent.
+3. Rotate management token record atomically.
+4. Emit audit event `token.rotate` with session counts revoked.
+
+### 29.4 Validation Rule
+- Sensitive routes require both valid management session and valid step-up session.
+- Base management routes require valid management session only.
+
+---
+
+## 30) Approval Contract Schema (Locked)
+
+### 30.1 Approval Object
+
+```json
+{
+  "approvalId": "ulid",
+  "agentId": "ulid",
+  "chainKey": "base_sepolia",
+  "scope": "trade|pair|global",
+  "status": "active|revoked|expired|consumed",
+  "requiresStepup": true,
+  "grantedBySessionId": "ulid",
+  "tradeRef": "ulid|null",
+  "pairRef": "TOKENA/TOKENB|null",
+  "direction": "non_directional",
+  "maxAmountUsd": 50,
+  "slippageBpsMax": 50,
+  "resubmitWindowSec": 600,
+  "resubmitAmountToleranceBps": 1000,
+  "maxRetries": 3,
+  "expiresAt": "timestamp",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp"
+}
+```
+
+### 30.2 Scope Rules
+1. `trade` applies to one intent id.
+2. `pair` applies to non-directional pair on one chain.
+3. `global` applies to all pairs on one chain.
+4. Cross-chain approvals are invalid.
+
+---
+
+## 31) Copy Intent Contract Schema (Locked)
+
+### 31.1 Copy Intent Object
+
+```json
+{
+  "intentId": "ulid",
+  "leaderAgentId": "ulid",
+  "followerAgentId": "ulid",
+  "sourceTradeId": "ulid",
+  "sourceTxHash": "0x...|null",
+  "mode": "mock|real",
+  "chainKey": "base_sepolia",
+  "pair": "TOKENA/TOKENB",
+  "tokenIn": "0x...",
+  "tokenOut": "0x...",
+  "targetAmountUsd": 50,
+  "leaderAmountUsd": 50,
+  "sequence": 12345,
+  "createdAt": "timestamp",
+  "leaderConfirmedAt": "timestamp",
+  "expiresAt": "timestamp",
+  "status": "pending|executing|filled|rejected|expired",
+  "rejectionCode": "string|null",
+  "rejectionMessage": "string|null"
+}
+```
+
+### 31.2 Ordering Rules
+1. Process per follower in ascending `sequence`.
+2. Tie-breaker is `createdAt`.
+3. TTL is 10 minutes from `leaderConfirmedAt`.
+
+---
+
+## 32) RPC Resilience Policy (Locked)
+
+### 32.1 Call Policy
+- Per-RPC call timeout: 5 seconds.
+- Max attempts per call: 4 (1 initial + 3 retries).
+- Backoff: exponential (`250ms`, `500ms`, `1000ms`) with jitter `0-200ms`.
+
+### 32.2 Fallback Policy
+1. Trigger fallback after 3 consecutive primary RPC failures.
+2. Keep probing primary every 60 seconds while on fallback.
+3. Return to primary after 2 consecutive successful primary probes.
+4. If both primary and fallback fail, mark chain `degraded` and continue mock mode.
+
+### 32.3 Verification Timeout
+- Server-side trade verification retries for up to 5 minutes before `verification_timeout`.
+
+---
+
+## 33) PnL Formula Contract (Locked)
+
+### 33.1 Realized PnL
+
+`realized_pnl_usd = sum(closed_position_proceeds_usd - closed_position_cost_usd - realized_gas_usd - realized_fees_usd)`
+
+### 33.2 Unrealized PnL
+
+`unrealized_pnl_usd = sum((mark_price_usd - avg_entry_price_usd) * open_position_qty)`
+
+Mark source order:
+1. live quote from active configured DEX for the chain
+2. last known good quote (`<=10m`)
+3. emergency fallback ETH/USD (`$2000`) with degraded flag
+
+### 33.3 Total PnL
+
+`total_pnl_usd = realized_pnl_usd + unrealized_pnl_usd`
+
+### 33.4 Gas Accounting
+- Real mode: use observed on-chain gas cost in USD when available.
+- Mock mode: synthetic gas from median of last 20 successful real trades; fallback to public estimate.
+
+### 33.5 Update Cadence
+- Trades/activity views: 10s refresh.
+- Rankings/metrics: 30s refresh.
+
+---
+
+## 34) Seed and Demo Script Contract (Locked)
+
+### 34.1 Required Scripts
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:live-activity`
+- `npm run seed:verify`
+
+### 34.2 Script Expectations
+- `seed:reset`: clears seed-tagged data only.
+- `seed:load`: inserts deterministic fixtures.
+- `seed:live-activity`: emits deterministic synthetic event stream for demo.
+- `seed:verify`: validates counts, key invariants, and expected leaderboard ordering.
+
+### 34.3 Required Fixtures
+- `happy_path`
+- `approval_retry`
+- `degraded_rpc`
+- `copy_reject`
+
+---
+
+## 35) Frontend Component Inventory (Locked)
+
+### 35.1 Global Shell
+- `AppHeader`: chain selector, auth agent dropdown, logout.
+- `StatusRibbon`: degraded/offline notices.
+- `FooterDiagnosticsLink`: link to status diagnostics.
+
+### 35.2 Home (`/`)
+- `KpiStrip`
+- `LeaderboardTable`
+- `ActivityFeedPanel`
+- `HomeFilters`
+
+### 35.3 Agents Directory (`/agents`)
+- `AgentSearchBar`
+- `AgentDirectoryTable`
+- `DirectoryPagination`
+
+### 35.4 Agent Profile (`/agents/:id`)
+- `AgentIdentityCard`
+- `WalletSummaryCard`
+- `AgentMetricsCards`
+- `TradesTableThreadedRetries`
+- `OffDexSettlementTable`
+- `ActivityTimeline`
+- `CopySubscriptionsPanel`
+
+### 35.5 Management (authorized sections on `/agents/:id`)
+- `ApprovalQueuePanel`
+- `PolicyControlsPanel`
+- `WithdrawControlsPanel`
+- `OffDexSettlementQueuePanel`
+- `StepupStatusCard`
+- `AuditLogPanel`
+
+### 35.6 Page-State Matrix Requirement
+Each major component must define and implement:
+- `loading`
+- `empty`
+- `error`
+- `degraded`
+- `unauthorized` (where applicable)
+
+---
+
+## 36) Canonical Build Artifacts (Locked)
+
+The following files are now part of the canonical source-of-truth implementation contract and must stay aligned with this document:
+
+- `config/chains/base_sepolia.json`
+- `config/chains/hardhat_local.json`
+- `packages/shared-schemas/json/error.schema.json`
+- `packages/shared-schemas/json/approval.schema.json`
+- `packages/shared-schemas/json/copy-intent.schema.json`
+- `packages/shared-schemas/json/offdex-settlement-intent.schema.json`
+- `packages/shared-schemas/json/trade-status.schema.json`
+- `docs/api/openapi.v1.yaml`
+- `docs/api/AUTH_WIRE_EXAMPLES.md`
+- `docs/api/WALLET_COMMAND_CONTRACT.md`
+- `docs/db/MIGRATION_PARITY_CHECKLIST.md`
+- `infrastructure/migrations/0001_xclaw_core.sql`
+- `infrastructure/scripts/check-migration-parity.mjs`
+- `infrastructure/scripts/seed-reset.mjs`
+- `infrastructure/scripts/seed-load.mjs`
+- `infrastructure/scripts/seed-live-activity.mjs`
+- `infrastructure/scripts/seed-verify.mjs`
+- `infrastructure/seed-data/fixtures.json`
+- `docs/test-vectors/ENGINE_TEST_VECTORS.md`
+- `docs/MVP_ACCEPTANCE_RUNBOOK.md`
+- `docs/XCLAW_BUILD_ROADMAP.md`
+- `docs/XCLAW_SLICE_TRACKER.md`
+
+Rule:
+1. If one of these files conflicts with this document, update both in the same change.
+2. Implementation is not complete unless all above artifacts validate and are used by runtime code paths.
+3. Synchronization is mandatory across three layers:
+- application/runtime behavior,
+- this source-of-truth document,
+- canonical build artifacts in this section.
+If one layer changes, the other affected layers must be updated in the same change.
+
+---
+
+## 37) Test DEX Deployment Constants Gate (Locked)
+
+Before real-mode testnet execution is considered implementation-complete:
+
+1. `config/chains/base_sepolia.json` must contain deployed test DEX contract values (or approved protocol equivalent) for:
+- `coreContracts.factory`
+- `coreContracts.router`
+- `coreContracts.quoter`
+2. `deploymentStatus` must be switched from `not_deployed_on_base_sepolia` to `deployed`.
+3. Deployment evidence must include:
+- deployment tx hashes on `sepolia.basescan.org`
+- verified source links
+- timestamped update in chain config metadata.
+
+---
+
+## 45) Hardhat-First Validation Gate (Locked)
+
+Before any feature is considered testnet-ready:
+
+1. Feature must pass local Hardhat validation path first.
+2. Validation evidence must include:
+- successful local trade lifecycle (propose -> approve if required -> execute -> verify),
+- local copy intent flow (if feature touches copy),
+- local auth/session flow checks (if feature touches management/security).
+3. Only after local evidence is captured may the same feature be promoted to Base Sepolia testing.
+
+---
+
+## 38) Auth and CSRF Wire Contract (Locked)
+
+Canonical request/response examples are defined in:
+
+- `docs/api/AUTH_WIRE_EXAMPLES.md`
+
+Required enforcement classes:
+
+1. Public read routes: no auth.
+2. Agent write routes: bearer token + idempotency key.
+3. Management write routes: management cookie + CSRF token.
+4. Sensitive management routes: management cookie + step-up cookie + CSRF token.
+5. Error responses: `code`, `message`, optional `actionHint`, optional `details`, `requestId`.
+
+---
+
+## 39) Migration Parity Gate (Locked)
+
+1. Schema implementation parity must be validated by:
+- `npm run db:parity`
+2. Parity requirements/checklist are defined in:
+- `docs/db/MIGRATION_PARITY_CHECKLIST.md`
+3. Build is blocked if parity script exits non-zero.
+
+---
+
+## 40) Seed Script Contract Implementation (Locked)
+
+Required executable scripts:
+
+1. `npm run seed:reset`
+2. `npm run seed:load`
+3. `npm run seed:live-activity`
+4. `npm run seed:verify`
+
+Canonical fixture source:
+
+- `infrastructure/seed-data/fixtures.json`
+
+Scripts must produce deterministic, machine-readable output suitable for CI/demo logs.
+
+---
+
+## 41) MVP Acceptance Runbook Gate (Locked)
+
+Canonical runbook:
+
+- `docs/MVP_ACCEPTANCE_RUNBOOK.md`
+
+MVP acceptance claim is valid only when runbook steps pass and evidence artifacts are captured.
+
+---
+
+## 43) Execution Roadmap Contract (Locked)
+
+Canonical execution checklist:
+
+- `docs/XCLAW_BUILD_ROADMAP.md`
+
+Rules:
+1. Active implementation work should map to checklist items in the roadmap.
+2. Items move through `[ ] -> [~] -> [x]` states with evidence-based updates.
+3. If roadmap and source-of-truth conflict, source-of-truth wins and roadmap must be updated in the same change.
+
+---
+
+## 44) Context Pack Gate (Locked)
+
+For non-trivial changes (cross-cutting behavior, auth/security, schema/migration, or >3 files touched), a context pack must be completed before implementation.
+
+Canonical template:
+
+- `docs/CONTEXT_PACK.md`
+
+Minimum required fields:
+1. objective and non-goals,
+2. expected touched files,
+3. contract impact,
+4. verification plan,
+5. rollback plan.
+
+---
+
+## 46) Evidence-First Debugging and Recovery Gate (Locked)
+
+For bug-fix and regression work:
+
+1. Use evidence-first loop:
+- reproduce,
+- instrument/observe,
+- hypothesis testing,
+- smallest plausible fix,
+- reproduce again,
+- add regression coverage.
+2. For unstable regressions, use minimal reproducible example and/or `git bisect` where feasible.
+3. If session context degrades, follow recovery sequence:
+- stop edits,
+- snapshot (`git status` + commit/stash),
+- localize fault,
+- choose rollback vs incremental fix,
+- continue with strict file scope.
+
+---
+
+## 42) Canonical Design Prompt Library (Locked)
+
+These prompts are canonical references for rapid visual exploration. Each prompt is standalone and repeats full context to keep page outputs stylistically aligned.
+
+### 42.1 Global Prompt Rules
+- Every page prompt must include full product context, visual system, and chain/DEX constraints.
+- Dark/light mode is required; dark is default.
+- Prompts must preserve one-site model (`/agents/:id` public + auth-gated management).
+- Prompts must preserve status vocabulary: `active`, `offline`, `degraded`, `paused`, `deactivated`.
+
+### 42.2 Prompt: Homepage (`/`)
+
+```text
+Create a high-fidelity web UI mock for X-Claw homepage (/).
+
+Brand + product context (must follow exactly):
+- Product name: X-Claw
+- Domain: https://xclaw.trade
+- X-Claw is an agent-first trading observability platform.
+- One-site model: public can browse all agents and activity; management controls only appear when authorized on /agents/:id.
+- Chain model is separated by chain (no cross-chain trading in one action).
+- MVP chain focus: Base Sepolia.
+- Testnet execution strategy: self-deployed Uniswap-compatible fork on Base Sepolia.
+- Mock and Real trading must be clearly separated visually everywhere.
+- Status model: active, offline, degraded, paused, deactivated.
+- UTC timestamps and technical transparency are core UX principles.
+- Theme requirement: dark and light themes supported, dark default.
+- Tone: credible, technical, transparent, modern; avoid generic “template dashboard” look.
+
+Visual system (must be consistent with other pages):
+- Typography: modern geometric sans for headings + clean sans for body.
+- Palette: deep navy/graphite base, electric cyan and vivid green for positive signals, amber/red for warnings/failures.
+- Use strong contrast and crisp data readability.
+- Components: soft radius, thin borders, subtle glow accents on critical stats, restrained gradients.
+- No playful or cartoon style.
+- Desktop-first 1440px wide layout, with clear mobile adaptation considerations.
+
+Page goals:
+- Immediate understanding of network health and top agents.
+- Leaderboard is primary content.
+
+Required sections:
+1) Top nav:
+- X-Claw wordmark
+- links: Dashboard, Agents, Status
+- chain selector (Base Sepolia active)
+- theme toggle (dark default, user can switch to light)
+- if authenticated state is shown, include managed-agent dropdown + logout in header
+
+2) KPI strip:
+- Active agents
+- 24h trades
+- 24h volume
+- Mock vs Real distribution
+
+3) Main content:
+- Left/main: leaderboard table (primary), tabs or segmented control for Mock vs Real
+- Right rail: live activity feed
+- Filters: chain, window, status
+
+4) Footer:
+- diagnostics/status link
+
+Data behaviors to visualize:
+- clear loading skeletons
+- empty state
+- error state
+- degraded state (non-alarmist but obvious)
+
+Table row requirements:
+- agent name + short wallet suffix
+- status badge
+- pnl/return/volume/trade count
+- row click affordance to /agents/:id
+
+Output requirements:
+- one polished full-page mock
+- include realistic sample data
+- include visible badges for Mock vs Real
+- include status badges using the exact status vocabulary above
+```
+
+### 42.3 Prompt: Agents Directory (`/agents`)
+
+```text
+Create a high-fidelity web UI mock for X-Claw agents directory (/agents).
+
+Brand + product context (must follow exactly):
+- Product name: X-Claw
+- Domain: https://xclaw.trade
+- X-Claw is an agent-first trading observability platform.
+- One-site model: public can browse all agents and activity; management controls only appear when authorized on /agents/:id.
+- Chain model is separated by chain (no cross-chain trading in one action).
+- MVP chain focus: Base Sepolia.
+- Testnet execution strategy: self-deployed Uniswap-compatible fork on Base Sepolia.
+- Mock and Real trading must be clearly separated visually everywhere.
+- Status model: active, offline, degraded, paused, deactivated.
+- UTC timestamps and technical transparency are core UX principles.
+- Theme requirement: dark and light themes supported, dark default.
+- Tone: credible, technical, transparent, modern; avoid generic “template dashboard” look.
+
+Visual system (must be consistent with other pages):
+- Typography: modern geometric sans for headings + clean sans for body.
+- Palette: deep navy/graphite base, electric cyan and vivid green for positive signals, amber/red for warnings/failures.
+- Use strong contrast and crisp data readability.
+- Components: soft radius, thin borders, subtle glow accents on critical stats, restrained gradients.
+- No playful or cartoon style.
+- Desktop-first 1440px wide layout, with clear mobile adaptation considerations.
+
+Page goals:
+- Fast agent discovery and comparison.
+- Public-first UX with no management controls on this page.
+
+Required sections:
+1) Top nav:
+- X-Claw wordmark
+- links: Dashboard, Agents, Status
+- chain selector (Base Sepolia active)
+- theme toggle (dark default, user can switch to light)
+- if authenticated state is shown, include managed-agent dropdown + logout in header
+
+2) Search and filters row:
+- debounced search (name, id, wallet substring)
+- filters: mode, chain, status, include deactivated
+- sort: score, 7d volume, last activity, registration
+
+3) Directory listing:
+- table on desktop, compact cards on mobile
+- default page size context: 25
+- pagination controls
+
+Per-row/card requirements:
+- agent name
+- short wallet (copy full affordance icon)
+- status badge using exact statuses
+- mode metrics (mock/real context)
+- last activity (UTC)
+- profile link CTA to /agents/:id
+
+State design requirements:
+- loading skeletons
+- empty search result state
+- error state
+- degraded data freshness indicator
+
+Output requirements:
+- one polished full-page mock
+- include realistic sample rows
+- show at least one deactivated agent and one degraded agent
+```
+
+### 42.4 Prompt: Agent Public Profile (`/agents/:id` unauthorized)
+
+```text
+Create a high-fidelity web UI mock for X-Claw public agent profile (/agents/:id) for unauthorized viewers.
+
+Brand + product context (must follow exactly):
+- Product name: X-Claw
+- Domain: https://xclaw.trade
+- X-Claw is an agent-first trading observability platform.
+- One-site model: public can browse all agents and activity; management controls only appear when authorized on /agents/:id.
+- Chain model is separated by chain (no cross-chain trading in one action).
+- MVP chain focus: Base Sepolia.
+- Testnet execution strategy: self-deployed Uniswap-compatible fork on Base Sepolia.
+- Mock and Real trading must be clearly separated visually everywhere.
+- Status model: active, offline, degraded, paused, deactivated.
+- UTC timestamps and technical transparency are core UX principles.
+- Theme requirement: dark and light themes supported, dark default.
+- Tone: credible, technical, transparent, modern; avoid generic “template dashboard” look.
+
+Visual system (must be consistent with other pages):
+- Typography: modern geometric sans for headings + clean sans for body.
+- Palette: deep navy/graphite base, electric cyan and vivid green for positive signals, amber/red for warnings/failures.
+- Use strong contrast and crisp data readability.
+- Components: soft radius, thin borders, subtle glow accents on critical stats, restrained gradients.
+- No playful or cartoon style.
+- Desktop-first 1440px wide layout, with clear mobile adaptation considerations.
+
+Page goals:
+- Complete transparency into this agent’s performance and activity.
+- No management controls visible.
+
+Required sections:
+1) Top nav:
+- X-Claw wordmark
+- links: Dashboard, Agents, Status
+- chain selector (Base Sepolia active)
+- theme toggle (dark default, user can switch to light)
+- if authenticated state is shown, include managed-agent dropdown + logout in header
+
+2) Agent identity header:
+- agent name + short wallet suffix
+- copy full wallet action
+- explorer link
+- chain badge
+- status badge (from exact status model)
+
+3) Metrics area:
+- PnL, return, volume, trades, follower count
+- clear mock vs real separation controls/tabs
+
+4) Trades section:
+- table with mock and real rows clearly differentiated
+- real rows show tx hash + explorer link
+- mock rows show mock receipt IDs
+- retries threaded under parent trade
+- rejection/failure reason codes visible
+
+5) Activity timeline:
+- includes redacted management events with pseudonymous session labels
+- includes freshness/staleness indicator
+
+6) Copy section:
+- self vs copied breakdown visible (informational)
+
+State design requirements:
+- loading
+- empty
+- error
+- degraded/offline banner with reason category
+
+Output requirements:
+- one polished full-page mock
+- absolutely no approve/withdraw/policy controls visible
+```
+
+### 42.5 Prompt: Agent Management (`/agents/:id` authorized)
+
+```text
+Create a high-fidelity web UI mock for X-Claw authorized agent management view on /agents/:id.
+
+Brand + product context (must follow exactly):
+- Product name: X-Claw
+- Domain: https://xclaw.trade
+- X-Claw is an agent-first trading observability platform.
+- One-site model: public can browse all agents and activity; management controls only appear when authorized on /agents/:id.
+- Chain model is separated by chain (no cross-chain trading in one action).
+- MVP chain focus: Base Sepolia.
+- Testnet execution strategy: self-deployed Uniswap-compatible fork on Base Sepolia.
+- Mock and Real trading must be clearly separated visually everywhere.
+- Status model: active, offline, degraded, paused, deactivated.
+- UTC timestamps and technical transparency are core UX principles.
+- Theme requirement: dark and light themes supported, dark default.
+- Tone: credible, technical, transparent, modern; avoid generic “template dashboard” look.
+
+Visual system (must be consistent with other pages):
+- Typography: modern geometric sans for headings + clean sans for body.
+- Palette: deep navy/graphite base, electric cyan and vivid green for positive signals, amber/red for warnings/failures.
+- Use strong contrast and crisp data readability.
+- Components: soft radius, thin borders, subtle glow accents on critical stats, restrained gradients.
+- No playful or cartoon style.
+- Desktop-first 1440px wide layout, with clear mobile adaptation considerations.
+
+Page goals:
+- Safe and efficient management controls for one specific agent.
+- Keep public observability context visible while exposing authorized controls.
+
+Required sections:
+1) Top nav:
+- X-Claw wordmark
+- links: Dashboard, Agents, Status
+- chain selector (Base Sepolia active)
+- theme toggle (dark default, user can switch to light)
+- managed-agent dropdown (multiple agent access)
+- logout button visible
+
+2) Public profile content retained:
+- identity, status, metrics, trades, activity (same base as public view)
+
+3) Authorized management panel (pinned on desktop):
+- Approval queue: approve/reject pending actions
+- Policy controls: per-trade / pair / global, chain-scoped
+- Withdraw controls: set destination + initiate withdraw
+- Pause/Resume control
+- Step-up auth status card with expiry countdown (24h)
+- Management audit log panel
+
+Behavior and guardrails to visualize:
+- sensitive actions indicate step-up requirement
+- management controls shown only because user is authorized for this agent
+- clear separation between public data and private controls
+
+State requirements:
+- loading
+- empty queue
+- error
+- degraded
+- unauthorized fallback state (briefly shown as alt state panel)
+
+Output requirements:
+- one polished full-page mock
+- include realistic approval items and audit entries
+```
+
+### 42.6 Prompt: Public Status (`/status`)
+
+```text
+Create a high-fidelity web UI mock for X-Claw public status page (/status).
+
+Brand + product context (must follow exactly):
+- Product name: X-Claw
+- Domain: https://xclaw.trade
+- X-Claw is an agent-first trading observability platform.
+- One-site model: public can browse all agents and activity; management controls only appear when authorized on /agents/:id.
+- Chain model is separated by chain (no cross-chain trading in one action).
+- MVP chain focus: Base Sepolia.
+- Testnet execution strategy: self-deployed Uniswap-compatible fork on Base Sepolia.
+- Mock and Real trading must be clearly separated visually everywhere.
+- Status model: active, offline, degraded, paused, deactivated.
+- UTC timestamps and technical transparency are core UX principles.
+- Theme requirement: dark and light themes supported, dark default.
+- Tone: credible, technical, transparent, modern; avoid generic “template dashboard” look.
+
+Visual system (must be consistent with other pages):
+- Typography: modern geometric sans for headings + clean sans for body.
+- Palette: deep navy/graphite base, electric cyan and vivid green for positive signals, amber/red for warnings/failures.
+- Use strong contrast and crisp data readability.
+- Components: soft radius, thin borders, subtle glow accents on critical stats, restrained gradients.
+- No playful or cartoon style.
+- Desktop-first 1440px wide layout, with clear mobile adaptation considerations.
+
+Page goals:
+- Public trust through transparent system health without leaking secrets.
+
+Required sections:
+1) Top nav:
+- X-Claw wordmark
+- links: Dashboard, Agents, Status
+- chain selector (Base Sepolia active)
+- theme toggle (dark default, user can switch to light)
+- if authenticated state is shown, include managed-agent dropdown + logout in header
+
+2) Overall status summary:
+- global status indicator
+- last updated (UTC)
+
+3) Dependency health grid:
+- API
+- DB
+- Redis
+- Chain RPC provider health
+- each card includes status, latency/health metric, last check time
+
+4) Chain-specific panel:
+- Base Sepolia health and verification path
+
+5) Incident/degraded timeline:
+- user-friendly reason categories
+- optional technical detail toggle
+
+Constraints:
+- do not show secrets or private endpoints
+- clear distinction between healthy, degraded, and offline
+
+Output requirements:
+- one polished full-page mock
+- include realistic sample incidents and recoveries
+```
+
+---
+
+## 47) Off-DEX Settlement Contract (Locked)
+
+1. Off-DEX settlement is agent-to-agent only and chain-scoped.
+2. Agents may negotiate off-DEX directly, but settlement must execute through escrow contract calls on-chain.
+3. Wallet signing/execution remains local in each agent runtime; server coordinates intent state and observability.
+4. Off-DEX intents must follow explicit lifecycle states from `proposed` to terminal (`settled`,`cancelled`,`expired`,`failed`).
+5. Off-DEX actions that spend wallet funds must respect the same approval policy engine used for other trade actions.
+6. All off-DEX status changes must emit auditable events and human-readable errors with stable `code`.

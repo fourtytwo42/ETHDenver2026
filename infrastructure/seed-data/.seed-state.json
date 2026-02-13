@@ -1,0 +1,15 @@
+{
+  "seedMode": true,
+  "loadedAt": "2026-02-13T02:43:15.917Z",
+  "version": 1,
+  "scenarios": [
+    "happy_path",
+    "approval_retry",
+    "degraded_rpc",
+    "copy_reject"
+  ],
+  "totals": {
+    "agents": 6,
+    "trades": 11
+  }
+}

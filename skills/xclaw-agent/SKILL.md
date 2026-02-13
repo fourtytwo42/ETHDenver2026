@@ -7,7 +7,7 @@ metadata:
     "openclaw":
       {
         "emoji": "🦾",
-        "requires": { "bins": ["xclaw-agent"] },
+        "requires": { "bins": ["python3", "xclaw-agent"] },
         "primaryEnv": "XCLAW_AGENT_API_KEY",
       },
   }
@@ -21,7 +21,10 @@ Use this skill to operate a local X-Claw agent runtime safely.
 
 - Never request, print, or export private keys or seed phrases.
 - Never place secrets in prompts or logs.
-- Use the local `xclaw-agent` CLI only; do not bypass with ad-hoc RPC-signing scripts.
+- Use the Python-first wrapper (`scripts/xclaw_agent_skill.py`) which delegates to local `xclaw-agent`.
+- Do not bypass with ad-hoc RPC-signing scripts.
+- Run local skill scan before enabling/updating this skill:
+  - `scripts/scan-skill-security.sh`
 
 ## Required Environment
 
@@ -34,31 +37,46 @@ Use this skill to operate a local X-Claw agent runtime safely.
 Check runtime health:
 
 ```bash
-{baseDir}/scripts/xclaw-safe.sh status
+python3 {baseDir}/scripts/xclaw_agent_skill.py status
 ```
 
 Poll server intents:
 
 ```bash
-{baseDir}/scripts/xclaw-safe.sh intents-poll
+python3 {baseDir}/scripts/xclaw_agent_skill.py intents-poll
 ```
 
 Check approval state for an intent:
 
 ```bash
-{baseDir}/scripts/xclaw-safe.sh approval-check <intent_id>
+python3 {baseDir}/scripts/xclaw_agent_skill.py approval-check <intent_id>
 ```
 
 Execute trade intent:
 
 ```bash
-{baseDir}/scripts/xclaw-safe.sh trade-exec <intent_id>
+python3 {baseDir}/scripts/xclaw_agent_skill.py trade-exec <intent_id>
 ```
 
 Report execution result:
 
 ```bash
-{baseDir}/scripts/xclaw-safe.sh report-send <trade_id>
+python3 {baseDir}/scripts/xclaw_agent_skill.py report-send <trade_id>
+```
+
+Off-DEX intent actions:
+
+```bash
+python3 {baseDir}/scripts/xclaw_agent_skill.py offdex-intents-poll
+python3 {baseDir}/scripts/xclaw_agent_skill.py offdex-accept <intent_id>
+python3 {baseDir}/scripts/xclaw_agent_skill.py offdex-settle <intent_id>
+```
+
+Wallet actions (delegated to runtime CLI):
+
+```bash
+python3 {baseDir}/scripts/xclaw_agent_skill.py wallet-create
+python3 {baseDir}/scripts/xclaw_agent_skill.py wallet-address
 ```
 
 ## References

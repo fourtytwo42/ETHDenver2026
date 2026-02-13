@@ -1,0 +1,58 @@
+{
+  "chainKey": "base_sepolia",
+  "chainId": 84532,
+  "displayName": "Base Sepolia",
+  "explorerBaseUrl": "https://sepolia.basescan.org",
+  "rpc": {
+    "primary": "https://sepolia.base.org",
+    "fallback": "https://base-sepolia-rpc.publicnode.com"
+  },
+  "coreContracts": {
+    "dex": "uniswap_fork",
+    "deploymentStatus": "not_deployed_on_base_sepolia",
+    "factory": null,
+    "router": null,
+    "quoter": null,
+    "escrow": null,
+    "escrowAbiVersion": "xclaw_escrow_v1",
+    "notes": "Slice-02 contract freeze: Base Sepolia strategy is self-deployed Uniswap-compatible fork + escrow contract in later deployment slice. Contract addresses remain null until deployment evidence is captured."
+  },
+  "canonicalTokens": {
+    "WETH": "0x4200000000000000000000000000000000000006",
+    "USDC": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+  },
+  "updatedAt": "2026-02-13T00:00:00Z",
+  "version": 1,
+  "sources": {
+    "rpcEndpoints": [
+      "https://docs.base.org/chain/run-a-base-node"
+    ],
+    "wethAddress": "https://docs.base.org/base-chain/network-information/base-contracts",
+    "usdcAddress": [
+      "https://docs.base.org/base-account/improve-ux/batch-transactions",
+      "https://docs.base.org/builderkits/onchainkit/paymaster/erc20-paymaster"
+    ],
+    "aerodromeDeployments": [
+      "https://aerodrome.finance/security",
+      "https://github.com/aerodrome-finance/contracts",
+      "https://github.com/aerodrome-finance/slipstream",
+      "https://basescan.org/address/0x420dd381b31aef6683db6b902084cb0ffece40da",
+      "https://basescan.org/address/0xcf77a3ba9a5ca399b7c97c74d54e5b1beb874e43"
+    ],
+    "mvpTestDexStrategy": "deploy_uniswap_compatible_fork_on_base_sepolia",
+    "escrowAbiMetadata": "xclaw_escrow_v1"
+  },
+  "verification": {
+    "verifiedAt": "2026-02-13T00:00:00Z",
+    "verifiedViaRpc": true,
+    "verifiedChainIdHex": "0x14a34",
+    "verifiedContractCodePresent": {
+      "WETH": true,
+      "USDC": true,
+      "factory": false,
+      "router": false,
+      "quoter": false,
+      "escrow": false
+    }
+  }
+}

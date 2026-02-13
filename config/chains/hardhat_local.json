@@ -1,0 +1,44 @@
+{
+  "chainKey": "hardhat_local",
+  "chainId": 31337,
+  "displayName": "Hardhat Local",
+  "explorerBaseUrl": null,
+  "rpc": {
+    "primary": "http://127.0.0.1:8545",
+    "fallback": null
+  },
+  "coreContracts": {
+    "dex": "uniswap_fork",
+    "deploymentStatus": "local_deployed",
+    "factory": null,
+    "router": null,
+    "quoter": null,
+    "escrow": null,
+    "escrowAbiVersion": "xclaw_escrow_v1",
+    "notes": "Slice-02 contract freeze: local contract addresses are intentionally deferred to Slice 07 deployment evidence or deterministic fixtures; null values are expected in this slice."
+  },
+  "canonicalTokens": {
+    "WETH": null,
+    "USDC": null
+  },
+  "updatedAt": "2026-02-13T00:00:00Z",
+  "version": 1,
+  "sources": {
+    "network": "hardhat_local",
+    "mvpTestDexStrategy": "deploy_uniswap_compatible_fork_on_hardhat_before_base_sepolia",
+    "escrowAbiMetadata": "xclaw_escrow_v1"
+  },
+  "verification": {
+    "verifiedAt": "2026-02-13T00:00:00Z",
+    "verifiedViaRpc": false,
+    "verifiedChainIdHex": "0x7a69",
+    "verifiedContractCodePresent": {
+      "WETH": false,
+      "USDC": false,
+      "factory": false,
+      "router": false,
+      "quoter": false,
+      "escrow": false
+    }
+  }
+}

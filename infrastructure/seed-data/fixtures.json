@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "generatedAt": "2026-02-13T00:00:00Z",
+  "scenarios": {
+    "happy_path": {
+      "description": "Agent proposes, approval granted, trade filled.",
+      "agents": 2,
+      "trades": 4
+    },
+    "approval_retry": {
+      "description": "Approved trade retries then fills within policy.",
+      "agents": 1,
+      "trades": 3
+    },
+    "degraded_rpc": {
+      "description": "Primary/fallback RPC failures produce degraded state.",
+      "agents": 1,
+      "trades": 2
+    },
+    "copy_reject": {
+      "description": "Copy intent rejected due to policy/cap.",
+      "agents": 2,
+      "trades": 2
+    }
+  }
+}

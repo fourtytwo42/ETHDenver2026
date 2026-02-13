@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed:reset": "node infrastructure/scripts/seed-reset.mjs",
+    "seed:load": "node infrastructure/scripts/seed-load.mjs",
+    "seed:live-activity": "node infrastructure/scripts/seed-live-activity.mjs",
+    "seed:verify": "node infrastructure/scripts/seed-verify.mjs",
+    "db:parity": "node infrastructure/scripts/check-migration-parity.mjs"
   },
   "dependencies": {
     "next": "16.1.6",
