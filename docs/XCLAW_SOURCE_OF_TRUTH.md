@@ -626,10 +626,10 @@ Rule:
 Execution map in repo issues:
 - #1 Slice 01: Environment + Toolchain Baseline
 - #2 Slice 02: Canonical Contracts Freeze
-- #3 Slice 03: Agent Runtime CLI Scaffold
-- #4 Slice 04: Wallet Core
+- #3 Slice 03: Agent Runtime CLI Scaffold (Done-Path Ready)
+- #4 Slice 04: Wallet Core (Create/Import/Address/Health)
 - #5 Slice 05: Wallet Auth + Signing
-- #6 Slice 06: Wallet Spend Ops
+- #6 Slice 06: Wallet Spend Ops (Send + Balance + Token Balance + Remove)
 - #7 Slice 07: Core API Vertical Slice
 - #8 Slice 08: Auth + Management Vertical Slice
 - #9 Slice 09: Public Web Vertical Slice

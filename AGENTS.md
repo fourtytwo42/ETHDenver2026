@@ -23,10 +23,14 @@ Build execution must follow both:
 Rules:
 1. Work one slice at a time from `XCLAW_SLICE_TRACKER.md`.
 2. Do not start the next slice until current slice DoD is met and marked complete.
-3. Any touched roadmap items for the active slice must be updated in the same change.
-4. If work crosses slice boundaries, stop and split into separate follow-up changes unless explicitly approved.
-5. After a slice is fully tested and all required validations pass, commit and push that slice before starting the next slice.
-6. Every slice must be linked to at least one GitHub issue; on slice completion, post verification evidence + commit hash(es) to the mapped issue(s) in the same session.
+3. For every active slice, implementation scope must be validated against both:
+- `docs/XCLAW_SLICE_TRACKER.md` (slice Goal + DoD),
+- `docs/XCLAW_SOURCE_OF_TRUTH.md` (canonical behavior/contract for that slice scope).
+4. If tracker and source-of-truth differ, stop implementation and reconcile both docs in the same change before continuing.
+5. Any touched roadmap items for the active slice must be updated in the same change.
+6. If work crosses slice boundaries, stop and split into separate follow-up changes unless explicitly approved.
+7. After a slice is fully tested and all required validations pass, commit and push that slice before starting the next slice.
+8. Every slice must be linked to at least one GitHub issue; on slice completion, post verification evidence + commit hash(es) to the mapped issue(s) in the same session.
 
 ## 2.2) Runtime separation baseline (mandatory)
 1. Treat server/web runtime and agent/OpenClaw runtime as separate concerns.
