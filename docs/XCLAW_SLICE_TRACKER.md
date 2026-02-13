@@ -58,17 +58,17 @@ DoD:
 ---
 
 ## Slice 04: Wallet Core (Create/Import/Address/Health)
-Status: [ ]
+Status: [x]
 
 Goal:
 - Real wallet lifecycle baseline works on local machine.
 
 DoD:
-- [ ] `wallet-create` works
-- [ ] `wallet-import` works
-- [ ] `wallet-address` works
-- [ ] `wallet-health` returns real state
-- [ ] no persistent plaintext key/password files
+- [x] `wallet-create` works
+- [x] `wallet-import` works
+- [x] `wallet-address` works
+- [x] `wallet-health` returns real state
+- [x] no persistent plaintext key/password files
 
 ---
 

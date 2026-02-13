@@ -81,18 +81,21 @@ Errors MUST be machine-parseable and human-readable:
 2. `wallet-send` validates amount is non-negative integer string.
 3. `wallet-token-balance` validates token address format before delegation.
 4. `wallet-sign-challenge` rejects empty message.
+5. `wallet-create` and `wallet-import` require interactive TTY and fail with `non_interactive` in non-interactive contexts.
 
-## 6) Runtime-Behavior Alignment (Slice 03)
+## 6) Runtime-Behavior Alignment (Slice 04)
 
 Current behavior in `apps/agent-runtime/xclaw_agent/cli.py`:
 
-1. `wallet-health` and `wallet-remove` return live scaffold JSON responses.
-2. `wallet-address` returns `wallet_missing` when no wallet exists for the chain.
-3. `wallet-create`, `wallet-import`, `wallet-sign-challenge`, `wallet-send`, `wallet-balance`, and `wallet-token-balance` currently return structured `not_implemented` runtime errors.
-4. Wrapper-level input validation executes before runtime delegation.
-5. On delegated non-zero exits, wrapper passes runtime JSON through unchanged when stdout is parseable JSON payload with `ok` and `code`; otherwise wrapper emits structured `agent_command_failed`.
+1. `wallet-create` is implemented with interactive TTY passphrase prompts and encrypted-at-rest storage.
+2. `wallet-import` is implemented with interactive TTY secret intake and encrypted-at-rest storage.
+3. `wallet-address` returns active chain-bound address or `wallet_missing`.
+4. `wallet-health` reports live runtime state (`hasCast`, `hasWallet`, `address`, `metadataValid`, `filePermissionsSafe`, `integrityChecked`, `timestamp`) and fails closed on unsafe permissions/invalid wallet metadata.
+5. `wallet-sign-challenge`, `wallet-send`, `wallet-balance`, and `wallet-token-balance` remain structured `not_implemented` runtime handlers pending later slices.
+6. Wrapper-level input validation executes before runtime delegation.
+7. On delegated non-zero exits, wrapper passes runtime JSON through unchanged when stdout is parseable JSON payload with `ok` and `code`; otherwise wrapper emits structured `agent_command_failed`.
 
-This is contract-compliant for Slice 03 because command surface, delegation reliability, and JSON error semantics are fixed while real wallet implementation is completed in later slices.
+This is contract-compliant for Slice 04 because wallet core lifecycle baseline is implemented while signing and spend-path commands are deferred to later slices.
 
 ## 7) Security Rules
 

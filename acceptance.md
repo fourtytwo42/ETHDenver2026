@@ -85,3 +85,102 @@ Active slice: `Slice 03: Agent Runtime CLI Scaffold (Done-Path Ready)`
 - Date (UTC): 2026-02-13
 - Action: Added governance rule in `AGENTS.md` requiring commit+push after each fully-tested slice.
 - Action: Checkpoint commit/push created before Slice 04 implementation work.
+
+## Slice 04 Acceptance Evidence
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 04: Wallet Core (Create/Import/Address/Health)`
+
+### Pre-step checkpoint evidence
+- Separate checkpoint commit before Slice 04: `cb22213`
+- Commit pushed to `origin/main` prior to Slice 04 implementation.
+- Governance rule added in `AGENTS.md`: each fully-tested slice must be committed and pushed before next slice.
+
+### File-level evidence (Slice 04)
+- Runtime implementation:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/requirements.txt`
+  - `apps/agent-runtime/tests/test_wallet_core.py`
+  - `apps/agent-runtime/README.md`
+- Contract/docs/process:
+  - `docs/api/WALLET_COMMAND_CONTRACT.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+
+### Environment blockers and resolution
+- Blocker: `python3 -m pip` unavailable (`No module named pip`).
+- Blocker: `python3 -m venv` unavailable (`ensurepip` missing).
+- Resolution used: bootstrap user pip via:
+  - `curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py`
+  - `python3 /tmp/get-pip.py --user --break-system-packages`
+- Dependency install command used:
+  - `python3 -m pip install --user --break-system-packages -r apps/agent-runtime/requirements.txt`
+
+### Unit/integration test evidence
+- `python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -v` -> PASS
+  - roundtrip encrypt/decrypt passes
+  - malformed payload rejected
+  - non-interactive create/import rejected
+  - unsafe permission check rejected
+  - missing wallet address path validated
+
+### Required global gate evidence
+Executed with:
+- `source ~/.nvm/nvm.sh && nvm use --silent default`
+
+Results:
+- `npm run db:parity` -> PASS (`"ok": true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`"ok": true`)
+- `npm run build` -> PASS
+
+### Runtime wallet core evidence
+- Interactive create (TTY) command:
+  - `apps/agent-runtime/bin/xclaw-agent wallet create --chain base_sepolia --json`
+  - result: `ok:true`, `message:"Wallet created."`, address returned.
+- Address command:
+  - `apps/agent-runtime/bin/xclaw-agent wallet address --chain base_sepolia --json`
+  - result: `ok:true`, chain-bound address returned.
+- Health command:
+  - `apps/agent-runtime/bin/xclaw-agent wallet health --chain base_sepolia --json`
+  - result: real state fields returned (`hasCast`, `hasWallet`, `metadataValid`, `filePermissionsSafe`).
+- Interactive import (TTY) command in isolated runtime home:
+  - `XCLAW_AGENT_HOME=/tmp/xclaw-s4-import/.xclaw-agent apps/agent-runtime/bin/xclaw-agent wallet import --chain base_sepolia --json`
+  - result: `ok:true`, `imported:true`, address returned.
+
+### Negative/security-path evidence
+- Non-interactive create rejected:
+  - `wallet create ... --json` -> `code: non_interactive`, exit `2`
+- Non-interactive import rejected:
+  - `wallet import ... --json` -> `code: non_interactive`, exit `2`
+- Unsafe permission rejection:
+  - wallet file mode `0644` -> `wallet health` returns `code: unsafe_permissions`, exit `1`
+- Malformed encrypted payload rejection:
+  - invalid base64 crypto fields -> `wallet health` returns `code: wallet_store_invalid`, exit `1`
+- Plaintext artifact scan:
+  - `rg` scan across wallet dirs found no persisted test passphrases/private-key literal.
+
+### Slice status synchronization
+- `docs/XCLAW_SLICE_TRACKER.md` Slice 04 set to `[x]` with all DoD boxes checked.
+- `docs/XCLAW_BUILD_ROADMAP.md` updated for runtime wallet manager, portable wallet model, and plaintext-artifact guard.
+
+### Dependency and supply-chain notes
+- Added `argon2-cffi==23.1.0`
+  - Purpose: Argon2id key derivation for wallet at-rest encryption key.
+  - Risk note: mature package with bindings-only scope; used strictly for local KDF.
+- Added `pycryptodome==3.21.0`
+  - Purpose: Keccak-256 hashing for deterministic EVM address derivation from private key.
+  - Risk note: mature crypto library; scoped to local address derivation only.
+
+### High-risk review protocol
+- Security-sensitive class: wallet key storage and secret handling.
+- Second-opinion review pass: completed via focused re-review of command error paths, encryption metadata handling, and permission fail-closed behavior.
+- Rollback plan:
+  1. revert Slice 04 touched files only,
+  2. rerun required npm gates + wallet command checks,
+  3. confirm tracker/roadmap/docs return to pre-Slice-04 state.

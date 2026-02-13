@@ -1,19 +1,25 @@
-# X-Claw Agent Runtime (Slice 03 Scaffold)
+# X-Claw Agent Runtime (Slice 04 Wallet Core)
 
-This directory contains the Python runtime scaffold for the `xclaw-agent` CLI.
+This directory contains the Python runtime for the `xclaw-agent` CLI.
 
-## Run locally (smoke)
+## Dependencies
+
+```bash
+python3 -m pip install -r apps/agent-runtime/requirements.txt
+```
+
+## Run locally
 
 ```bash
 apps/agent-runtime/bin/xclaw-agent status --json
 apps/agent-runtime/bin/xclaw-agent wallet health --chain base_sepolia --json
-apps/agent-runtime/bin/xclaw-agent wallet create --chain base_sepolia --json
-apps/agent-runtime/bin/xclaw-agent wallet remove --chain base_sepolia --json
+apps/agent-runtime/bin/xclaw-agent wallet address --chain base_sepolia --json
 ```
 
-## Notes
+## Wallet core notes
 
-- Command surface matches `docs/api/WALLET_COMMAND_CONTRACT.md`.
-- Slice 03 guarantees callable JSON command routes and validation semantics.
-- Wallet lifecycle operations beyond scaffold behavior are deferred to Slice 04+.
+- `wallet create` and `wallet import` require an interactive TTY for secret input.
+- Wallet key material is encrypted at rest (`AES-256-GCM`) with Argon2id-derived keys.
+- Wallet metadata and chain bindings are stored in `~/.xclaw-agent/wallets.json` with owner-only permissions.
+- `wallet health` checks cast availability, permission safety, wallet metadata validity, and optional decryption integrity when `XCLAW_WALLET_PASSPHRASE` is provided.
 - Non-wallet trade/copy/off-DEX commands remain scaffold placeholders pending later runtime slices.

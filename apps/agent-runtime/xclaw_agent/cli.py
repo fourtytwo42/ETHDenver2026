@@ -2,22 +2,56 @@
 """X-Claw agent runtime CLI scaffold.
 
 This CLI provides the command surface required by the X-Claw skill wrapper.
-Wallet commands are scaffolded for production integration and return structured JSON.
+Wallet core operations are implemented with encrypted-at-rest storage.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
+import getpass
 import json
 import os
 import pathlib
 import re
+import secrets
 import shutil
+import stat
 import sys
 from datetime import datetime, timezone
+from typing import Any
 
-APP_DIR = pathlib.Path.home() / ".xclaw-agent"
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+try:
+    from argon2.low_level import Type, hash_secret_raw
+except Exception:  # pragma: no cover - handled by runtime dependency check
+    Type = None  # type: ignore[assignment]
+    hash_secret_raw = None  # type: ignore[assignment]
+
+try:
+    from Crypto.Hash import keccak
+except Exception:  # pragma: no cover - handled by runtime dependency check
+    keccak = None  # type: ignore[assignment]
+
+APP_DIR = pathlib.Path(os.environ.get("XCLAW_AGENT_HOME", str(pathlib.Path.home() / ".xclaw-agent")))
 STATE_FILE = APP_DIR / "state.json"
+WALLET_STORE_FILE = APP_DIR / "wallets.json"
+
+WALLET_STORE_VERSION = 1
+ARGON2_TIME_COST = 3
+ARGON2_MEMORY_COST = 65536
+ARGON2_PARALLELISM = 1
+ARGON2_HASH_LEN = 32
+
+
+class WalletStoreError(Exception):
+    """Wallet store is unavailable or invalid."""
+
+
+class WalletSecurityError(Exception):
+    """Wallet security checks failed."""
 
 
 def utc_now() -> str:
@@ -51,29 +85,92 @@ def require_json_flag(args: argparse.Namespace) -> int | None:
     return fail("missing_flag", "This command requires --json output mode.", "Re-run with --json.", exit_code=2)
 
 
-def load_state() -> dict:
-    if not STATE_FILE.exists():
+def ensure_app_dir() -> None:
+    APP_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if os.name != "nt":
+        os.chmod(APP_DIR, 0o700)
+
+
+def _is_secure_permissions(path: pathlib.Path, expected_mode: int) -> bool:
+    if os.name == "nt":
+        return True
+    mode = stat.S_IMODE(path.stat().st_mode)
+    return mode == expected_mode
+
+
+def _assert_secure_permissions(path: pathlib.Path, expected_mode: int, kind: str) -> None:
+    if not path.exists():
+        return
+    if not _is_secure_permissions(path, expected_mode):
+        raise WalletSecurityError(
+            f"Unsafe {kind} permissions for '{path}'. Expected {oct(expected_mode)} owner-only permissions."
+        )
+
+
+def _read_json(path: pathlib.Path) -> dict[str, Any]:
+    if not path.exists():
         return {}
     try:
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    except Exception:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise WalletStoreError(f"Invalid JSON in '{path}': {exc}") from exc
+
+
+def _write_json(path: pathlib.Path, payload: dict[str, Any]) -> None:
+    ensure_app_dir()
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    if os.name != "nt":
+        os.chmod(path, 0o600)
+
+
+def load_state() -> dict[str, Any]:
+    if not STATE_FILE.exists():
         return {}
+    return _read_json(STATE_FILE)
 
 
-def save_state(state: dict) -> None:
-    APP_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
-    os.chmod(STATE_FILE, 0o600)
+def save_state(state: dict[str, Any]) -> None:
+    _write_json(STATE_FILE, state)
 
 
-def ensure_wallet_entry(chain: str) -> tuple[dict, dict]:
+def _default_wallet_store() -> dict[str, Any]:
+    return {
+        "version": WALLET_STORE_VERSION,
+        "defaultWalletId": None,
+        "wallets": {},
+        "chains": {},
+    }
+
+
+def load_wallet_store() -> dict[str, Any]:
+    ensure_app_dir()
+    _assert_secure_permissions(APP_DIR, 0o700, "directory")
+    if not WALLET_STORE_FILE.exists():
+        return _default_wallet_store()
+    _assert_secure_permissions(WALLET_STORE_FILE, 0o600, "wallet store file")
+    data = _read_json(WALLET_STORE_FILE)
+    if not isinstance(data, dict):
+        raise WalletStoreError("Wallet store must be a JSON object.")
+    version = data.get("version")
+    if version != WALLET_STORE_VERSION:
+        raise WalletStoreError(f"Unsupported wallet store version: {version}")
+    if not isinstance(data.get("wallets"), dict) or not isinstance(data.get("chains"), dict):
+        raise WalletStoreError("Wallet store missing required maps: wallets/chains.")
+    return data
+
+
+def save_wallet_store(store: dict[str, Any]) -> None:
+    _write_json(WALLET_STORE_FILE, store)
+
+
+def ensure_wallet_entry(chain: str) -> tuple[dict[str, Any], dict[str, Any]]:
     state = load_state()
     wallets = state.setdefault("wallets", {})
     wallet = wallets.get(chain)
     return state, wallet or {}
 
 
-def set_wallet_entry(chain: str, wallet: dict) -> None:
+def set_wallet_entry(chain: str, wallet: dict[str, Any]) -> None:
     state = load_state()
     wallets = state.setdefault("wallets", {})
     wallets[chain] = wallet
@@ -81,12 +178,31 @@ def set_wallet_entry(chain: str, wallet: dict) -> None:
 
 
 def remove_wallet_entry(chain: str) -> bool:
+    existed = False
+
     state = load_state()
     wallets = state.setdefault("wallets", {})
-    existed = chain in wallets
-    if existed:
+    if chain in wallets:
         wallets.pop(chain, None)
         save_state(state)
+        existed = True
+
+    try:
+        store = load_wallet_store()
+    except (WalletStoreError, WalletSecurityError):
+        return existed
+
+    chains = store.setdefault("chains", {})
+    wallet_id = chains.pop(chain, None)
+    if wallet_id:
+        existed = True
+        in_use = wallet_id in chains.values()
+        if not in_use:
+            store.setdefault("wallets", {}).pop(wallet_id, None)
+            if store.get("defaultWalletId") == wallet_id:
+                store["defaultWalletId"] = None
+        save_wallet_store(store)
+
     return existed
 
 
@@ -94,8 +210,146 @@ def is_hex_address(value: str) -> bool:
     return bool(re.fullmatch(r"0x[a-fA-F0-9]{40}", value))
 
 
+def _normalize_private_key_hex(value: str) -> str | None:
+    stripped = value.strip()
+    if stripped.startswith("0x"):
+        stripped = stripped[2:]
+    if re.fullmatch(r"[a-fA-F0-9]{64}", stripped):
+        return stripped.lower()
+    return None
+
+
 def cast_exists() -> bool:
     return shutil.which("cast") is not None
+
+
+def _derive_address(private_key_hex: str) -> str:
+    if keccak is None:
+        raise WalletStoreError("Missing dependency: pycryptodome (Crypto.Hash.keccak).")
+    private_key_bytes = bytes.fromhex(private_key_hex)
+    private_value = int.from_bytes(private_key_bytes, byteorder="big")
+    # cryptography validates private key range for secp256k1.
+    private_key = ec.derive_private_key(private_value, ec.SECP256K1())
+    public_key_bytes = private_key.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+    digest = keccak.new(digest_bits=256)
+    digest.update(public_key_bytes[1:])
+    return "0x" + digest.digest()[-20:].hex()
+
+
+def _derive_aes_key(passphrase: str, salt: bytes) -> bytes:
+    if hash_secret_raw is None or Type is None:
+        raise WalletStoreError("Missing dependency: argon2-cffi.")
+    return hash_secret_raw(
+        secret=passphrase.encode("utf-8"),
+        salt=salt,
+        time_cost=ARGON2_TIME_COST,
+        memory_cost=ARGON2_MEMORY_COST,
+        parallelism=ARGON2_PARALLELISM,
+        hash_len=ARGON2_HASH_LEN,
+        type=Type.ID,
+    )
+
+
+def _encrypt_private_key(private_key_hex: str, passphrase: str) -> dict[str, Any]:
+    private_key_bytes = bytes.fromhex(private_key_hex)
+    salt = secrets.token_bytes(16)
+    nonce = secrets.token_bytes(12)
+    key = _derive_aes_key(passphrase, salt)
+    cipher = AESGCM(key)
+    ciphertext = cipher.encrypt(nonce, private_key_bytes, None)
+    return {
+        "version": 1,
+        "enc": "aes-256-gcm",
+        "kdf": "argon2id",
+        "kdfParams": {
+            "timeCost": ARGON2_TIME_COST,
+            "memoryCost": ARGON2_MEMORY_COST,
+            "parallelism": ARGON2_PARALLELISM,
+            "hashLen": ARGON2_HASH_LEN,
+        },
+        "saltB64": base64.b64encode(salt).decode("ascii"),
+        "nonceB64": base64.b64encode(nonce).decode("ascii"),
+        "ciphertextB64": base64.b64encode(ciphertext).decode("ascii"),
+    }
+
+
+def _decrypt_private_key(entry: dict[str, Any], passphrase: str) -> bytes:
+    crypto = entry.get("crypto")
+    if not isinstance(crypto, dict):
+        raise WalletStoreError("Wallet entry missing crypto object.")
+
+    try:
+        salt = base64.b64decode(crypto["saltB64"])
+        nonce = base64.b64decode(crypto["nonceB64"])
+        ciphertext = base64.b64decode(crypto["ciphertextB64"])
+    except Exception as exc:
+        raise WalletStoreError("Wallet crypto payload is not valid base64.") from exc
+
+    if len(salt) != 16 or len(nonce) != 12 or len(ciphertext) < 16:
+        raise WalletStoreError("Wallet crypto payload has invalid lengths.")
+
+    key = _derive_aes_key(passphrase, salt)
+    cipher = AESGCM(key)
+    return cipher.decrypt(nonce, ciphertext, None)
+
+
+def _validate_wallet_entry_shape(entry: dict[str, Any]) -> None:
+    if not isinstance(entry, dict):
+        raise WalletStoreError("Wallet entry is not an object.")
+    address = entry.get("address")
+    if not isinstance(address, str) or not is_hex_address(address):
+        raise WalletStoreError("Wallet entry address is missing or invalid.")
+    crypto = entry.get("crypto")
+    if not isinstance(crypto, dict):
+        raise WalletStoreError("Wallet entry crypto payload is missing.")
+
+    required_crypto_fields = ["enc", "kdf", "kdfParams", "saltB64", "nonceB64", "ciphertextB64"]
+    missing = [k for k in required_crypto_fields if k not in crypto]
+    if missing:
+        raise WalletStoreError(f"Wallet entry crypto payload missing fields: {', '.join(missing)}")
+
+    if crypto.get("enc") != "aes-256-gcm" or crypto.get("kdf") != "argon2id":
+        raise WalletStoreError("Wallet entry crypto algorithm metadata is invalid.")
+    try:
+        salt = base64.b64decode(str(crypto.get("saltB64", "")))
+        nonce = base64.b64decode(str(crypto.get("nonceB64", "")))
+        ciphertext = base64.b64decode(str(crypto.get("ciphertextB64", "")))
+    except Exception as exc:
+        raise WalletStoreError("Wallet crypto payload is not valid base64.") from exc
+    if len(salt) != 16 or len(nonce) != 12 or len(ciphertext) < 16:
+        raise WalletStoreError("Wallet crypto payload has invalid lengths.")
+
+
+def _interactive_required() -> bool:
+    return sys.stdin.isatty() and sys.stderr.isatty()
+
+
+def _prompt_passphrase() -> str:
+    first = getpass.getpass("Wallet passphrase: ").strip()
+    second = getpass.getpass("Confirm wallet passphrase: ").strip()
+    if not first:
+        raise ValueError("Passphrase cannot be empty.")
+    if first != second:
+        raise ValueError("Passphrase confirmation mismatch.")
+    return first
+
+
+def _chain_wallet(store: dict[str, Any], chain: str) -> tuple[str | None, dict[str, Any] | None]:
+    wallet_id = store.setdefault("chains", {}).get(chain)
+    if not wallet_id:
+        return None, None
+    wallet = store.setdefault("wallets", {}).get(wallet_id)
+    if not isinstance(wallet, dict):
+        return wallet_id, None
+    return wallet_id, wallet
+
+
+def _bind_chain_to_wallet(store: dict[str, Any], chain: str, wallet_id: str) -> None:
+    store.setdefault("chains", {})[chain] = wallet_id
+
+
+def _new_wallet_id() -> str:
+    return f"wlt_{secrets.token_hex(10)}"
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -122,14 +376,65 @@ def cmd_wallet_health(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
         return chk
+
     chain = args.chain
-    _, wallet = ensure_wallet_entry(chain)
+    has_wallet = False
+    address: str | None = None
+    metadata_valid = True
+    permission_safe = True
+    integrity_checked = False
+
+    try:
+        ensure_app_dir()
+        _assert_secure_permissions(APP_DIR, 0o700, "directory")
+        if STATE_FILE.exists():
+            _assert_secure_permissions(STATE_FILE, 0o600, "state file")
+        if WALLET_STORE_FILE.exists():
+            _assert_secure_permissions(WALLET_STORE_FILE, 0o600, "wallet store file")
+
+        store = load_wallet_store()
+        wallet_id, wallet = _chain_wallet(store, chain)
+        if wallet_id:
+            if wallet is None:
+                raise WalletStoreError(f"Chain '{chain}' points to missing wallet id '{wallet_id}'.")
+            _validate_wallet_entry_shape(wallet)
+            has_wallet = True
+            address = wallet.get("address")
+
+            probe_passphrase = os.environ.get("XCLAW_WALLET_PASSPHRASE")
+            if probe_passphrase:
+                plaintext = _decrypt_private_key(wallet, probe_passphrase)
+                derived = _derive_address(plaintext.hex())
+                if derived.lower() != str(address).lower():
+                    raise WalletStoreError("Wallet encrypted payload does not match stored address.")
+                integrity_checked = True
+        else:
+            # Legacy fallback for Slice 03 state shape.
+            _, legacy_wallet = ensure_wallet_entry(chain)
+            legacy_address = legacy_wallet.get("address")
+            if isinstance(legacy_address, str) and is_hex_address(legacy_address):
+                has_wallet = True
+                address = legacy_address
+
+    except WalletSecurityError as exc:
+        permission_safe = False
+        return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": chain}, exit_code=1)
+    except WalletStoreError as exc:
+        metadata_valid = False
+        return fail("wallet_store_invalid", str(exc), "Repair or remove invalid wallet metadata and retry.", {"chain": chain}, exit_code=1)
+    except Exception as exc:
+        metadata_valid = False
+        return fail("wallet_health_failed", str(exc), "Inspect wallet files and retry wallet health.", {"chain": chain}, exit_code=1)
+
     return ok(
         "Wallet health checked.",
         chain=chain,
         hasCast=cast_exists(),
-        hasWallet=bool(wallet),
-        address=wallet.get("address"),
+        hasWallet=has_wallet,
+        address=address,
+        metadataValid=metadata_valid,
+        filePermissionsSafe=permission_safe,
+        integrityChecked=integrity_checked,
         timestamp=utc_now(),
     )
 
@@ -138,24 +443,178 @@ def cmd_wallet_create(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
         return chk
-    return cmd_not_implemented(args, "wallet.create")
+
+    if not _interactive_required():
+        return fail(
+            "non_interactive",
+            "wallet.create requires an interactive TTY for secure passphrase input.",
+            "Run the command in a terminal session with TTY attached.",
+            {"chain": args.chain},
+            exit_code=2,
+        )
+
+    try:
+        passphrase = _prompt_passphrase()
+        store = load_wallet_store()
+
+        chain = args.chain
+        wallet_id, wallet = _chain_wallet(store, chain)
+        if wallet_id and wallet:
+            return fail(
+                "wallet_exists",
+                f"Wallet already configured for chain '{chain}'.",
+                "Use wallet address/health or wallet remove before creating again.",
+                {"chain": chain, "address": wallet.get("address")},
+                exit_code=1,
+            )
+
+        default_wallet_id = store.get("defaultWalletId")
+        if isinstance(default_wallet_id, str) and default_wallet_id:
+            default_wallet = store.setdefault("wallets", {}).get(default_wallet_id)
+            if not isinstance(default_wallet, dict):
+                raise WalletStoreError("defaultWalletId points to a missing wallet record.")
+            _validate_wallet_entry_shape(default_wallet)
+            _bind_chain_to_wallet(store, chain, default_wallet_id)
+            save_wallet_store(store)
+            set_wallet_entry(chain, {"address": default_wallet.get("address"), "walletId": default_wallet_id})
+            return ok("Existing portable wallet bound to chain.", chain=chain, address=default_wallet.get("address"), created=False)
+
+        private_key = ec.generate_private_key(ec.SECP256K1())
+        private_value = private_key.private_numbers().private_value
+        private_key_hex = private_value.to_bytes(32, "big").hex()
+        address = _derive_address(private_key_hex)
+
+        wallet_id = _new_wallet_id()
+        encrypted = _encrypt_private_key(private_key_hex, passphrase)
+        store.setdefault("wallets", {})[wallet_id] = {
+            "walletId": wallet_id,
+            "address": address,
+            "createdAt": utc_now(),
+            "crypto": encrypted,
+        }
+        store["defaultWalletId"] = wallet_id
+        _bind_chain_to_wallet(store, chain, wallet_id)
+
+        save_wallet_store(store)
+        set_wallet_entry(chain, {"address": address, "walletId": wallet_id})
+        return ok("Wallet created.", chain=chain, address=address, created=True)
+
+    except ValueError as exc:
+        return fail("invalid_input", str(exc), "Provide matching non-empty passphrase values.", {"chain": args.chain}, exit_code=2)
+    except WalletSecurityError as exc:
+        return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": args.chain}, exit_code=1)
+    except WalletStoreError as exc:
+        return fail("wallet_store_invalid", str(exc), "Repair wallet store metadata and retry.", {"chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("wallet_create_failed", str(exc), "Inspect runtime wallet dependencies/configuration and retry.", {"chain": args.chain}, exit_code=1)
 
 
 def cmd_wallet_import(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
         return chk
-    return cmd_not_implemented(args, "wallet.import")
+
+    if not _interactive_required():
+        return fail(
+            "non_interactive",
+            "wallet.import requires an interactive TTY for secure secret input.",
+            "Run the command in a terminal session with TTY attached.",
+            {"chain": args.chain},
+            exit_code=2,
+        )
+
+    try:
+        private_key_input = getpass.getpass("Private key (hex, optional 0x): ")
+        private_key_hex = _normalize_private_key_hex(private_key_input)
+        if private_key_hex is None:
+            return fail(
+                "invalid_input",
+                "Private key must be 32-byte hex (64 chars, optional 0x prefix).",
+                "Provide a valid EVM private key hex string.",
+                {"chain": args.chain},
+                exit_code=2,
+            )
+
+        address = _derive_address(private_key_hex)
+        passphrase = _prompt_passphrase()
+
+        store = load_wallet_store()
+        chain = args.chain
+        existing_id, existing_wallet = _chain_wallet(store, chain)
+        if existing_id and existing_wallet:
+            return fail(
+                "wallet_exists",
+                f"Wallet already configured for chain '{chain}'.",
+                "Use wallet remove first if you want to replace the chain binding.",
+                {"chain": chain, "address": existing_wallet.get("address")},
+                exit_code=1,
+            )
+
+        default_wallet_id = store.get("defaultWalletId")
+        if isinstance(default_wallet_id, str) and default_wallet_id:
+            default_wallet = store.setdefault("wallets", {}).get(default_wallet_id)
+            if not isinstance(default_wallet, dict):
+                raise WalletStoreError("defaultWalletId points to a missing wallet record.")
+            _validate_wallet_entry_shape(default_wallet)
+            default_address = str(default_wallet.get("address", "")).lower()
+            if default_address != address.lower():
+                return fail(
+                    "portable_wallet_conflict",
+                    "Imported private key does not match existing portable default wallet.",
+                    "Import the same portable key or remove existing wallet bindings first.",
+                    {"chain": chain, "existingAddress": default_wallet.get("address"), "importAddress": address},
+                    exit_code=1,
+                )
+            _bind_chain_to_wallet(store, chain, default_wallet_id)
+            save_wallet_store(store)
+            set_wallet_entry(chain, {"address": default_wallet.get("address"), "walletId": default_wallet_id})
+            return ok("Portable wallet bound to chain.", chain=chain, address=default_wallet.get("address"), imported=True)
+
+        wallet_id = _new_wallet_id()
+        encrypted = _encrypt_private_key(private_key_hex, passphrase)
+        store.setdefault("wallets", {})[wallet_id] = {
+            "walletId": wallet_id,
+            "address": address,
+            "createdAt": utc_now(),
+            "crypto": encrypted,
+        }
+        store["defaultWalletId"] = wallet_id
+        _bind_chain_to_wallet(store, chain, wallet_id)
+
+        save_wallet_store(store)
+        set_wallet_entry(chain, {"address": address, "walletId": wallet_id})
+        return ok("Wallet imported.", chain=chain, address=address, imported=True)
+
+    except ValueError as exc:
+        return fail("invalid_input", str(exc), "Provide matching non-empty passphrase values.", {"chain": args.chain}, exit_code=2)
+    except WalletSecurityError as exc:
+        return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": args.chain}, exit_code=1)
+    except WalletStoreError as exc:
+        return fail("wallet_store_invalid", str(exc), "Repair wallet store metadata and retry.", {"chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("wallet_import_failed", str(exc), "Inspect runtime wallet dependencies/configuration and retry.", {"chain": args.chain}, exit_code=1)
 
 
 def cmd_wallet_address(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
         return chk
+
     chain = args.chain
-    _, wallet = ensure_wallet_entry(chain)
-    addr = wallet.get("address")
-    if not addr:
+    try:
+        store = load_wallet_store()
+        _, wallet = _chain_wallet(store, chain)
+        if wallet:
+            address = wallet.get("address")
+            if isinstance(address, str) and is_hex_address(address):
+                return ok("Wallet address fetched.", chain=chain, address=address)
+
+    except (WalletStoreError, WalletSecurityError) as exc:
+        return fail("wallet_store_invalid", str(exc), "Repair wallet store metadata and retry.", {"chain": chain}, exit_code=1)
+
+    _, legacy_wallet = ensure_wallet_entry(chain)
+    addr = legacy_wallet.get("address")
+    if not isinstance(addr, str) or not is_hex_address(addr):
         return fail("wallet_missing", f"No wallet configured for chain '{chain}'.", "Run wallet create/import first.", {"chain": chain}, exit_code=1)
     return ok("Wallet address fetched.", chain=chain, address=addr)
 
