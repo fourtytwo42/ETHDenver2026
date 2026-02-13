@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 import textwrap
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 
 RUNTIME_ROOT = pathlib.Path("apps/agent-runtime").resolve()
@@ -39,6 +40,41 @@ class WalletCoreUnitTests(unittest.TestCase):
         }
         with self.assertRaises(cli.WalletStoreError):
             cli._decrypt_private_key(entry, "pw")
+
+    def test_api_request_recovers_on_auth_invalid(self) -> None:
+        with (
+            mock.patch.object(cli, "_require_api_base_url", return_value="https://xclaw.trade/api/v1"),
+            mock.patch.object(cli, "_resolve_api_key", return_value="old-key"),
+            mock.patch.object(cli, "_recover_api_key_with_wallet_signature", return_value="new-key") as recover_mock,
+            mock.patch.object(
+                cli,
+                "_http_json_request",
+                side_effect=[(401, {"code": "auth_invalid", "message": "bad key"}), (200, {"ok": True})],
+            ) as http_mock,
+        ):
+            status, body = cli._api_request("GET", "/status")
+
+        self.assertEqual(status, 200)
+        self.assertTrue(body.get("ok"))
+        recover_mock.assert_called_once_with("https://xclaw.trade/api/v1", "old-key", "base_sepolia")
+        self.assertEqual(http_mock.call_count, 2)
+
+    def test_api_request_does_not_recover_for_non_auth_error(self) -> None:
+        with (
+            mock.patch.object(cli, "_require_api_base_url", return_value="https://xclaw.trade/api/v1"),
+            mock.patch.object(cli, "_resolve_api_key", return_value="old-key"),
+            mock.patch.object(cli, "_recover_api_key_with_wallet_signature") as recover_mock,
+            mock.patch.object(
+                cli,
+                "_http_json_request",
+                return_value=(500, {"code": "internal_error", "message": "boom"}),
+            ),
+        ):
+            status, body = cli._api_request("GET", "/status")
+
+        self.assertEqual(status, 500)
+        self.assertEqual(body.get("code"), "internal_error")
+        recover_mock.assert_not_called()
 
 
 class WalletCoreCliTests(unittest.TestCase):

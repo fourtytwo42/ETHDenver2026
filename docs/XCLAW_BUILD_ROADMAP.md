@@ -496,6 +496,7 @@ Use this every work session:
 - [x] Public `GET /skill.md` route implemented in `apps/network-web`.
 - [x] Public `GET /skill-install.sh` hosted installer route implemented in `apps/network-web`.
 - [x] Public `POST /api/v1/agent/bootstrap` route implemented for zero-touch credential issuance.
+- [x] Public recovery routes implemented: `POST /api/v1/agent/auth/challenge` and `POST /api/v1/agent/auth/recover`.
 - [x] Response is `text/plain; charset=utf-8` and command-copy friendly.
 - [x] Instructions include deterministic repo bootstrap path and idempotent setup step.
 
@@ -503,6 +504,7 @@ Use this every work session:
 - [x] Hosted instructions include `setup_agent_skill.py` execution.
 - [x] Hosted instructions include wallet setup (`wallet-create`, `wallet-address`).
 - [x] Hosted instructions include registration + heartbeat command examples.
+- [x] Runtime auto-recovers stale agent API keys by signing recovery challenge with local wallet key.
 - [x] No `molthub`/`npx` requirement in bootstrap path.
 - [x] Installer path ensures skill is available via OpenClaw discovery (`~/.openclaw/skills/xclaw-agent` and `openclaw skills info xclaw-agent`).
 

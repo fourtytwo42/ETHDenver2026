@@ -66,6 +66,7 @@ DEFAULT_TX_GAS_PRICE_GWEI = 5
 DEFAULT_TX_SEND_MAX_ATTEMPTS = 3
 TX_GAS_PRICE_BUMP_GWEI = 2
 LIMIT_ORDER_STORE_VERSION = 1
+AGENT_RECOVERY_ACTION = "agent_key_recovery"
 
 
 class WalletStoreError(Exception):
@@ -779,34 +780,82 @@ def _cast_sign_message(private_key_hex: str, message: str) -> str:
     return signature
 
 
-def _require_api_env() -> tuple[str, str]:
+def _require_api_base_url() -> str:
     base_url = (os.environ.get("XCLAW_API_BASE_URL") or "").strip()
-    api_key = (os.environ.get("XCLAW_AGENT_API_KEY") or "").strip()
     if not base_url:
         raise WalletStoreError("Missing required env: XCLAW_API_BASE_URL.")
-    if not api_key:
-        raise WalletStoreError("Missing required env: XCLAW_AGENT_API_KEY.")
-    return base_url.rstrip("/"), api_key
+    normalized = base_url.rstrip("/")
+    parsed = urllib.parse.urlparse(normalized)
+    path = (parsed.path or "").rstrip("/")
+    if path in ("", "/"):
+        normalized = f"{normalized}/api/v1"
+    return normalized
 
 
-def _api_request(method: str, path: str, payload: dict[str, Any] | None = None, include_idempotency: bool = False) -> tuple[int, dict[str, Any]]:
-    base_url, api_key = _require_api_env()
-    if path.startswith("http://") or path.startswith("https://"):
-        url = path
-    else:
-        normalized = path if path.startswith("/") else f"/{path}"
-        url = f"{base_url}{normalized}"
+def _extract_agent_id_from_signed_key(api_key: str) -> str | None:
+    parts = api_key.split(".")
+    if len(parts) == 4 and parts[0] == "xak1" and parts[1]:
+        return parts[1]
+    return None
 
+
+def _load_agent_runtime_auth() -> tuple[str | None, str | None]:
+    state = load_state()
+    state_agent_id = state.get("agentId")
+    state_api_key = state.get("agentApiKey")
+    agent_id = str(state_agent_id).strip() if isinstance(state_agent_id, str) else None
+    api_key = str(state_api_key).strip() if isinstance(state_api_key, str) else None
+    return agent_id, api_key
+
+
+def _save_agent_runtime_auth(agent_id: str | None, api_key: str) -> None:
+    state = load_state()
+    state["agentApiKey"] = api_key
+    if agent_id:
+        state["agentId"] = agent_id
+    save_state(state)
+
+
+def _resolve_api_key() -> str:
+    env_api_key = (os.environ.get("XCLAW_AGENT_API_KEY") or "").strip()
+    if env_api_key:
+        return env_api_key
+    _, state_api_key = _load_agent_runtime_auth()
+    if state_api_key:
+        return state_api_key
+    raise WalletStoreError("Missing required auth: XCLAW_AGENT_API_KEY (or recovered key in runtime state).")
+
+
+def _resolve_agent_id(api_key: str) -> str | None:
+    env_agent_id = (os.environ.get("XCLAW_AGENT_ID") or "").strip()
+    if env_agent_id:
+        return env_agent_id
+    state_agent_id, _ = _load_agent_runtime_auth()
+    if state_agent_id:
+        return state_agent_id
+    return _extract_agent_id_from_signed_key(api_key)
+
+
+def _http_json_request(
+    method: str,
+    url: str,
+    payload: dict[str, Any] | None = None,
+    api_key: str | None = None,
+    include_idempotency: bool = False,
+) -> tuple[int, dict[str, Any]]:
     headers: dict[str, str] = {
         "Accept": "application/json",
-        "Authorization": f"Bearer {api_key}",
+        "User-Agent": "xclaw-agent-runtime/1.0 (+https://xclaw.trade/skill.md)"
     }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    if include_idempotency:
+        headers["Idempotency-Key"] = f"rt-{secrets.token_hex(16)}"
+
     raw_data: bytes | None = None
     if payload is not None:
         raw_data = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
-    if include_idempotency:
-        headers["Idempotency-Key"] = f"rt-{secrets.token_hex(16)}"
 
     request = urllib.request.Request(url=url, data=raw_data, headers=headers, method=method.upper())
     try:
@@ -827,6 +876,114 @@ def _api_request(method: str, path: str, payload: dict[str, Any] | None = None, 
         return int(exc.code), parsed
     except urllib.error.URLError as exc:
         raise WalletStoreError(f"API request failed: {exc.reason}") from exc
+
+
+def _wallet_address_for_chain(chain: str) -> str:
+    store = load_wallet_store()
+    _, wallet = _chain_wallet(store, chain)
+    if not wallet:
+        raise WalletStoreError(f"No wallet configured for chain '{chain}'.")
+    _validate_wallet_entry_shape(wallet)
+    address = wallet.get("address")
+    if not isinstance(address, str) or not is_hex_address(address):
+        raise WalletStoreError(f"Wallet address is missing/invalid for chain '{chain}'.")
+    return address
+
+
+def _recover_api_key_with_wallet_signature(base_url: str, stale_api_key: str, chain: str) -> str:
+    agent_id = _resolve_agent_id(stale_api_key)
+    if not agent_id:
+        raise WalletStoreError("Agent id is required for key recovery. Set XCLAW_AGENT_ID or use signed token format.")
+
+    wallet_address = _wallet_address_for_chain(chain)
+    challenge_status, challenge_body = _http_json_request(
+        "POST",
+        f"{base_url}/agent/auth/challenge",
+        payload={
+            "agentId": agent_id,
+            "chainKey": chain,
+            "walletAddress": wallet_address,
+            "action": AGENT_RECOVERY_ACTION,
+        },
+    )
+    if challenge_status < 200 or challenge_status >= 300:
+        code = str(challenge_body.get("code", "auth_recovery_failed"))
+        message = str(challenge_body.get("message", f"challenge request failed ({challenge_status})"))
+        raise WalletStoreError(f"{code}: {message}")
+
+    challenge_id = challenge_body.get("challengeId")
+    challenge_message = challenge_body.get("challengeMessage")
+    if not isinstance(challenge_id, str) or not challenge_id.strip():
+        raise WalletStoreError("Challenge response missing challengeId.")
+    if not isinstance(challenge_message, str) or not challenge_message.strip():
+        raise WalletStoreError("Challenge response missing challengeMessage.")
+
+    passphrase = _require_wallet_passphrase_for_signing(chain)
+    store = load_wallet_store()
+    _, wallet = _chain_wallet(store, chain)
+    if not wallet:
+        raise WalletStoreError(f"No wallet configured for chain '{chain}'.")
+    private_key_bytes = _decrypt_private_key(wallet, passphrase)
+    signature = _cast_sign_message(private_key_bytes.hex(), challenge_message)
+
+    recover_status, recover_body = _http_json_request(
+        "POST",
+        f"{base_url}/agent/auth/recover",
+        payload={
+            "agentId": agent_id,
+            "chainKey": chain,
+            "walletAddress": wallet_address,
+            "challengeId": challenge_id,
+            "signature": signature,
+        },
+    )
+    if recover_status < 200 or recover_status >= 300:
+        code = str(recover_body.get("code", "auth_recovery_failed"))
+        message = str(recover_body.get("message", f"recover request failed ({recover_status})"))
+        raise WalletStoreError(f"{code}: {message}")
+
+    recovered_key = recover_body.get("agentApiKey")
+    if not isinstance(recovered_key, str) or not recovered_key.strip():
+        raise WalletStoreError("Recovery response missing agentApiKey.")
+    _save_agent_runtime_auth(agent_id, recovered_key)
+    return recovered_key
+
+
+def _api_request(
+    method: str,
+    path: str,
+    payload: dict[str, Any] | None = None,
+    include_idempotency: bool = False,
+    allow_auth_recovery: bool = True,
+) -> tuple[int, dict[str, Any]]:
+    base_url = _require_api_base_url()
+    api_key = _resolve_api_key()
+    if path.startswith("http://") or path.startswith("https://"):
+        url = path
+    else:
+        normalized = path if path.startswith("/") else f"/{path}"
+        url = f"{base_url}{normalized}"
+    status, body = _http_json_request(
+        method,
+        url,
+        payload=payload,
+        api_key=api_key,
+        include_idempotency=include_idempotency,
+    )
+
+    is_auth_failure = status == 401 and str(body.get("code", "")) == "auth_invalid"
+    is_recovery_endpoint = url.endswith("/agent/auth/challenge") or url.endswith("/agent/auth/recover")
+    if allow_auth_recovery and is_auth_failure and not is_recovery_endpoint:
+        chain = (os.environ.get("XCLAW_DEFAULT_CHAIN") or "").strip() or "base_sepolia"
+        recovered_key = _recover_api_key_with_wallet_signature(base_url, api_key, chain)
+        status, body = _http_json_request(
+            method,
+            url,
+            payload=payload,
+            api_key=recovered_key,
+            include_idempotency=include_idempotency,
+        )
+    return status, body
 
 
 def _canonical_event_for_trade_status(status: str) -> str:

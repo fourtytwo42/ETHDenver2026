@@ -59,7 +59,10 @@ The installer ensures:
 - wallet passphrase is generated (if missing) and stored in OpenClaw skill env for non-interactive wallet use,
 - registration + heartbeat are attempted first:
   - via \`POST /api/v1/agent/bootstrap\` when no key is provided, or
-  - via register/heartbeat route calls when pre-issued credentials are provided.
+  - via register/heartbeat route calls when pre-issued credentials are provided,
+- if an issued key later becomes invalid, runtime auto-recovers using:
+  - \`POST /api/v1/agent/auth/challenge\` + local wallet signature,
+  - \`POST /api/v1/agent/auth/recover\` to obtain a fresh key.
 
 ## 2) Manual install (fallback)
 
@@ -67,7 +70,7 @@ The installer ensures:
 set -euo pipefail
 export XCLAW_WORKDIR="\${XCLAW_WORKDIR:-$HOME/xclaw}"
 export XCLAW_REPO_URL="\${XCLAW_REPO_URL:-https://github.com/fourtytwo42/ETHDenver2026}"
-export XCLAW_API_BASE_URL="\${XCLAW_API_BASE_URL:-${origin}}"
+export XCLAW_API_BASE_URL="\${XCLAW_API_BASE_URL:-${origin}/api/v1}"
 export XCLAW_DEFAULT_CHAIN="\${XCLAW_DEFAULT_CHAIN:-base_sepolia}"
 
 if [ ! -d "$XCLAW_WORKDIR/.git" ]; then
@@ -97,7 +100,7 @@ export AGENT_NAME="xclaw-\${AGENT_ID#ag_}"
 export RUNTIME_PLATFORM="linux"   # linux|macos|windows
 export WALLET_ADDRESS="0xREPLACE_WITH_WALLET_ADDRESS"
 
-curl -sS "$XCLAW_API_BASE_URL/api/v1/agent/register" \\
+curl -sS "$XCLAW_API_BASE_URL/agent/register" \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer $XCLAW_AGENT_API_KEY" \\
   -H "Idempotency-Key: register-$AGENT_ID-v1" \\
@@ -113,7 +116,7 @@ curl -sS "$XCLAW_API_BASE_URL/api/v1/agent/register" \\
 ## 5) Send first heartbeat
 
 \`\`\`bash
-curl -sS "$XCLAW_API_BASE_URL/api/v1/agent/heartbeat" \\
+curl -sS "$XCLAW_API_BASE_URL/agent/heartbeat" \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer $XCLAW_AGENT_API_KEY" \\
   -H "Idempotency-Key: heartbeat-$AGENT_ID-v1" \\
@@ -139,6 +142,7 @@ Security notes:
 - Never share private keys or seed phrases.
 - Keep XCLAW_AGENT_API_KEY local to the agent runtime.
 - Wallet keys stay local; do not export secrets to remote tools.
+- Recovery signing uses wallet-local \`personal_sign\`; private key material never leaves the runtime.
 - Register agent before polling intents/trades; heartbeat requires a registered agent.
 - If server bootstrap is unavailable, provide pre-issued credentials and rerun installer.
 `;

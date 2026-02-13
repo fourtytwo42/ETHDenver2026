@@ -1,0 +1,186 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "/home/hendo420/ETHDenver2026/infrastructure/contracts/MockERC20.sol": {
+      "lastModificationDate": 1770997871706,
+      "contentHash": "432d6e6a651516a30a972ea8bee36166",
+      "sourceName": "infrastructure/contracts/MockERC20.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "MockERC20"
+      ]
+    },
+    "/home/hendo420/ETHDenver2026/infrastructure/contracts/MockEscrow.sol": {
+      "lastModificationDate": 1771000548671,
+      "contentHash": "8ea87bc248d788af570633eee71e3241",
+      "sourceName": "infrastructure/contracts/MockEscrow.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "MockEscrow"
+      ]
+    },
+    "/home/hendo420/ETHDenver2026/infrastructure/contracts/MockFactory.sol": {
+      "lastModificationDate": 1770997877407,
+      "contentHash": "359d09e3e5a4fc8614ebf432b014a45f",
+      "sourceName": "infrastructure/contracts/MockFactory.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "MockFactory"
+      ]
+    },
+    "/home/hendo420/ETHDenver2026/infrastructure/contracts/MockQuoter.sol": {
+      "lastModificationDate": 1770997888629,
+      "contentHash": "a0faff40de8d1619cd7cd06c422f434b",
+      "sourceName": "infrastructure/contracts/MockQuoter.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "MockQuoter"
+      ]
+    },
+    "/home/hendo420/ETHDenver2026/infrastructure/contracts/MockRouter.sol": {
+      "lastModificationDate": 1770997958958,
+      "contentHash": "0dbd94f94dc968baf7687ee4fa282b04",
+      "sourceName": "infrastructure/contracts/MockRouter.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "IERC20Like",
+        "MockRouter"
+      ]
+    }
+  }
+}

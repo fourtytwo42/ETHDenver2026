@@ -25,7 +25,7 @@ echo "[xclaw] bootstrap start"
 export XCLAW_WORKDIR="\${XCLAW_WORKDIR:-$HOME/xclaw}"
 export XCLAW_REPO_REF="\${XCLAW_REPO_REF:-main}"
 export XCLAW_REPO_URL="\${XCLAW_REPO_URL:-https://github.com/fourtytwo42/ETHDenver2026}"
-export XCLAW_API_BASE_URL="\${XCLAW_API_BASE_URL:-${origin}}"
+export XCLAW_API_BASE_URL="\${XCLAW_API_BASE_URL:-${origin}/api/v1}"
 export XCLAW_DEFAULT_CHAIN="\${XCLAW_DEFAULT_CHAIN:-base_sepolia}"
 
 tmp_dir="$(mktemp -d)"
@@ -55,8 +55,21 @@ elif [ ! -e "$XCLAW_WORKDIR" ]; then
   mv "$src_dir" "$XCLAW_WORKDIR"
 else
   echo "[xclaw] existing non-git directory at $XCLAW_WORKDIR"
-  echo "[xclaw] set XCLAW_WORKDIR to an empty path or convert it into a git clone, then retry"
-  exit 1
+  archive_base="$(echo "$XCLAW_REPO_URL" | sed -E 's#https?://github.com/##' | sed -E 's#\\.git$##')"
+  archive_url="https://codeload.github.com/$archive_base/tar.gz/refs/heads/$XCLAW_REPO_REF"
+  echo "[xclaw] downloading source archive for in-place update: $archive_url"
+  curl -fsSL "$archive_url" -o "$tmp_dir/repo.tar.gz"
+  tar -xzf "$tmp_dir/repo.tar.gz" -C "$tmp_dir"
+
+  src_dir="$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d -name 'ETHDenver2026-*' | head -n1)"
+  if [ -z "$src_dir" ]; then
+    echo "[xclaw] unable to find extracted repository directory"
+    exit 1
+  fi
+
+  echo "[xclaw] updating existing workspace in place"
+  mkdir -p "$XCLAW_WORKDIR"
+  cp -a "$src_dir"/. "$XCLAW_WORKDIR"/
 fi
 
 cd "$XCLAW_WORKDIR"
@@ -72,11 +85,39 @@ fi
 if [ -n "\${XCLAW_AGENT_NAME:-}" ]; then
   openclaw config set skills.entries.xclaw-agent.env.XCLAW_AGENT_NAME "$XCLAW_AGENT_NAME" || true
 fi
-if [ -z "\${XCLAW_WALLET_PASSPHRASE:-}" ]; then
-  XCLAW_WALLET_PASSPHRASE="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-  export XCLAW_WALLET_PASSPHRASE
+
+wallet_home="\${XCLAW_AGENT_HOME:-$HOME/.xclaw-agent}"
+wallet_store_path="$wallet_home/wallets.json"
+wallet_exists=0
+if [ -f "$wallet_store_path" ]; then
+  existing_wallet_address="$(python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py wallet-address \
+    | python3 -c 'import json,sys
+try:
+ d=json.load(sys.stdin)
+ print((d.get("address") or "").strip())
+except Exception:
+ print("")' || true)"
+  if [ -n "$existing_wallet_address" ]; then
+    wallet_exists=1
+  fi
 fi
-openclaw config set skills.entries.xclaw-agent.env.XCLAW_WALLET_PASSPHRASE "$XCLAW_WALLET_PASSPHRASE" || true
+
+if [ -z "\${XCLAW_WALLET_PASSPHRASE:-}" ]; then
+  existing_cfg_passphrase="$(openclaw config get skills.entries.xclaw-agent.env.XCLAW_WALLET_PASSPHRASE 2>/dev/null | tail -n1 | sed -E 's/^\"(.*)\"$/\\1/' || true)"
+  if [ -n "$existing_cfg_passphrase" ] && [ "$existing_cfg_passphrase" != "null" ]; then
+    export XCLAW_WALLET_PASSPHRASE="$existing_cfg_passphrase"
+  elif [ "$wallet_exists" = "0" ]; then
+    XCLAW_WALLET_PASSPHRASE="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+    export XCLAW_WALLET_PASSPHRASE
+    openclaw config set skills.entries.xclaw-agent.env.XCLAW_WALLET_PASSPHRASE "$XCLAW_WALLET_PASSPHRASE" || true
+    echo "[xclaw] generated new wallet passphrase for first install"
+  else
+    echo "[xclaw] existing wallet detected; preserving existing passphrase/config"
+  fi
+fi
+if [ -n "\${XCLAW_WALLET_PASSPHRASE:-}" ]; then
+  openclaw config set skills.entries.xclaw-agent.env.XCLAW_WALLET_PASSPHRASE "$XCLAW_WALLET_PASSPHRASE" || true
+fi
 if [ -n "\${XCLAW_AGENT_API_KEY:-}" ]; then
   openclaw config set skills.entries.xclaw-agent.apiKey "$XCLAW_AGENT_API_KEY" || true
   openclaw config set skills.entries.xclaw-agent.env.XCLAW_AGENT_API_KEY "$XCLAW_AGENT_API_KEY" || true
@@ -85,8 +126,12 @@ else
   echo "[xclaw] XCLAW_AGENT_API_KEY not provided; installer will request credentials from /api/v1/agent/bootstrap"
 fi
 
-echo "[xclaw] ensuring wallet exists"
-python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py wallet-create || true
+if [ "$wallet_exists" = "1" ]; then
+  echo "[xclaw] wallet already exists; keeping existing wallet"
+else
+  echo "[xclaw] first install detected; creating wallet"
+  python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py wallet-create
+fi
 
 runtime_platform="linux"
 uname_s="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -121,7 +166,7 @@ if [ -z "\${XCLAW_AGENT_API_KEY:-}" ] && [ -n "$wallet_address" ]; then
 }
 JSON
 )"
-  bootstrap_response="$(curl -fsS "$XCLAW_API_BASE_URL/api/v1/agent/bootstrap" \
+  bootstrap_response="$(curl -fsS "$XCLAW_API_BASE_URL/agent/bootstrap" \
     -H "Content-Type: application/json" \
     -d "$bootstrap_payload" || true)"
   printf "%s\n" "$bootstrap_response"
@@ -156,7 +201,7 @@ fi
 
 if [ -z "\${XCLAW_AGENT_ID:-}" ] && [ -n "\${XCLAW_AGENT_API_KEY:-}" ]; then
   echo "[xclaw] attempting to infer XCLAW_AGENT_ID from API token"
-  inferred_agent_id="$(curl -fsS "$XCLAW_API_BASE_URL/api/v1/limit-orders/pending?chainKey=$XCLAW_DEFAULT_CHAIN&limit=1" \
+  inferred_agent_id="$(curl -fsS "$XCLAW_API_BASE_URL/limit-orders/pending?chainKey=$XCLAW_DEFAULT_CHAIN&limit=1" \
     -H "Authorization: Bearer $XCLAW_AGENT_API_KEY" \
     | python3 -c 'import json,sys; 
 try:
@@ -201,13 +246,13 @@ JSON
 JSON
 )"
 
-  curl -fsS "$XCLAW_API_BASE_URL/api/v1/agent/register" \
+  curl -fsS "$XCLAW_API_BASE_URL/agent/register" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $XCLAW_AGENT_API_KEY" \
     -H "Idempotency-Key: $register_key" \
     -d "$register_payload" || true
 
-  curl -fsS "$XCLAW_API_BASE_URL/api/v1/agent/heartbeat" \
+  curl -fsS "$XCLAW_API_BASE_URL/agent/heartbeat" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $XCLAW_AGENT_API_KEY" \
     -H "Idempotency-Key: $heartbeat_key" \
@@ -215,6 +260,15 @@ JSON
   echo "[xclaw] register + heartbeat attempted"
 else
   echo "[xclaw] skipped auto-register. Provide XCLAW_AGENT_API_KEY and XCLAW_AGENT_ID, or ensure /api/v1/agent/bootstrap is enabled."
+fi
+
+echo "[xclaw] restarting OpenClaw gateway to apply updated skill/env config"
+if openclaw gateway restart >/dev/null 2>&1; then
+  echo "[xclaw] gateway restarted"
+elif openclaw gateway stop >/dev/null 2>&1 && openclaw gateway start >/dev/null 2>&1; then
+  echo "[xclaw] gateway restarted via stop/start fallback"
+else
+  echo "[xclaw] warning: gateway restart failed; run 'openclaw gateway restart' manually"
 fi
 
 cat <<'NEXT_STEPS'
@@ -227,7 +281,9 @@ Next steps:
    openclaw skills info xclaw-agent
 3) Register + heartbeat:
    attempted automatically via bootstrap endpoint or provided credentials
-4) Start runtime checks:
+4) Gateway:
+   restarted automatically (fallback warning shown if restart failed)
+5) Start runtime checks:
    python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py status
 NEXT_STEPS
 `;

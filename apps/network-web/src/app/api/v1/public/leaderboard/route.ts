@@ -128,7 +128,10 @@ export async function GET(req: NextRequest) {
         from performance_snapshots ps
         where ps."window" = $1::performance_window
           and ($2::text = 'all' or ps.mode::text = $2)
-          and ($3::text = 'all' or ps.chain_key = $3)
+          and (
+            ($3::text = 'all' and ps.chain_key = 'all')
+            or ($3::text <> 'all' and ps.chain_key = $3)
+          )
       )
       select
         r.agent_id,

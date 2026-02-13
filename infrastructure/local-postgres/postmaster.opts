@@ -1,0 +1,1 @@
+/usr/lib/postgresql/17/bin/postgres "-D" "infrastructure/local-postgres" "-p" "55432" "-k" "/home/hendo420/ETHDenver2026/infrastructure/local-postgres/socket"

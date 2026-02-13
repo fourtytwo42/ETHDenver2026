@@ -1659,3 +1659,18 @@ Active slice: `Slice 18: Hosted Agent Bootstrap Skill Contract`
 
 ### Notes
 - One `seed:verify` attempt failed when reset/load/verify were run in parallel; rerun sequentially (`seed:load && seed:verify`) passed and is the canonical evidence.
+
+### Slice 18.1 Agent key recovery extension
+
+Additional file-level evidence:
+- `apps/network-web/src/app/api/v1/agent/auth/challenge/route.ts`
+- `apps/network-web/src/app/api/v1/agent/auth/recover/route.ts`
+- `packages/shared-schemas/json/agent-auth-challenge-request.schema.json`
+- `packages/shared-schemas/json/agent-auth-recover-request.schema.json`
+- `infrastructure/migrations/0004_slice18_agent_auth_recovery.sql`
+- `apps/agent-runtime/xclaw_agent/cli.py`
+- `apps/agent-runtime/tests/test_wallet_core.py`
+
+Additional verification outputs:
+- `python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -v` -> PASS (28 tests including auth-recovery retry path)
+- `npm run build` -> PASS (route list includes `/api/v1/agent/auth/challenge` and `/api/v1/agent/auth/recover`)

@@ -372,6 +372,18 @@ Append-only enforcement:
 - `mock_receipt_id` varchar(128) nullable
 - `created_at`
 
+## 7.19 `agent_auth_challenges`
+- `challenge_id` ULID PK
+- `agent_id` FK
+- `chain_key` varchar(64)
+- `wallet_address` varchar(128)
+- `nonce` varchar(128)
+- `action` varchar(64)
+- `challenge_message` text
+- `expires_at` timestamptz
+- `consumed_at` timestamptz nullable
+- `created_at`, `updated_at`
+
 ---
 
 ## 8) API Contracts (Network App)
@@ -391,29 +403,35 @@ All agent write endpoints require:
 3. `POST /api/v1/agent/heartbeat`
 - Updates runtime status, policy snapshot, optional balances.
 
-4. `POST /api/v1/trades/proposed`
+4. `POST /api/v1/agent/auth/challenge`
+- Issues canonical wallet-sign challenge for key recovery.
+
+5. `POST /api/v1/agent/auth/recover`
+- Verifies wallet signature and returns a fresh agent API key.
+
+6. `POST /api/v1/trades/proposed`
 - Ingests proposed trade and returns normalized `tradeId`.
 
-5. `POST /api/v1/trades/:tradeId/status`
+7. `POST /api/v1/trades/:tradeId/status`
 - Accepts allowed state transitions and execution payload.
 
-6. `POST /api/v1/events`
+8. `POST /api/v1/events`
 - Ingests normalized agent events.
 
-7. `POST /api/v1/management/session/bootstrap`
+9. `POST /api/v1/management/session/bootstrap`
 - Validates `?token=` bootstrap and creates/refreshes agent-scoped management session cookie.
 
-8. `POST /api/v1/management/stepup/challenge`
+10. `POST /api/v1/management/stepup/challenge`
 - Issues single-use step-up challenge code via agent-facing pathway.
 
-9. `POST /api/v1/management/stepup/verify`
+11. `POST /api/v1/management/stepup/verify`
 - Verifies challenge code and creates 24h step-up session.
 
-10. `POST /api/v1/management/revoke-all`
+12. `POST /api/v1/management/revoke-all`
 - Revokes all management sessions and active step-up sessions for the agent.
-11. `POST /api/v1/management/limit-orders`
+13. `POST /api/v1/management/limit-orders`
 - Creates a management-authored limit order.
-12. `POST /api/v1/management/limit-orders/:orderId/cancel`
+14. `POST /api/v1/management/limit-orders/:orderId/cancel`
 - Cancels one open/triggered limit order.
 
 ## 8.2 Agent Read Endpoints (Authenticated)

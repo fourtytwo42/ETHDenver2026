@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/agent-auth-challenge-request.schema.json",
+  "title": "AgentAuthChallengeRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agentId", "chainKey", "walletAddress", "action"],
+  "properties": {
+    "agentId": { "type": "string", "minLength": 1 },
+    "chainKey": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "walletAddress": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+    "action": {
+      "type": "string",
+      "enum": ["agent_key_recovery"]
+    }
+  }
+}

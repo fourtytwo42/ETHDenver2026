@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { ModeBadge } from '@/components/mode-badge';
 import { PublicStatusBadge } from '@/components/public-status-badge';
-import { formatNumber, formatPercent, formatUsd, formatUtc, isStale } from '@/lib/public-format';
+import { formatNumber, formatPercent, formatUsd, formatUtc } from '@/lib/public-format';
 import { isPublicStatus, type PublicMode } from '@/lib/public-types';
 
 type LeaderboardItem = {
@@ -18,6 +18,7 @@ type LeaderboardItem = {
   volume_usd: string | null;
   trades_count: number;
   followers_count: number;
+  stale: boolean;
   snapshot_at: string;
 };
 
@@ -102,7 +103,7 @@ function DashboardPage() {
     };
   }, [leaderboard]);
 
-  const stale = (leaderboard ?? []).some((row) => isStale(row.snapshot_at, 300));
+  const stale = (leaderboard ?? []).some((row) => row.stale);
 
   return (
     <div>
@@ -199,7 +200,7 @@ function DashboardPage() {
                       <td>{formatNumber(row.trades_count)}</td>
                       <td>
                         {formatUtc(row.snapshot_at)}
-                        {isStale(row.snapshot_at, 300) ? <div className="stale">stale</div> : null}
+                        {row.stale ? <div className="stale">stale</div> : null}
                       </td>
                     </tr>
                   ))}

@@ -24,6 +24,20 @@ function asNumber(value: string | null | undefined): number {
   return parsed;
 }
 
+function normalizeAmountForMetrics(value: string | null | undefined): number {
+  const parsed = asNumber(value);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+  const abs = Math.abs(parsed);
+  // Historical rows may carry wei-scaled values in amount fields.
+  // Heuristic: values at trillion+ scale are interpreted as wei and converted to token units.
+  if (abs >= 1e12) {
+    return parsed / 1e18;
+  }
+  return parsed;
+}
+
 function calcTradePnl(status: string, volumeUsd: number, isMock: boolean): number {
   if (status === 'filled') {
     return volumeUsd * (isMock ? 0.01 : 0.008);
@@ -133,7 +147,7 @@ async function recomputeForAgent(client: PoolClient, agentId: string): Promise<v
         let copiedPnlUsd = 0;
 
         for (const row of result.rows) {
-          const amountUsd = Math.abs(asNumber(row.amount_usd));
+          const amountUsd = Math.abs(normalizeAmountForMetrics(row.amount_usd));
           const tradePnl = calcTradePnl(row.status, amountUsd, row.is_mock);
 
           volumeUsd += amountUsd;

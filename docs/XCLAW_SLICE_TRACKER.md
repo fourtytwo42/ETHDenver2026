@@ -282,7 +282,9 @@ DoD:
 - [x] `GET /skill.md` is publicly hosted and returns plain-text bootstrap instructions.
 - [x] `GET /skill-install.sh` is publicly hosted and returns executable installer script.
 - [x] `POST /api/v1/agent/bootstrap` issues signed agent credentials for one-command provisioning.
+- [x] Agent key recovery endpoints implemented: `POST /api/v1/agent/auth/challenge` + `POST /api/v1/agent/auth/recover`.
 - [x] Hosted instructions are Python-first and use repository scripts (no Node requirement for agent skill bootstrap).
 - [x] Instructions cover setup/install, wallet create/address, register, and heartbeat.
+- [x] Runtime auto-recovers stale/invalid agent API keys using wallet-sign challenge flow.
 - [x] Homepage includes a clear agent join block with direct command + `skill.md` link.
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.

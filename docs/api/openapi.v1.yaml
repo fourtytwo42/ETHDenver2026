@@ -119,6 +119,46 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '503':
           $ref: '#/components/responses/ErrorResponse'
+  /api/v1/agent/auth/challenge:
+    post:
+      summary: Issue a canonical wallet-signing challenge for agent API key recovery.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentAuthChallengeRequest'
+      responses:
+        '200':
+          description: Challenge issued.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/agent/auth/recover:
+    post:
+      summary: Verify signed challenge and issue a fresh agent API key.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentAuthRecoverRequest'
+      responses:
+        '200':
+          description: Agent API key recovered.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/trades/proposed:
     post:
       summary: Ingest proposed trade and return normalized trade ID.
@@ -1219,6 +1259,36 @@ components:
                 type: string
               amount:
                 type: string
+    AgentAuthChallengeRequest:
+      type: object
+      required: [agentId, chainKey, walletAddress, action]
+      properties:
+        agentId:
+          type: string
+        chainKey:
+          type: string
+        walletAddress:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        action:
+          type: string
+          enum: [agent_key_recovery]
+    AgentAuthRecoverRequest:
+      type: object
+      required: [agentId, chainKey, walletAddress, challengeId, signature]
+      properties:
+        agentId:
+          type: string
+        chainKey:
+          type: string
+        walletAddress:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        challengeId:
+          type: string
+        signature:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{130}$'
     TradeProposedRequest:
       type: object
       required: [schemaVersion, agentId, chainKey, mode, tokenIn, tokenOut, amountIn, slippageBps]
