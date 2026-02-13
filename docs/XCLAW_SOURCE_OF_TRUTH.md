@@ -382,35 +382,38 @@ All agent write endpoints require:
 - `schemaVersion` in payload
 
 ## 8.1 Write Endpoints
-1. `POST /api/v1/agent/register`
+1. `POST /api/v1/agent/bootstrap`
+- One-shot bootstrap route that creates agent identity + wallet mapping and returns a signed agent API key for zero-touch installer flows.
+
+2. `POST /api/v1/agent/register`
 - Registers or upserts agent identity and wallets.
 
-2. `POST /api/v1/agent/heartbeat`
+3. `POST /api/v1/agent/heartbeat`
 - Updates runtime status, policy snapshot, optional balances.
 
-3. `POST /api/v1/trades/proposed`
+4. `POST /api/v1/trades/proposed`
 - Ingests proposed trade and returns normalized `tradeId`.
 
-4. `POST /api/v1/trades/:tradeId/status`
+5. `POST /api/v1/trades/:tradeId/status`
 - Accepts allowed state transitions and execution payload.
 
-5. `POST /api/v1/events`
+6. `POST /api/v1/events`
 - Ingests normalized agent events.
 
-6. `POST /api/v1/management/session/bootstrap`
+7. `POST /api/v1/management/session/bootstrap`
 - Validates `?token=` bootstrap and creates/refreshes agent-scoped management session cookie.
 
-7. `POST /api/v1/management/stepup/challenge`
+8. `POST /api/v1/management/stepup/challenge`
 - Issues single-use step-up challenge code via agent-facing pathway.
 
-8. `POST /api/v1/management/stepup/verify`
+9. `POST /api/v1/management/stepup/verify`
 - Verifies challenge code and creates 24h step-up session.
 
-9. `POST /api/v1/management/revoke-all`
+10. `POST /api/v1/management/revoke-all`
 - Revokes all management sessions and active step-up sessions for the agent.
-10. `POST /api/v1/management/limit-orders`
+11. `POST /api/v1/management/limit-orders`
 - Creates a management-authored limit order.
-11. `POST /api/v1/management/limit-orders/:orderId/cancel`
+12. `POST /api/v1/management/limit-orders/:orderId/cancel`
 - Cancels one open/triggered limit order.
 
 ## 8.2 Agent Read Endpoints (Authenticated)
@@ -591,6 +594,7 @@ Must not show to unauthorized viewers:
 - `DATABASE_URL`
 - `REDIS_URL`
 - `AGENT_API_KEY_SALT`
+- `XCLAW_AGENT_TOKEN_SIGNING_KEY` (optional; if set, enables signed bootstrap-issued agent API keys)
 - `CHAIN_RPC_<CHAIN_KEY>`
 - `CHAIN_RPC_<CHAIN_KEY>_FALLBACK` (optional but recommended)
 - `RPC_PROVIDER_NAME` (e.g. `public`, `alchemy`, `ankr`, `quicknode`)
@@ -1648,6 +1652,7 @@ The following files are now part of the canonical source-of-truth implementation
 - `config/chains/base_sepolia.json`
 - `config/chains/hardhat_local.json`
 - `packages/shared-schemas/json/error.schema.json`
+- `packages/shared-schemas/json/agent-bootstrap-request.schema.json`
 - `packages/shared-schemas/json/agent-register-request.schema.json`
 - `packages/shared-schemas/json/agent-heartbeat-request.schema.json`
 - `packages/shared-schemas/json/trade-proposed-request.schema.json`

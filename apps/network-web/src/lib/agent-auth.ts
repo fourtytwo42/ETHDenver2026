@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 
 import { getEnv } from '@/lib/env';
 import { errorResponse } from '@/lib/errors';
+import { verifySignedAgentToken } from '@/lib/agent-token';
 
 type AuthFailure = {
   ok: false;
@@ -56,28 +57,38 @@ export function authenticateAgentByToken(
 
   if (expectedAgentId) {
     const expectedToken = env.agentApiKeys[expectedAgentId];
-    if (!expectedToken || expectedToken !== token) {
-      return {
-        ok: false,
-        response: errorResponse(
-          401,
-          {
-            code: 'auth_invalid',
-            message: 'Agent authentication failed for the provided agentId.',
-            actionHint: 'Use the api key mapped to this agentId in XCLAW_AGENT_API_KEYS.'
-          },
-          requestId
-        )
-      };
+    if (expectedToken && expectedToken === token) {
+      return { ok: true, agentId: expectedAgentId };
     }
 
-    return { ok: true, agentId: expectedAgentId };
+    const signed = verifySignedAgentToken(token);
+    if (signed.ok && signed.agentId === expectedAgentId) {
+      return { ok: true, agentId: expectedAgentId };
+    }
+
+    return {
+      ok: false,
+      response: errorResponse(
+        401,
+        {
+          code: 'auth_invalid',
+          message: 'Agent authentication failed for the provided agentId.',
+          actionHint: 'Use the api key mapped to this agentId in XCLAW_AGENT_API_KEYS or a valid signed agent bootstrap token.'
+        },
+        requestId
+      )
+    };
   }
 
   for (const [agentId, candidate] of Object.entries(env.agentApiKeys)) {
     if (candidate === token) {
       return { ok: true, agentId };
     }
+  }
+
+  const signed = verifySignedAgentToken(token);
+  if (signed.ok) {
+    return { ok: true, agentId: signed.agentId };
   }
 
   return {

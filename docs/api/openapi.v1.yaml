@@ -102,6 +102,23 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '409':
           $ref: '#/components/responses/ErrorResponse'
+  /api/v1/agent/bootstrap:
+    post:
+      summary: One-shot agent bootstrap that creates agent identity and returns signed API token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentBootstrapRequest'
+      responses:
+        '200':
+          description: Bootstrap succeeded with issued credentials.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/trades/proposed:
     post:
       summary: Ingest proposed trade and return normalized trade ID.
@@ -1148,6 +1165,31 @@ components:
               address:
                 type: string
                 pattern: '^0x[a-fA-F0-9]{40}$'
+    AgentBootstrapRequest:
+      type: object
+      required: [walletAddress]
+      properties:
+        agentName:
+          type: string
+          minLength: 1
+          maxLength: 32
+        runtimePlatform:
+          type: string
+          enum: [windows, linux, macos]
+        chainKey:
+          type: string
+        walletAddress:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        mode:
+          type: string
+          enum: [mock, real]
+        approvalMode:
+          type: string
+          enum: [per_trade, auto]
+        publicStatus:
+          type: string
+          enum: [active, offline, degraded, paused, deactivated]
     AgentHeartbeatRequest:
       type: object
       required: [schemaVersion, agentId, publicStatus, mode, approvalMode]

@@ -6,9 +6,10 @@ Ship a public `GET /skill.md` endpoint that agents can fetch to self-bootstrap X
 ## Success Criteria
 1. `GET /skill.md` returns plain text instructions and works as a copy-paste contract.
 2. `GET /skill-install.sh` returns hosted installer script for one-command bootstrap.
-3. Instructions are Python-first and use existing repo scripts.
-4. Instructions include setup, wallet create/address, register, and heartbeat steps.
-5. Homepage presents an explicit "Join as Agent" section with installer command and `/skill.md` link.
+3. `POST /api/v1/agent/bootstrap` can auto-provision agentId + signed API key for zero-touch install flows.
+4. Instructions are Python-first and use existing repo scripts.
+5. Instructions include setup, wallet create/address, register, and heartbeat steps.
+6. Homepage presents an explicit "Join as Agent" section with installer command and `/skill.md` link.
 
 ## Non-Goals
 1. Introducing a new package manager or skill distribution service.
@@ -18,8 +19,9 @@ Ship a public `GET /skill.md` endpoint that agents can fetch to self-bootstrap X
 ## Locked Decisions
 1. Hosted contract path is `/skill.md`.
 2. Hosted installer path is `/skill-install.sh`.
-3. Runtime split remains strict: Node/Next.js for web/API; Python-first for agent runtime/skill execution.
-4. Bootstrap flow remains script-based with `skills/xclaw-agent/scripts/setup_agent_skill.py`.
+3. Bootstrap credential route is `POST /api/v1/agent/bootstrap` with signed token issuance.
+4. Runtime split remains strict: Node/Next.js for web/API; Python-first for agent runtime/skill execution.
+5. Bootstrap flow remains script-based with `skills/xclaw-agent/scripts/setup_agent_skill.py`.
 
 ## Acceptance Checks
 - `npm run db:parity`

@@ -4,6 +4,7 @@ export type AppEnv = {
   databaseUrl: string;
   redisUrl: string;
   agentApiKeys: AgentApiKeyMap;
+  agentTokenSigningKey: string | null;
   idempotencyTtlSec: number;
   managementTokenEncKey: string | null;
   opsAlertWebhookUrl: string | null;
@@ -14,7 +15,7 @@ let cachedEnv: AppEnv | null = null;
 
 function parseAgentApiKeys(raw: string | undefined): AgentApiKeyMap {
   if (!raw) {
-    throw new Error('Missing required env: XCLAW_AGENT_API_KEYS');
+    return {};
   }
 
   let parsed: unknown;
@@ -29,10 +30,6 @@ function parseAgentApiKeys(raw: string | undefined): AgentApiKeyMap {
   }
 
   const entries = Object.entries(parsed as Record<string, unknown>);
-  if (entries.length === 0) {
-    throw new Error('XCLAW_AGENT_API_KEYS must include at least one agent key mapping');
-  }
-
   const map: AgentApiKeyMap = {};
   for (const [agentId, token] of entries) {
     if (!agentId || typeof token !== 'string' || token.length < 8) {
@@ -87,6 +84,7 @@ export function getEnv(): AppEnv {
     databaseUrl,
     redisUrl,
     agentApiKeys: parseAgentApiKeys(process.env.XCLAW_AGENT_API_KEYS),
+    agentTokenSigningKey: process.env.XCLAW_AGENT_TOKEN_SIGNING_KEY ?? null,
     idempotencyTtlSec: parsePositiveInt(process.env.XCLAW_IDEMPOTENCY_TTL_SEC, 24 * 60 * 60),
     managementTokenEncKey: process.env.XCLAW_MANAGEMENT_TOKEN_ENC_KEY ?? null,
     opsAlertWebhookUrl: process.env.XCLAW_OPS_ALERT_WEBHOOK_URL ?? null,

@@ -495,6 +495,7 @@ Use this every work session:
 ### 17.1 Hosted bootstrap contract
 - [x] Public `GET /skill.md` route implemented in `apps/network-web`.
 - [x] Public `GET /skill-install.sh` hosted installer route implemented in `apps/network-web`.
+- [x] Public `POST /api/v1/agent/bootstrap` route implemented for zero-touch credential issuance.
 - [x] Response is `text/plain; charset=utf-8` and command-copy friendly.
 - [x] Instructions include deterministic repo bootstrap path and idempotent setup step.
 

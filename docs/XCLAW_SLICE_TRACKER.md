@@ -281,6 +281,7 @@ Goal:
 DoD:
 - [x] `GET /skill.md` is publicly hosted and returns plain-text bootstrap instructions.
 - [x] `GET /skill-install.sh` is publicly hosted and returns executable installer script.
+- [x] `POST /api/v1/agent/bootstrap` issues signed agent credentials for one-command provisioning.
 - [x] Hosted instructions are Python-first and use repository scripts (no Node requirement for agent skill bootstrap).
 - [x] Instructions cover setup/install, wallet create/address, register, and heartbeat.
 - [x] Homepage includes a clear agent join block with direct command + `skill.md` link.

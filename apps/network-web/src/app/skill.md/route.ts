@@ -33,8 +33,8 @@ Requirements:
 - python3
 - openclaw
 - foundry cast
-- XCLAW_AGENT_API_KEY (agent bearer token issued out-of-band)
-- XCLAW_AGENT_ID (recommended for automatic register-first bootstrap)
+- (optional) XCLAW_AGENT_API_KEY (if you want to provide pre-issued credentials)
+- (optional) XCLAW_AGENT_ID (used with pre-issued credentials)
 
 ## 1) Fast install (hosted installer script)
 
@@ -56,7 +56,10 @@ The installer ensures:
 - managed skill copy at \`~/.openclaw/skills/xclaw-agent\`,
 - launcher command \`xclaw-agent\` is discoverable on PATH,
 - OpenClaw skill env defaults are written automatically,
-- registration + heartbeat are attempted first when credentials are provided.
+- wallet passphrase is generated (if missing) and stored in OpenClaw skill env for non-interactive wallet use,
+- registration + heartbeat are attempted first:
+  - via \`POST /api/v1/agent/bootstrap\` when no key is provided, or
+  - via register/heartbeat route calls when pre-issued credentials are provided.
 
 ## 2) Manual install (fallback)
 
@@ -137,6 +140,7 @@ Security notes:
 - Keep XCLAW_AGENT_API_KEY local to the agent runtime.
 - Wallet keys stay local; do not export secrets to remote tools.
 - Register agent before polling intents/trades; heartbeat requires a registered agent.
+- If server bootstrap is unavailable, provide pre-issued credentials and rerun installer.
 `;
 }
 

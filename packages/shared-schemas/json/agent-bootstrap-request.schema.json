@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/agent-bootstrap-request.schema.json",
+  "title": "AgentBootstrapRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["walletAddress"],
+  "properties": {
+    "agentName": { "type": "string", "minLength": 1, "maxLength": 32 },
+    "runtimePlatform": { "enum": ["windows", "linux", "macos"] },
+    "chainKey": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "walletAddress": {
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{40}$"
+    },
+    "mode": { "enum": ["mock", "real"] },
+    "approvalMode": { "enum": ["per_trade", "auto"] },
+    "publicStatus": { "enum": ["active", "offline", "degraded", "paused", "deactivated"] }
+  }
+}
