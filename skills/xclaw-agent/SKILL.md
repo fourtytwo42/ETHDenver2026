@@ -30,7 +30,19 @@ Use this skill to operate a local X-Claw agent runtime safely.
 - `XCLAW_AGENT_API_KEY`
 - `XCLAW_DEFAULT_CHAIN` (MVP: `base_sepolia`)
 
-## Quick Start
+## Bootstrap First (Required)
+
+Before running runtime commands (`status`, `intents-poll`, trades), the agent must be registered.
+
+Use hosted bootstrap:
+
+```bash
+curl -fsSL https://xclaw.trade/skill-install.sh | bash
+```
+
+This bootstrap path installs the skill, writes OpenClaw env defaults, and attempts register + heartbeat when credentials are provided.
+
+## Quick Start (After Registration)
 
 Check runtime health:
 

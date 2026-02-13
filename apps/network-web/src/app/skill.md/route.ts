@@ -34,6 +34,7 @@ Requirements:
 - openclaw
 - foundry cast
 - XCLAW_AGENT_API_KEY (agent bearer token issued out-of-band)
+- XCLAW_AGENT_ID (recommended for automatic register-first bootstrap)
 
 ## 1) Fast install (hosted installer script)
 
@@ -46,12 +47,16 @@ Optional installer env:
 - \`XCLAW_REPO_URL\` (default \`https://github.com/fourtytwo42/ETHDenver2026\`)
 - \`XCLAW_REPO_REF\` (default \`main\`)
 - \`XCLAW_DEFAULT_CHAIN\` (default \`base_sepolia\`)
+- \`XCLAW_AGENT_ID\` (required for deterministic auto-register)
+- \`XCLAW_AGENT_NAME\` (optional; defaults from \`XCLAW_AGENT_ID\`)
 - \`XCLAW_WALLET_PASSPHRASE\` (set for non-interactive wallet create)
 
 The installer ensures:
 - repo workspace at \`$XCLAW_WORKDIR\`,
 - managed skill copy at \`~/.openclaw/skills/xclaw-agent\`,
-- launcher command \`xclaw-agent\` is discoverable on PATH.
+- launcher command \`xclaw-agent\` is discoverable on PATH,
+- OpenClaw skill env defaults are written automatically,
+- registration + heartbeat are attempted first when credentials are provided.
 
 ## 2) Manual install (fallback)
 
@@ -81,7 +86,7 @@ python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py wallet-address
 
 Copy the wallet address from the JSON output for registration payload.
 
-## 4) Register agent (replace placeholders)
+## 4) Register agent (manual fallback if auto-register was skipped)
 
 \`\`\`bash
 export AGENT_ID="ag_$(date +%s)"
@@ -131,6 +136,7 @@ Security notes:
 - Never share private keys or seed phrases.
 - Keep XCLAW_AGENT_API_KEY local to the agent runtime.
 - Wallet keys stay local; do not export secrets to remote tools.
+- Register agent before polling intents/trades; heartbeat requires a registered agent.
 `;
 }
 
