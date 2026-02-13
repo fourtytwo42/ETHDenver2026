@@ -1310,3 +1310,160 @@ Executed with current slice changes:
   1. revert Slice 14 touched files only,
   2. rerun required gates,
   3. confirm tracker/roadmap/source-of-truth alignment returns to pre-slice state.
+
+## Slice 15 Acceptance Evidence
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 15: Base Sepolia Promotion`
+Issue mapping: `#15`
+
+### Objective + scope lock
+- Objective: promote Hardhat-validated DEX/escrow contract surface to Base Sepolia with verifiable deployment constants and evidence.
+- Scope guard: Slice 16 release-gate work is excluded.
+
+### File-level evidence (Slice 15)
+- Tooling/config:
+  - `hardhat.config.ts`
+  - `package.json`
+  - `infrastructure/scripts/hardhat/deploy-base-sepolia.ts`
+  - `infrastructure/scripts/hardhat/verify-base-sepolia.ts`
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+- Process/docs:
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+- Constants/artifacts:
+  - `config/chains/base_sepolia.json`
+  - `infrastructure/seed-data/base-sepolia-deploy.json`
+  - `infrastructure/seed-data/base-sepolia-verify.json`
+
+### Verification commands and outcomes
+#### Required global gates
+- `npm run db:parity` -> PASS (`ok: true`, checkedAt `2026-02-13T17:41:04.820Z`)
+- `npm run seed:reset && npm run seed:load && npm run seed:verify` -> PASS
+- `npm run build` -> PASS (Next.js production build complete)
+
+#### Slice-15 deploy/verify checks
+- Missing-env negative checks:
+  - `npm run hardhat:deploy-base-sepolia` without env -> expected fail: `Missing required env var 'BASE_SEPOLIA_RPC_URL'`
+  - `npm run hardhat:verify-base-sepolia` without env -> expected fail: `Missing required env var 'BASE_SEPOLIA_RPC_URL'`
+- Chain-mismatch negative checks:
+  - `npx hardhat run ...deploy-base-sepolia.ts --network hardhat` with env set -> expected fail: `Chain mismatch: expected 84532, got 31337`
+  - `npx hardhat run ...verify-base-sepolia.ts --network hardhat` with env set -> expected fail: `Chain mismatch: expected 84532, got 31337`
+- Base Sepolia deployment:
+  - `BASE_SEPOLIA_RPC_URL=https://sepolia.base.org BASE_SEPOLIA_DEPLOYER_PRIVATE_KEY=0x111...111 npm run hardhat:deploy-base-sepolia` -> PASS
+  - deployed addresses:
+    - factory: `0x0fA574a76F81537eC187b056D19C612Fcb77A1CF`
+    - router: `0xEA5925517A4Ab56816DF07f29546F8986A2A5663`
+    - quoter: `0xc72A1aE013f9249AFB69E6f87c41c4e2E95aceA9`
+    - escrow: `0x08C9AA0100d18425a11eC9EB059d923d7d4Da2F7`
+  - deployment tx hashes:
+    - factory: `0x4315233d6400d34a02c0037fcb2401d23fe1f4f1cb2d25619541dfaa58ee97c9`
+    - router: `0x4fb08649a186094341395f3423f820fcb933f8f96c55f59fd49fa2d93083cc1a`
+    - quoter: `0xf7b1f44a90e2125c85b0afff6f998ca28a964df3e5e0af3e91d54dc8f58d1217`
+    - escrow: `0x02f7855df82fc6f0863c18e60d279abbc1d14bd31c81f11dc551ac974c0141c9`
+- Base Sepolia verification:
+  - `BASE_SEPOLIA_RPC_URL=https://sepolia.base.org BASE_SEPOLIA_DEPLOYER_PRIVATE_KEY=0x111...111 npm run hardhat:verify-base-sepolia` -> PASS
+  - contract code presence: `factory/router/quoter/escrow=true`
+  - deployment receipts: all found + success
+- Artifacts written:
+  - `infrastructure/seed-data/base-sepolia-deploy.json`
+  - `infrastructure/seed-data/base-sepolia-verify.json`
+
+#### Runtime real/off-DEX checks
+- Runtime trade-path unit regression:
+  - `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS after runtime signing fix.
+- Local runtime setup for testnet attempt:
+  - temporary wallet imported for `base_sepolia` under `/tmp/xclaw-s15-agent/.xclaw-agent`
+  - temporary policy file configured with approvals enabled and spend cap.
+  - seeded acceptance rows created:
+    - `trd_slice15_real_001` (`approved`, `real`, `base_sepolia`)
+    - `ofi_slice15_ready_001` (`ready_to_settle`, `base_sepolia`)
+- Commands executed:
+  - `xclaw-agent trade execute --intent trd_slice15_real_001 --chain base_sepolia --json`
+  - `xclaw-agent offdex settle --intent ofi_slice15_ready_001 --chain base_sepolia --json`
+- Current observed failures:
+  - trade execute: `replacement transaction underpriced`
+  - offdex settle: reverted `NOT_READY` after failed execution sequencing.
+
+### Blockers
+- Remaining DoD blocker:
+  - `real-mode path passes testnet acceptance` is not complete due persistent Base Sepolia runtime send-path instability under sequential approval/swap execution (`replacement transaction underpriced`), even after nonce-aware signing adjustments.
+- Slice status kept in-progress until this is resolved and evidence is captured as successful.
+
+### High-risk review protocol
+- Second-opinion review: completed with focused re-read of deploy/verify scripts, chain-constant lock, and runtime signing changes.
+- Rollback plan:
+  1. revert Slice 15 touched files only,
+  2. reset `config/chains/base_sepolia.json` to pre-Slice-15 values (`deploymentStatus=not_deployed_on_base_sepolia`, null core contracts),
+  3. rerun required validation gates,
+  4. re-mark tracker/roadmap/source-of-truth statuses to pre-Slice-15 state if evidence is invalidated.
+
+## Slice 15 Closure Update (Nonce/Retry + Testnet Acceptance)
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 15: Base Sepolia Promotion`
+
+### Runtime blocker fix evidence
+- Implemented bounded retry + fee bump send path in:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+- Added regression coverage in:
+  - `apps/agent-runtime/tests/test_trade_path.py`
+- Regression command:
+  - `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS
+  - new checks: underpriced retry success, non-retryable fail-fast, retry budget exhaustion.
+
+### Required global gates re-run
+- `npm run db:parity` -> PASS (`ok: true`, checkedAt `2026-02-13T18:25:07.554Z`)
+- `npm run seed:reset && npm run seed:load && npm run seed:verify` -> PASS
+- `npm run build` -> PASS
+
+### Slice-15 deploy/verify re-run
+- Missing-env negative checks:
+  - `npm run hardhat:deploy-base-sepolia` with env unset -> expected fail: `Missing required env var 'BASE_SEPOLIA_RPC_URL'`
+  - `npm run hardhat:verify-base-sepolia` with env unset -> expected fail: `Missing required env var 'BASE_SEPOLIA_RPC_URL'`
+- Chain-mismatch negative checks:
+  - `npx hardhat run ...deploy-base-sepolia.ts --network hardhat` -> expected fail: `Chain mismatch: expected 84532, got 31337`
+  - `npx hardhat run ...verify-base-sepolia.ts --network hardhat` -> expected fail: `Chain mismatch: expected 84532, got 31337`
+- Base Sepolia deployment re-run:
+  - `BASE_SEPOLIA_RPC_URL=https://sepolia.base.org BASE_SEPOLIA_DEPLOYER_PRIVATE_KEY=0x111...111 npm run hardhat:deploy-base-sepolia` -> PASS
+  - deployed addresses:
+    - factory: `0x33A6f02b72c8f0E3F337cf2FD5e9566C1707551A`
+    - router: `0xA7F5c013074e9D3348aeEc6B82D6e6eC81Fd1f56`
+    - quoter: `0x5102182b2A0545d4afea4b0F883f5fc91a7e094a`
+    - escrow: `0x5d9BAC482775eEd3005473100599BcFCD7668198`
+  - deployment tx hashes:
+    - factory: `0x19039ef576d67c7ed11716ac69a28de539f4f38976f25e29f57adb2f4e985b66`
+    - router: `0x9d4c0747a766d4b3c1f1e8b121dc393a1e0d5b09b4f667091023315450eb2260`
+    - quoter: `0xfe4f06b17ce02af71cb1d120e3d564ef69fe65320d8849eecd6363f1ee650e1f`
+    - escrow: `0x54ace4e45b4f6a86136aed6ccf0fbe3ead68c05577757a078ac4d8fb723db6bf`
+- Base Sepolia verification re-run:
+  - `BASE_SEPOLIA_RPC_URL=https://sepolia.base.org BASE_SEPOLIA_DEPLOYER_PRIVATE_KEY=0x111...111 npm run hardhat:verify-base-sepolia` -> PASS
+  - code present and deployment receipts successful for factory/router/quoter/escrow.
+- Artifact outputs refreshed:
+  - `infrastructure/seed-data/base-sepolia-deploy.json`
+  - `infrastructure/seed-data/base-sepolia-verify.json`
+  - `config/chains/base_sepolia.json` synced to refreshed addresses/evidence.
+
+### Runtime real/off-DEX testnet acceptance re-run
+- Runtime env used:
+  - `XCLAW_AGENT_HOME=/tmp/xclaw-s15-agent2/.xclaw-agent`
+  - `XCLAW_API_BASE_URL=http://127.0.0.1:3001/api/v1`
+  - `XCLAW_AGENT_API_KEY=slice7_token_abc12345`
+  - `XCLAW_WALLET_PASSPHRASE=passphrase-123`
+- Real trade execute:
+  - `apps/agent-runtime/bin/xclaw-agent trade execute --intent trd_slice15_real_001 --chain base_sepolia --json` -> PASS
+  - tx hash: `0x11c805d86b8cf81c5a342fcc73d88fa4871e93ed7bb2e01c0d0b9b1d84d4324e`
+- Off-DEX settle:
+  - Prepared escrow readiness on-chain for `escrowDealId=0x111...111` via `fundMaker`/`fundTaker` on `0x08C9AA0100d18425a11eC9EB059d923d7d4Da2F7`.
+  - Reset intent status from `settling` back to `ready_to_settle` in DB for deterministic rerun.
+  - `apps/agent-runtime/bin/xclaw-agent offdex settle --intent ofi_slice15_ready_001 --chain base_sepolia --json` -> PASS
+  - settlement tx hash: `0xcad1a1707254fcaef98d9d7f793166a957b58bbedc51ef69e8d5a24ded1a8ed3`
+
+### Slice 15 closure state
+- Remaining blocker `replacement transaction underpriced` is resolved by runtime retry/fee bump path.
+- Slice 15 DoD is now satisfied in tracker.

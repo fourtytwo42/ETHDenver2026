@@ -14,6 +14,83 @@ from xclaw_agent import cli  # noqa: E402
 
 
 class TradePathRuntimeTests(unittest.TestCase):
+    def test_cast_send_retries_underpriced_then_succeeds(self) -> None:
+        tx_obj = {
+            "from": "0x1111111111111111111111111111111111111111",
+            "to": "0x2222222222222222222222222222222222222222",
+            "data": "0xdeadbeef",
+        }
+        commands: list[list[str]] = []
+
+        def fake_run(cmd: list[str], text: bool = True, capture_output: bool = True):  # type: ignore[override]
+            commands.append(cmd)
+            if cmd[1] == "nonce":
+                return mock.Mock(returncode=0, stdout="0x1", stderr="")
+            if cmd[1] == "send":
+                send_index = len([entry for entry in commands if len(entry) > 1 and entry[1] == "send"])
+                if send_index == 1:
+                    return mock.Mock(returncode=1, stdout="", stderr="replacement transaction underpriced")
+                return mock.Mock(returncode=0, stdout='{"transactionHash":"0x' + "ab" * 32 + '"}', stderr="")
+            raise AssertionError(f"Unexpected command {cmd}")
+
+        with mock.patch.object(cli, "_require_cast_bin", return_value="cast"), mock.patch.object(
+            cli.subprocess, "run", side_effect=fake_run
+        ):
+            tx_hash = cli._cast_rpc_send_transaction("https://rpc.example", tx_obj, "0x" + "11" * 32)
+
+        self.assertEqual(tx_hash, "0x" + "ab" * 32)
+        send_cmds = [entry for entry in commands if len(entry) > 1 and entry[1] == "send"]
+        self.assertEqual(len(send_cmds), 2)
+        self.assertIn("5gwei", send_cmds[0])
+        self.assertIn("7gwei", send_cmds[1])
+
+    def test_cast_send_non_retryable_error_fails_immediately(self) -> None:
+        tx_obj = {
+            "from": "0x1111111111111111111111111111111111111111",
+            "to": "0x2222222222222222222222222222222222222222",
+            "data": "0xdeadbeef",
+        }
+        commands: list[list[str]] = []
+
+        def fake_run(cmd: list[str], text: bool = True, capture_output: bool = True):  # type: ignore[override]
+            commands.append(cmd)
+            if cmd[1] == "nonce":
+                return mock.Mock(returncode=0, stdout="0x2", stderr="")
+            if cmd[1] == "send":
+                return mock.Mock(returncode=1, stdout="", stderr="execution reverted")
+            raise AssertionError(f"Unexpected command {cmd}")
+
+        with mock.patch.object(cli, "_require_cast_bin", return_value="cast"), mock.patch.object(
+            cli.subprocess, "run", side_effect=fake_run
+        ):
+            with self.assertRaises(cli.WalletStoreError):
+                cli._cast_rpc_send_transaction("https://rpc.example", tx_obj, "0x" + "22" * 32)
+
+        send_cmds = [entry for entry in commands if len(entry) > 1 and entry[1] == "send"]
+        self.assertEqual(len(send_cmds), 1)
+
+    def test_cast_send_retry_budget_exhausted(self) -> None:
+        tx_obj = {
+            "from": "0x1111111111111111111111111111111111111111",
+            "to": "0x2222222222222222222222222222222222222222",
+            "data": "0xdeadbeef",
+        }
+
+        def fake_run(cmd: list[str], text: bool = True, capture_output: bool = True):  # type: ignore[override]
+            if cmd[1] == "nonce":
+                return mock.Mock(returncode=0, stdout="0x3", stderr="")
+            if cmd[1] == "send":
+                return mock.Mock(returncode=1, stdout="", stderr="nonce too low")
+            raise AssertionError(f"Unexpected command {cmd}")
+
+        with mock.patch.dict(cli.os.environ, {"XCLAW_TX_SEND_MAX_ATTEMPTS": "2"}, clear=False), mock.patch.object(
+            cli, "_require_cast_bin", return_value="cast"
+        ), mock.patch.object(cli.subprocess, "run", side_effect=fake_run):
+            with self.assertRaises(cli.WalletStoreError) as ctx:
+                cli._cast_rpc_send_transaction("https://rpc.example", tx_obj, "0x" + "33" * 32)
+
+        self.assertIn("after 2 attempts", str(ctx.exception))
+
     def test_intents_poll_success(self) -> None:
         args = argparse.Namespace(chain="hardhat_local", json=True)
         with mock.patch.object(

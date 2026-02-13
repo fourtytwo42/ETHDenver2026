@@ -1,43 +1,30 @@
 # X-Claw Context Pack
 
 ## 1) Goal
-- Primary objective: complete `Slice 14: Observability + Ops` end-to-end.
-- Success criteria (testable): health/status APIs + public status page + rate limits + structured logs/alerts + backup/restore drill evidence.
+- Primary objective: complete `Slice 15: Base Sepolia Promotion` in scope.
+- Success criteria (testable): Base Sepolia deploy/verify tooling + evidence artifacts + chain-constant lock + testnet acceptance evidence.
 
 ## 2) Constraints
-- Strict slice order: Slice 14 only.
+- Strict slice order: Slice 15 only.
 - Canonical authority: `docs/XCLAW_SOURCE_OF_TRUTH.md`.
 - Runtime boundary: Node/Next.js for API/web, Python-first runtime for agent/OpenClaw commands.
 - No opportunistic refactors or dependency additions.
 
 ## 3) Contract Impact
-- Add `/api/health`, `/api/status`, and `/api/v1/*` compatibility aliases.
-- Add health/status response schemas and OpenAPI route definitions.
-- Enforce public and sensitive-write rate limits per locked policy.
-- Add VM-native Postgres backup/restore scripts and runbook.
+- Add operator deploy/verify command interface for Base Sepolia.
+- Add deterministic deployment and verification artifacts under `infrastructure/seed-data/`.
+- Update Base Sepolia chain constants only when on-chain evidence is captured.
 
 ## 4) Files and Boundaries
 - Expected touched files:
-  - `apps/network-web/src/app/api/health/route.ts`
-  - `apps/network-web/src/app/api/status/route.ts`
-  - `apps/network-web/src/app/api/v1/health/route.ts`
-  - `apps/network-web/src/app/api/v1/status/route.ts`
-  - `apps/network-web/src/app/status/page.tsx`
-  - `apps/network-web/src/app/globals.css`
-  - `apps/network-web/src/lib/env.ts`
-  - `apps/network-web/src/lib/errors.ts`
-  - `apps/network-web/src/lib/management-auth.ts`
-  - `apps/network-web/src/lib/rate-limit.ts`
-  - `apps/network-web/src/lib/ops-health.ts`
-  - `apps/network-web/src/lib/ops-alerts.ts`
-  - `apps/network-web/src/app/api/v1/public/leaderboard/route.ts`
-  - `apps/network-web/src/app/api/v1/public/agents/route.ts`
-  - `apps/network-web/src/app/api/v1/public/agents/[agentId]/route.ts`
-  - `apps/network-web/src/app/api/v1/public/agents/[agentId]/trades/route.ts`
-  - `apps/network-web/src/app/api/v1/public/activity/route.ts`
-  - `packages/shared-schemas/json/health-response.schema.json`
-  - `packages/shared-schemas/json/status-response.schema.json`
-  - `docs/api/openapi.v1.yaml`
+  - `hardhat.config.ts`
+  - `package.json`
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `infrastructure/scripts/hardhat/deploy-base-sepolia.ts`
+  - `infrastructure/scripts/hardhat/verify-base-sepolia.ts`
+  - `config/chains/base_sepolia.json`
+  - `infrastructure/seed-data/base-sepolia-deploy.json`
+  - `infrastructure/seed-data/base-sepolia-verify.json`
   - `docs/XCLAW_SOURCE_OF_TRUTH.md`
   - `docs/XCLAW_BUILD_ROADMAP.md`
   - `docs/XCLAW_SLICE_TRACKER.md`
@@ -45,12 +32,9 @@
   - `spec.md`
   - `tasks.md`
   - `acceptance.md`
-  - `infrastructure/scripts/ops/pg-backup.sh`
-  - `infrastructure/scripts/ops/pg-restore.sh`
-  - `docs/OPS_BACKUP_RESTORE_RUNBOOK.md`
 - Forbidden scope:
-  - Slice 15 Base Sepolia promotion scope
-  - Slice 16 MVP release-gate scope
+  - Slice 16 MVP release gate scope
+  - API contract redesign beyond Slice 15 promotion needs
 
 ## 5) Invariants (Must Not Change)
 - Error contract remains `code`, `message`, optional `actionHint`, optional `details`, `requestId`.
@@ -65,17 +49,15 @@
   - `npm run seed:verify`
   - `npm run build`
 - Slice-specific checks:
-  - `/api/health` and `/api/status` payload/headers and public-safe diagnostics
-  - `/api/v1/health` and `/api/v1/status` alias parity
-  - `/status` page diagnostics sections rendering
-  - public and sensitive-write rate-limit negative checks
-  - correlation-id echo checks
-  - webhook alert + incident timeline check
-  - backup creation and restore drill check
+  - missing env vars fail-fast for Base Sepolia deploy script
+  - chain mismatch fail-fast for Base Sepolia deploy script
+  - Base Sepolia deploy artifact shape and tx hash fields
+  - Base Sepolia verify artifact checks for code + receipt success
+  - runtime real/off-DEX acceptance evidence on Base Sepolia (or explicit credential/funding blocker)
 
 ## 7) Evidence + Rollback
 - Capture command outputs and route-level evidence in `acceptance.md`.
 - Rollback plan:
-  1. revert Slice 14 touched files only,
+  1. revert Slice 15 touched files only,
   2. rerun required gates,
   3. verify tracker/roadmap/source-of-truth synchronization.

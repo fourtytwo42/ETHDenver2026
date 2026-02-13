@@ -59,6 +59,9 @@ CHALLENGE_REQUIRED_KEYS = {"domain", "chain", "nonce", "timestamp", "action"}
 CHALLENGE_ALLOWED_DOMAINS = {"xclaw.trade", "localhost", "127.0.0.1", "::1", "staging.xclaw.trade"}
 RETRY_WINDOW_SEC = 600
 MAX_TRADE_RETRIES = 3
+DEFAULT_TX_GAS_PRICE_GWEI = 5
+DEFAULT_TX_SEND_MAX_ATTEMPTS = 3
+TX_GAS_PRICE_BUMP_GWEI = 2
 
 
 class WalletStoreError(Exception):
@@ -858,13 +861,118 @@ def _cast_calldata(signature: str, args: list[str]) -> str:
     return data
 
 
-def _cast_rpc_send_transaction(rpc_url: str, tx_obj: dict[str, str]) -> str:
-    cast_bin = _require_cast_bin()
-    proc = subprocess.run(
-        [cast_bin, "rpc", "--rpc-url", rpc_url, "eth_sendTransaction", json.dumps(tx_obj, separators=(",", ":"))],
+def _retryable_send_error(stderr: str) -> bool:
+    normalized = stderr.lower()
+    retryable_fragments = (
+        "replacement transaction underpriced",
+        "nonce too low",
+        "already known",
+        "temporarily underpriced",
+        "transaction underpriced",
+    )
+    return any(fragment in normalized for fragment in retryable_fragments)
+
+
+def _tx_send_max_attempts() -> int:
+    raw = (os.environ.get("XCLAW_TX_SEND_MAX_ATTEMPTS") or "").strip()
+    if not raw:
+        return DEFAULT_TX_SEND_MAX_ATTEMPTS
+    if not re.fullmatch(r"[0-9]+", raw):
+        raise WalletStoreError("XCLAW_TX_SEND_MAX_ATTEMPTS must be an integer >= 1.")
+    value = int(raw)
+    if value < 1:
+        raise WalletStoreError("XCLAW_TX_SEND_MAX_ATTEMPTS must be >= 1.")
+    return value
+
+
+def _tx_gas_price_gwei(attempt_index: int) -> int:
+    raw = (os.environ.get("XCLAW_TX_GAS_PRICE_GWEI") or "").strip()
+    if raw:
+        if not re.fullmatch(r"[0-9]+", raw):
+            raise WalletStoreError("XCLAW_TX_GAS_PRICE_GWEI must be a positive integer in gwei.")
+        base = int(raw)
+    else:
+        base = DEFAULT_TX_GAS_PRICE_GWEI
+    if base < 1:
+        raise WalletStoreError("XCLAW_TX_GAS_PRICE_GWEI must be >= 1.")
+    return base + (attempt_index * TX_GAS_PRICE_BUMP_GWEI)
+
+
+def _cast_nonce(cast_bin: str, rpc_url: str, from_addr: str, block_tag: str) -> int | None:
+    nonce_proc = subprocess.run(
+        [cast_bin, "nonce", "--rpc-url", rpc_url, from_addr, "--block", block_tag],
         text=True,
         capture_output=True,
     )
+    if nonce_proc.returncode != 0:
+        return None
+    nonce_raw = (nonce_proc.stdout or "").strip()
+    try:
+        return _parse_uint_text(nonce_raw)
+    except WalletStoreError:
+        return None
+
+
+def _cast_rpc_send_transaction(rpc_url: str, tx_obj: dict[str, str], private_key_hex: str | None = None) -> str:
+    cast_bin = _require_cast_bin()
+    if private_key_hex:
+        from_addr = tx_obj.get("from")
+        to_addr = tx_obj.get("to")
+        data = tx_obj.get("data")
+        if not isinstance(from_addr, str) or not is_hex_address(from_addr):
+            raise WalletStoreError("cast send requires tx_obj.from as hex address.")
+        if not isinstance(to_addr, str) or not is_hex_address(to_addr):
+            raise WalletStoreError("cast send requires tx_obj.to as hex address.")
+        if not isinstance(data, str) or not re.fullmatch(r"0x[a-fA-F0-9]*", data):
+            raise WalletStoreError("cast send requires tx_obj.data as hex calldata.")
+        attempts = _tx_send_max_attempts()
+        last_err = "cast send failed."
+        for attempt in range(attempts):
+            nonce_pending = _cast_nonce(cast_bin, rpc_url, from_addr, "pending")
+            nonce_latest = _cast_nonce(cast_bin, rpc_url, from_addr, "latest")
+            nonce_candidates = [value for value in (nonce_pending, nonce_latest) if value is not None]
+            nonce = max(nonce_candidates) if nonce_candidates else None
+
+            send_cmd = [
+                cast_bin,
+                "send",
+                "--json",
+                "--rpc-url",
+                rpc_url,
+                "--private-key",
+                private_key_hex,
+                "--gas-price",
+                f"{_tx_gas_price_gwei(attempt)}gwei",
+            ]
+            if nonce is not None:
+                send_cmd.extend(["--nonce", str(nonce)])
+            send_cmd.extend(
+                [
+                    "--from",
+                    from_addr,
+                    to_addr,
+                    data,
+                ]
+            )
+            proc = subprocess.run(send_cmd, text=True, capture_output=True)
+            if proc.returncode == 0:
+                return _extract_tx_hash(proc.stdout)
+
+            stderr = (proc.stderr or "").strip()
+            stdout = (proc.stdout or "").strip()
+            last_err = stderr or stdout or "cast send failed."
+            if attempt < (attempts - 1) and _retryable_send_error(last_err):
+                continue
+            if attempt < (attempts - 1):
+                raise WalletStoreError(last_err)
+
+        raise WalletStoreError(f"{last_err} (after {attempts} attempts)")
+    else:
+        proc = subprocess.run(
+            [cast_bin, "rpc", "--rpc-url", rpc_url, "eth_sendTransaction", json.dumps(tx_obj, separators=(",", ":"))],
+            text=True,
+            capture_output=True,
+        )
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip()
         stdout = (proc.stdout or "").strip()
@@ -1008,7 +1116,7 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
             raise WalletStoreError(f"Unsupported trade mode '{mode}'.")
 
         store = load_wallet_store()
-        wallet_address, _private_key_hex = _execution_wallet(store, args.chain)
+        wallet_address, private_key_hex = _execution_wallet(store, args.chain)
         cast_bin = _require_cast_bin()
         rpc_url = _chain_rpc_url(args.chain)
         router = _require_chain_contract_address(args.chain, "router")
@@ -1033,6 +1141,7 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
                 "to": token_in,
                 "data": approve_data,
             },
+            private_key_hex,
         )
         approve_receipt = subprocess.run(
             [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, approve_tx_hash],
@@ -1059,6 +1168,7 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
                 "to": router,
                 "data": swap_data,
             },
+            private_key_hex,
         )
         _post_trade_status(args.intent, previous_status, "executing", {"txHash": tx_hash})
         transition_state = "executing"
@@ -1265,7 +1375,7 @@ def cmd_offdex_settle(args: argparse.Namespace) -> int:
             )
 
         store = load_wallet_store()
-        wallet_address, _private_key_hex = _execution_wallet(store, args.chain)
+        wallet_address, private_key_hex = _execution_wallet(store, args.chain)
         rpc_url = _chain_rpc_url(args.chain)
         escrow_contract = _require_chain_contract_address(args.chain, "escrow")
         escrow_deal_id = str(target.get("escrowDealId") or _intent_deal_id_hex(args.intent))
@@ -1278,6 +1388,7 @@ def cmd_offdex_settle(args: argparse.Namespace) -> int:
                 "to": escrow_contract,
                 "data": calldata,
             },
+            private_key_hex,
         )
         status_code, status_body = _offdex_post_status(
             args.intent,

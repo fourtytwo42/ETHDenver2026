@@ -10,6 +10,8 @@
     "hardhat:node": "TS_NODE_PROJECT=tsconfig.hardhat.json hardhat node --hostname 127.0.0.1 --port 8545",
     "hardhat:deploy-local": "TS_NODE_PROJECT=tsconfig.hardhat.json hardhat run infrastructure/scripts/hardhat/deploy-local.ts --network localhost",
     "hardhat:verify-local": "TS_NODE_PROJECT=tsconfig.hardhat.json hardhat run infrastructure/scripts/hardhat/verify-local.ts --network localhost",
+    "hardhat:deploy-base-sepolia": "TS_NODE_PROJECT=tsconfig.hardhat.json hardhat run infrastructure/scripts/hardhat/deploy-base-sepolia.ts --network base_sepolia",
+    "hardhat:verify-base-sepolia": "TS_NODE_PROJECT=tsconfig.hardhat.json hardhat run infrastructure/scripts/hardhat/verify-base-sepolia.ts --network base_sepolia",
     "seed:reset": "node infrastructure/scripts/seed-reset.mjs",
     "seed:load": "node infrastructure/scripts/seed-load.mjs",
     "seed:live-activity": "node infrastructure/scripts/seed-live-activity.mjs",

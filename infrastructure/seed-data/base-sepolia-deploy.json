@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "chainId": 84532,
+  "network": "base_sepolia",
+  "deployedAt": "2026-02-13T18:26:34.430Z",
+  "deployer": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+  "rpcUrlFingerprint": "https://sepolia.base.org...",
+  "contracts": {
+    "factory": "0x33A6f02b72c8f0E3F337cf2FD5e9566C1707551A",
+    "router": "0xA7F5c013074e9D3348aeEc6B82D6e6eC81Fd1f56",
+    "quoter": "0x5102182b2A0545d4afea4b0F883f5fc91a7e094a",
+    "escrow": "0x5d9BAC482775eEd3005473100599BcFCD7668198"
+  },
+  "deploymentTxHashes": {
+    "factory": "0x19039ef576d67c7ed11716ac69a28de539f4f38976f25e29f57adb2f4e985b66",
+    "router": "0x9d4c0747a766d4b3c1f1e8b121dc393a1e0d5b09b4f667091023315450eb2260",
+    "quoter": "0xfe4f06b17ce02af71cb1d120e3d564ef69fe65320d8849eecd6363f1ee650e1f",
+    "escrow": "0x54ace4e45b4f6a86136aed6ccf0fbe3ead68c05577757a078ac4d8fb723db6bf"
+  },
+  "explorerLinks": {
+    "factory": "https://sepolia.basescan.org/tx/0x19039ef576d67c7ed11716ac69a28de539f4f38976f25e29f57adb2f4e985b66",
+    "router": "https://sepolia.basescan.org/tx/0x9d4c0747a766d4b3c1f1e8b121dc393a1e0d5b09b4f667091023315450eb2260",
+    "quoter": "https://sepolia.basescan.org/tx/0xfe4f06b17ce02af71cb1d120e3d564ef69fe65320d8849eecd6363f1ee650e1f",
+    "escrow": "https://sepolia.basescan.org/tx/0x54ace4e45b4f6a86136aed6ccf0fbe3ead68c05577757a078ac4d8fb723db6bf"
+  },
+  "sourceVerification": {
+    "provider": "basescan",
+    "apiKeyConfigured": false
+  }
+}

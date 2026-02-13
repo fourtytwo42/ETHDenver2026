@@ -1246,7 +1246,7 @@ These defaults define baseline UX/layout behavior so frontend implementation is 
 - explorer base URL
 - RPC primary/fallback
 - canonical WETH/USDC addresses
-3. Aerodrome on Base Sepolia is marked `not_deployed_on_base_sepolia`; MVP testnet execution uses self-deployed Uniswap-compatible fork contracts.
+3. Aerodrome on Base Sepolia remains `not_deployed_on_base_sepolia`; MVP testnet execution uses self-deployed Uniswap-compatible fork contracts, and Slice-15 Base Sepolia deployment constants are now populated in `config/chains/base_sepolia.json`.
 4. Evidence sources for this status are locked to:
 - `https://aerodrome.finance/security` (official contract-address page, Base mainnet listings)
 - `https://github.com/aerodrome-finance/contracts` (official deployment table)
@@ -1612,6 +1612,9 @@ Before real-mode testnet execution is considered implementation-complete:
 - deployment tx hashes on `sepolia.basescan.org`
 - verified source links
 - timestamped update in chain config metadata.
+4. Slice-15 evidence artifacts:
+- `infrastructure/seed-data/base-sepolia-deploy.json`
+- `infrastructure/seed-data/base-sepolia-verify.json`
 
 ---
 

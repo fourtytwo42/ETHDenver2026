@@ -154,23 +154,23 @@ Exit criteria:
 ## 4) Test DEX Deployment on Base Sepolia
 
 ### 4.1 Deploy strategy
-- [ ] Choose Uniswap-compatible fork implementation path.
-- [ ] Define deployment script and config input variables.
-- [ ] Deploy factory/router/quoter contracts to Base Sepolia.
-- [ ] Deploy or configure escrow contract used for off-DEX settlement on Base Sepolia.
+- [x] Choose Uniswap-compatible fork implementation path.
+- [x] Define deployment script and config input variables.
+- [x] Deploy factory/router/quoter contracts to Base Sepolia.
+- [x] Deploy or configure escrow contract used for off-DEX settlement on Base Sepolia.
 
 ### 4.2 Verify deployment
-- [ ] Confirm contract code exists at deployed addresses.
-- [ ] Verify deployment tx hashes on Base Sepolia explorer.
-- [ ] Document deployment date and deployer identity.
+- [x] Confirm contract code exists at deployed addresses.
+- [x] Verify deployment tx hashes on Base Sepolia explorer.
+- [x] Document deployment date and deployer identity.
 
 ### 4.3 Lock constants
-- [ ] Update `coreContracts.factory`.
-- [ ] Update `coreContracts.router`.
-- [ ] Update `coreContracts.quoter`.
-- [ ] Update `coreContracts.escrow`.
-- [ ] Set `deploymentStatus` to `deployed`.
-- [ ] Update evidence links in chain config and source-of-truth notes.
+- [x] Update `coreContracts.factory`.
+- [x] Update `coreContracts.router`.
+- [x] Update `coreContracts.quoter`.
+- [x] Update `coreContracts.escrow`.
+- [x] Set `deploymentStatus` to `deployed`.
+- [x] Update evidence links in chain config and source-of-truth notes.
 
 Exit criteria:
 - Base Sepolia active test DEX constants are live and verifiable.

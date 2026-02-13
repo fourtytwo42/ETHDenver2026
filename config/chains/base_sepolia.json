@@ -9,19 +9,19 @@
   },
   "coreContracts": {
     "dex": "uniswap_fork",
-    "deploymentStatus": "not_deployed_on_base_sepolia",
-    "factory": null,
-    "router": null,
-    "quoter": null,
-    "escrow": null,
+    "deploymentStatus": "deployed",
+    "factory": "0x33A6f02b72c8f0E3F337cf2FD5e9566C1707551A",
+    "router": "0xA7F5c013074e9D3348aeEc6B82D6e6eC81Fd1f56",
+    "quoter": "0x5102182b2A0545d4afea4b0F883f5fc91a7e094a",
+    "escrow": "0x5d9BAC482775eEd3005473100599BcFCD7668198",
     "escrowAbiVersion": "xclaw_escrow_v1",
-    "notes": "Slice-02 contract freeze: Base Sepolia strategy is self-deployed Uniswap-compatible fork + escrow contract in later deployment slice. Contract addresses remain null until deployment evidence is captured."
+    "notes": "Slice-15 deployment finalized. Evidence artifacts: infrastructure/seed-data/base-sepolia-deploy.json and infrastructure/seed-data/base-sepolia-verify.json. Deployment tx hashes: factory=0x19039ef576d67c7ed11716ac69a28de539f4f38976f25e29f57adb2f4e985b66, router=0x9d4c0747a766d4b3c1f1e8b121dc393a1e0d5b09b4f667091023315450eb2260, quoter=0xfe4f06b17ce02af71cb1d120e3d564ef69fe65320d8849eecd6363f1ee650e1f, escrow=0x54ace4e45b4f6a86136aed6ccf0fbe3ead68c05577757a078ac4d8fb723db6bf."
   },
   "canonicalTokens": {
     "WETH": "0x4200000000000000000000000000000000000006",
     "USDC": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
   },
-  "updatedAt": "2026-02-13T00:00:00Z",
+  "updatedAt": "2026-02-13T18:26:40.053Z",
   "version": 1,
   "sources": {
     "rpcEndpoints": [
@@ -40,19 +40,29 @@
       "https://basescan.org/address/0xcf77a3ba9a5ca399b7c97c74d54e5b1beb874e43"
     ],
     "mvpTestDexStrategy": "deploy_uniswap_compatible_fork_on_base_sepolia",
-    "escrowAbiMetadata": "xclaw_escrow_v1"
+    "escrowAbiMetadata": "xclaw_escrow_v1",
+    "deploymentArtifacts": [
+      "infrastructure/seed-data/base-sepolia-deploy.json",
+      "infrastructure/seed-data/base-sepolia-verify.json"
+    ],
+    "deploymentEvidence": [
+      "https://sepolia.basescan.org/tx/0x19039ef576d67c7ed11716ac69a28de539f4f38976f25e29f57adb2f4e985b66",
+      "https://sepolia.basescan.org/tx/0x9d4c0747a766d4b3c1f1e8b121dc393a1e0d5b09b4f667091023315450eb2260",
+      "https://sepolia.basescan.org/tx/0xfe4f06b17ce02af71cb1d120e3d564ef69fe65320d8849eecd6363f1ee650e1f",
+      "https://sepolia.basescan.org/tx/0x54ace4e45b4f6a86136aed6ccf0fbe3ead68c05577757a078ac4d8fb723db6bf"
+    ]
   },
   "verification": {
-    "verifiedAt": "2026-02-13T00:00:00Z",
+    "verifiedAt": "2026-02-13T18:26:40.053Z",
     "verifiedViaRpc": true,
     "verifiedChainIdHex": "0x14a34",
     "verifiedContractCodePresent": {
       "WETH": true,
       "USDC": true,
-      "factory": false,
-      "router": false,
-      "quoter": false,
-      "escrow": false
+      "factory": true,
+      "router": true,
+      "quoter": true,
+      "escrow": true
     }
   }
 }

@@ -1,20 +1,17 @@
-# Slice 14 Tasks
+# Slice 15 Tasks
 
-Active slice: `Slice 14: Observability + Ops`
+Active slice: `Slice 15: Base Sepolia Promotion`
 
 ## Checklist
 - [x] Record pre-flight objective, acceptance checks, touched-file allowlist, and slice guardrails.
-- [x] Implement canonical health/status routes and `/api/v1` aliases.
-- [x] Implement ops health aggregation utility (dependency, provider, heartbeat, queue views).
-- [x] Implement ops alerts utility (structured logs, incident categories, transition alerts, webhook dispatch).
-- [x] Implement Redis-backed per-minute rate limiter utility.
-- [x] Enforce public read rate limits on all `/api/v1/public/*` routes and `/api/status` path.
-- [x] Enforce sensitive management write limit centrally in management write auth path.
-- [x] Implement `/status` diagnostics page aligned with `/api/status`.
-- [x] Add health/status shared JSON schemas.
-- [x] Update OpenAPI with health/status routes and `429` coverage.
-- [x] Add Postgres backup/restore scripts and runbook.
-- [x] Run full required validation gates and capture outputs.
-- [x] Capture slice-specific functional/negative checks in acceptance evidence.
-- [x] Update source-of-truth/roadmap/tracker status for Slice 14.
-- [ ] Commit/push Slice 14 and post evidence + commit hash to issue `#14`.
+- [x] Add Base Sepolia Hardhat network support using env-sourced RPC + deployer key.
+- [x] Add `hardhat:deploy-base-sepolia` script with fail-fast env + chain checks and deployment artifact output.
+- [x] Add `hardhat:verify-base-sepolia` script with bytecode + receipt validation and verification artifact output.
+- [x] Add npm script entries for Base Sepolia deploy/verify.
+- [x] Run Base Sepolia deploy and verify commands with funded credentials; capture tx hashes and evidence artifacts.
+- [x] Finalize `config/chains/base_sepolia.json` (`factory/router/quoter/escrow`, `deploymentStatus=deployed`, evidence links).
+- [x] Add negative checks for missing env vars and chain mismatch fail-fast behavior.
+- [x] Run real-mode/off-DEX testnet acceptance path and capture evidence.
+- [x] Run required validation gates and capture outputs.
+- [x] Update source-of-truth/roadmap/tracker status for current Slice 15 result.
+- [ ] Commit/push Slice 15 and post evidence + commit hash to issue `#15`.

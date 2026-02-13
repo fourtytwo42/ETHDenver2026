@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "verifiedAt": "2026-02-13T18:26:40.053Z",
+  "verifiedViaRpc": true,
+  "verifiedChainIdHex": "0x14a34",
+  "verifiedContractCodePresent": {
+    "factory": true,
+    "router": true,
+    "quoter": true,
+    "escrow": true
+  },
+  "verifiedDeploymentTransactions": {
+    "factory": {
+      "hash": "0x19039ef576d67c7ed11716ac69a28de539f4f38976f25e29f57adb2f4e985b66",
+      "found": true,
+      "success": true,
+      "explorer": "https://sepolia.basescan.org/tx/0x19039ef576d67c7ed11716ac69a28de539f4f38976f25e29f57adb2f4e985b66"
+    },
+    "router": {
+      "hash": "0x9d4c0747a766d4b3c1f1e8b121dc393a1e0d5b09b4f667091023315450eb2260",
+      "found": true,
+      "success": true,
+      "explorer": "https://sepolia.basescan.org/tx/0x9d4c0747a766d4b3c1f1e8b121dc393a1e0d5b09b4f667091023315450eb2260"
+    },
+    "quoter": {
+      "hash": "0xfe4f06b17ce02af71cb1d120e3d564ef69fe65320d8849eecd6363f1ee650e1f",
+      "found": true,
+      "success": true,
+      "explorer": "https://sepolia.basescan.org/tx/0xfe4f06b17ce02af71cb1d120e3d564ef69fe65320d8849eecd6363f1ee650e1f"
+    },
+    "escrow": {
+      "hash": "0x54ace4e45b4f6a86136aed6ccf0fbe3ead68c05577757a078ac4d8fb723db6bf",
+      "found": true,
+      "success": true,
+      "explorer": "https://sepolia.basescan.org/tx/0x54ace4e45b4f6a86136aed6ccf0fbe3ead68c05577757a078ac4d8fb723db6bf"
+    }
+  }
+}

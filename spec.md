@@ -1,26 +1,25 @@
-# Slice 14 Spec: Observability + Ops
+# Slice 15 Spec: Base Sepolia Promotion
 
 ## Goal
-Implement canonical Slice 14 behavior so X-Claw is operable and diagnosable through public-safe diagnostics, enforced rate limits, and recovery runbooks.
+Promote the Hardhat-validated trading/off-DEX contract surface to Base Sepolia by adding reproducible deploy/verify tooling, chain-constant lock procedures, and testnet acceptance evidence.
 
 ## Success Criteria
-1. `GET /api/health` and `GET /api/status` are implemented and return contract-compliant payloads.
-2. Compatibility aliases `GET /api/v1/health` and `GET /api/v1/status` behave consistently with canonical routes.
-3. Public diagnostics page `/status` is implemented and aligned with `/api/status`.
-4. Public read rate limits (`120 req/min/IP`) and sensitive management write rate limits (`10 req/min/agent/session`) are enforced with `429 rate_limited` responses.
-5. Structured ops logs, incident categories, and webhook alerting on health transitions are active.
-6. Nightly Postgres backup path and restore drill runbook/scripts are implemented with evidence.
+1. Base Sepolia deployment script deploys `MockFactory`, `MockRouter`, `MockQuoter`, `MockEscrow` with tx-hash evidence.
+2. Base Sepolia verify script confirms contract bytecode and successful deployment receipts from RPC.
+3. `config/chains/base_sepolia.json` is finalized with deployed contract addresses and `deploymentStatus=deployed` when deployment evidence exists.
+4. Slice-15 acceptance evidence includes required global gates plus deploy/verify and real-path checks.
+5. Runtime real/off-DEX send path can sign with local private key on external RPC (no unlocked-account dependency).
 
 ## Non-Goals
-1. Slice 15 Base Sepolia deployment/promotion.
-2. Slice 16 release-gate stabilization and post-release monitoring window.
-3. New agent-runtime trading behavior changes.
+1. Slice 16 MVP acceptance/release gating.
+2. Changing trade/off-DEX API contracts.
+3. Replacing existing mock contracts with a new DEX implementation in this slice.
 
 ## Locked Decisions
-1. Canonical health/status routes are unversioned (`/api/health`, `/api/status`) with compatibility aliases (`/api/v1/health`, `/api/v1/status`).
-2. Alerts use a generic webhook target configured by environment variable.
-3. Backup automation is VM-native cron + shell scripts.
-4. Incident timeline persistence uses Redis capped list in MVP.
+1. Deployment credentials are env-var driven only; no committed secrets.
+2. Base Sepolia target chainId is fixed at `84532`.
+3. Fail-fast behavior is required for missing env vars and chain mismatch.
+4. Hardhat-local evidence remains prerequisite for testnet promotion.
 
 ## Acceptance Checks
 1. `npm run db:parity`
@@ -28,11 +27,8 @@ Implement canonical Slice 14 behavior so X-Claw is operable and diagnosable thro
 3. `npm run seed:load`
 4. `npm run seed:verify`
 5. `npm run build`
-6. Slice-14 matrix:
-   - health/status endpoints + alias parity
-   - public-safe status diagnostics (no raw RPC URLs)
-   - status page rendering for summary/dependencies/providers/incidents
-   - public and sensitive-write rate-limit negative checks
-   - correlation-id propagation checks
-   - alert transition + incident timeline checks
-   - backup creation + restore drill checks
+6. Slice-15 checks:
+   - `npm run hardhat:deploy-base-sepolia` (success with evidence artifact)
+   - `npm run hardhat:verify-base-sepolia` (success with evidence artifact)
+   - runtime real/off-DEX Base Sepolia checks (or explicit blocker evidence)
+   - negative checks for missing env and chain mismatch

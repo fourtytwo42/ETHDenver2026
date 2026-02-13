@@ -227,15 +227,15 @@ DoD:
 ---
 
 ## Slice 15: Base Sepolia Promotion
-Status: [ ]
+Status: [x]
 
 Goal:
 - Promote validated local feature set to Base Sepolia.
 
 DoD:
-- [ ] test DEX/escrow contracts deployed and verified
-- [ ] `config/chains/base_sepolia.json` finalized with `factory/router/quoter/escrow` + evidence links + `deploymentStatus=deployed`
-- [ ] real-mode path passes testnet acceptance
+- [x] test DEX/escrow contracts deployed and verified
+- [x] `config/chains/base_sepolia.json` finalized with `factory/router/quoter/escrow` + evidence links + `deploymentStatus=deployed`
+- [x] real-mode path passes testnet acceptance
 
 ---
 
