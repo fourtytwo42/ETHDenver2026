@@ -346,3 +346,39 @@ Results:
   1. revert Slice 06 touched files only,
   2. rerun unittest + required npm gates,
   3. verify tracker/roadmap/source-of-truth and wallet contract docs return to pre-Slice-06 state.
+
+## Pre-Slice 07 Control-Gate Evidence
+
+Date (UTC): 2026-02-13
+Checkpoint objective: complete roadmap Section `0.1 Control setup` and re-validate required gates before starting Slice 07.
+
+### Control setup verification
+- Branch strategy confirmed:
+  - current branch: `main`
+  - `gh api repos/fourtytwo42/ETHDenver2026/branches/main/protection` -> `404 Branch not protected`
+  - recorded strategy: feature-branch-per-slice + mandatory commit/push checkpoint before starting next slice.
+- Issue mapping confirmed:
+  - `gh issue list --limit 20 --json number,title | jq '[.[]|select(.number>=1 and .number<=16)] | length'` -> `16`
+  - `gh issue view 7 --json number,title,state,url` -> open and mapped to Slice 07.
+- Required artifact folders confirmed present and tracked:
+  - `config/chains/`
+  - `packages/shared-schemas/json/`
+  - `docs/api/`
+  - `infrastructure/migrations/`
+  - `infrastructure/scripts/`
+  - `docs/test-vectors/`
+
+### Validation gates (re-run)
+Executed with:
+- `source ~/.nvm/nvm.sh && nvm use --silent default`
+
+Results:
+- `npm run db:parity` -> PASS (`"ok": true`)
+- `npm run seed:reset && npm run seed:load && npm run seed:verify` -> PASS (`"ok": true`)
+- `npm run build` -> PASS (Next.js build succeeded)
+
+### Files updated for this checkpoint
+- `docs/XCLAW_BUILD_ROADMAP.md`
+- `docs/XCLAW_SLICE_TRACKER.md`
+- `docs/XCLAW_SOURCE_OF_TRUTH.md`
+- `acceptance.md`

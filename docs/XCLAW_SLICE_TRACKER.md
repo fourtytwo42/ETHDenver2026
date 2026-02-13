@@ -99,33 +99,7 @@ DoD:
 
 ---
 
-## Slice 07: Hardhat Local Trading Path
-Status: [ ]
-
-Goal:
-- Propose -> approval -> execute -> verify works locally.
-
-DoD:
-- [ ] local DEX contracts deployed
-- [ ] `config/chains/hardhat_local.json` updated with addresses
-- [ ] lifecycle passes with evidence
-
----
-
-## Slice 08: Off-DEX Escrow Local Path
-Status: [ ]
-
-Goal:
-- Intent -> accept -> fund -> settle path works locally.
-
-DoD:
-- [ ] off-DEX intent endpoints/runtime hooks active
-- [ ] escrow flow status transitions verified
-- [ ] public activity trail shows settlement lifecycle
-
----
-
-## Slice 09: Core API Vertical Slice
+## Slice 07: Core API Vertical Slice
 Status: [ ]
 
 Goal:
@@ -138,7 +112,7 @@ DoD:
 
 ---
 
-## Slice 10: Auth + Management Vertical Slice
+## Slice 08: Auth + Management Vertical Slice
 Status: [ ]
 
 Goal:
@@ -152,7 +126,7 @@ DoD:
 
 ---
 
-## Slice 11: Public Web Vertical Slice
+## Slice 09: Public Web Vertical Slice
 Status: [ ]
 
 Goal:
@@ -165,7 +139,7 @@ DoD:
 
 ---
 
-## Slice 12: Management UI Vertical Slice
+## Slice 10: Management UI Vertical Slice
 Status: [ ]
 
 Goal:
@@ -176,6 +150,32 @@ DoD:
 - [ ] policy controls + pause/resume work
 - [ ] withdraw controls work with step-up requirements
 - [ ] global header dropdown + logout behavior correct
+
+---
+
+## Slice 11: Hardhat Local Trading Path
+Status: [ ]
+
+Goal:
+- Propose -> approval -> execute -> verify works locally.
+
+DoD:
+- [ ] local DEX contracts deployed
+- [ ] `config/chains/hardhat_local.json` updated with addresses
+- [ ] lifecycle passes with evidence
+
+---
+
+## Slice 12: Off-DEX Escrow Local Path
+Status: [ ]
+
+Goal:
+- Intent -> accept -> fund -> settle path works locally.
+
+DoD:
+- [ ] off-DEX intent endpoints/runtime hooks active
+- [ ] escrow flow status transitions verified
+- [ ] public activity trail shows settlement lifecycle
 
 ---
 

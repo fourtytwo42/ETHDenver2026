@@ -14,9 +14,9 @@ If roadmap conflicts with source-of-truth, source-of-truth wins.
 ## 0) Program Control and Working Rules
 
 ### 0.1 Control setup
-- [ ] Confirm branch strategy (`main` protected, feature branches for each milestone).
-- [ ] Confirm issue mapping for every milestone in this roadmap.
-- [ ] Confirm artifact folders exist and are committed:
+- [x] Confirm branch strategy (`main` currently unprotected; use feature branches per milestone and commit/push slice checkpoints before next slice).
+- [x] Confirm issue mapping for every milestone in this roadmap.
+- [x] Confirm artifact folders exist and are committed:
   - `config/chains/`
   - `packages/shared-schemas/json/`
   - `docs/api/`
@@ -36,6 +36,19 @@ If roadmap conflicts with source-of-truth, source-of-truth wins.
 
 Exit criteria:
 - Governance files present, scripts runnable, issue mapping confirmed.
+
+### 0.3 Slice 07+ execution order (dependency-aligned)
+Roadmap sections are capability checklists; for implementation sequence, execute Slice 07+ in this order:
+- Slice 07 -> roadmap section `5) Network App Backend (API + Persistence)`
+- Slice 08 -> roadmap section `6) Auth, Session, and Security Controls`
+- Slice 09 -> roadmap section `8) Public Web UX (Unauthenticated)`
+- Slice 10 -> roadmap section `9) Management UX (Authorized on /agents/:id)`
+- Slice 11 -> roadmap section `3) Hardhat Local Full Validation`
+- Slice 12 -> roadmap section `11) Copy Network` (off-DEX settlement scope only)
+- Slice 13 -> roadmap sections `10) Ranking, Metrics, and PnL` + `11) Copy Network` (copy-trading scope)
+- Slice 14 -> roadmap section `12) Observability and Operations`
+- Slice 15 -> roadmap section `4) Test DEX Deployment on Base Sepolia`
+- Slice 16 -> roadmap sections `13) Test, QA, and Demo Readiness` + `14) Release and Post-Release Stabilization`
 
 ---
 
@@ -103,7 +116,7 @@ Exit criteria:
 
 ---
 
-## 3) Hardhat Local Full Validation (Must Pass First)
+## 3) Hardhat Local Full Validation (Must Pass Before Slice 15 Promotion)
 
 ### 3.1 Local chain bring-up
 - [ ] Hardhat local chain config active and loadable.
@@ -122,7 +135,7 @@ Exit criteria:
 - [ ] rejection reason pathways verified locally.
 
 Exit criteria:
-- Hardhat validation evidence captured for target feature set.
+- Hardhat validation evidence captured for target feature set before Base Sepolia promotion.
 
 ---
 

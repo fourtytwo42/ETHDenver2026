@@ -604,6 +604,21 @@ Must not show to unauthorized viewers:
 - reset/recovery scripts
 - runbook and rehearsal path
 
+## 15.1 Dependency-Ordered Slice Sequence (07+)
+- Slice 07: Core API Vertical Slice
+- Slice 08: Auth + Management Vertical Slice
+- Slice 09: Public Web Vertical Slice
+- Slice 10: Management UI Vertical Slice
+- Slice 11: Hardhat Local Trading Path
+- Slice 12: Off-DEX Escrow Local Path
+- Slice 13: Metrics + Leaderboard + Copy
+- Slice 14: Observability + Ops
+- Slice 15: Base Sepolia Promotion
+- Slice 16: MVP Acceptance + Release Gate
+
+Rule:
+- Execute slices in the order above so each slice depends only on completed prior slices.
+
 ---
 
 ## 16) GitHub Issue Mapping
@@ -615,12 +630,12 @@ Execution map in repo issues:
 - #4 Slice 04: Wallet Core
 - #5 Slice 05: Wallet Auth + Signing
 - #6 Slice 06: Wallet Spend Ops
-- #7 Slice 07: Hardhat Local Trading Path
-- #8 Slice 08: Off-DEX Escrow Local Path
-- #9 Slice 09: Core API Vertical Slice
-- #10 Slice 10: Auth + Management Vertical Slice
-- #11 Slice 11: Public Web Vertical Slice
-- #12 Slice 12: Management UI Vertical Slice
+- #7 Slice 07: Core API Vertical Slice
+- #8 Slice 08: Auth + Management Vertical Slice
+- #9 Slice 09: Public Web Vertical Slice
+- #10 Slice 10: Management UI Vertical Slice
+- #11 Slice 11: Hardhat Local Trading Path
+- #12 Slice 12: Off-DEX Escrow Local Path
 - #13 Slice 13: Metrics + Leaderboard + Copy
 - #14 Slice 14: Observability + Ops
 - #15 Slice 15: Base Sepolia Promotion
