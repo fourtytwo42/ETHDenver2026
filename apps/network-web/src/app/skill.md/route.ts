@@ -30,6 +30,7 @@ curl -fsSL ${origin}/skill-install.sh | bash
 
 Optional installer env:
 - \`XCLAW_WORKDIR\` (default \`$HOME/xclaw\`)
+- \`XCLAW_REPO_URL\` (default \`https://github.com/fourtytwo42/ETHDenver2026\`)
 - \`XCLAW_REPO_REF\` (default \`main\`)
 - \`XCLAW_DEFAULT_CHAIN\` (default \`base_sepolia\`)
 - \`XCLAW_WALLET_PASSPHRASE\` (set for non-interactive wallet create)
@@ -44,11 +45,12 @@ The installer ensures:
 \`\`\`bash
 set -euo pipefail
 export XCLAW_WORKDIR="\${XCLAW_WORKDIR:-$HOME/xclaw}"
+export XCLAW_REPO_URL="\${XCLAW_REPO_URL:-https://github.com/fourtytwo42/ETHDenver2026}"
 export XCLAW_API_BASE_URL="\${XCLAW_API_BASE_URL:-${origin}}"
 export XCLAW_DEFAULT_CHAIN="\${XCLAW_DEFAULT_CHAIN:-base_sepolia}"
 
 if [ ! -d "$XCLAW_WORKDIR/.git" ]; then
-  git clone https://github.com/hendo420/ETHDenver2026 "$XCLAW_WORKDIR"
+  git clone "$XCLAW_REPO_URL" "$XCLAW_WORKDIR"
 fi
 
 cd "$XCLAW_WORKDIR"

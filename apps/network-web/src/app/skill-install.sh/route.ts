@@ -11,6 +11,7 @@ echo "[xclaw] bootstrap start"
 
 export XCLAW_WORKDIR="\${XCLAW_WORKDIR:-$HOME/xclaw}"
 export XCLAW_REPO_REF="\${XCLAW_REPO_REF:-main}"
+export XCLAW_REPO_URL="\${XCLAW_REPO_URL:-https://github.com/fourtytwo42/ETHDenver2026}"
 export XCLAW_API_BASE_URL="\${XCLAW_API_BASE_URL:-${origin}}"
 export XCLAW_DEFAULT_CHAIN="\${XCLAW_DEFAULT_CHAIN:-base_sepolia}"
 
@@ -25,7 +26,8 @@ if [ -d "$XCLAW_WORKDIR/.git" ]; then
   git checkout "$XCLAW_REPO_REF"
   git pull --ff-only
 elif [ ! -e "$XCLAW_WORKDIR" ]; then
-  archive_url="https://codeload.github.com/hendo420/ETHDenver2026/tar.gz/refs/heads/$XCLAW_REPO_REF"
+  archive_base="$(echo "$XCLAW_REPO_URL" | sed -E 's#https?://github.com/##' | sed -E 's#\\.git$##')"
+  archive_url="https://codeload.github.com/$archive_base/tar.gz/refs/heads/$XCLAW_REPO_REF"
   echo "[xclaw] downloading source archive: $archive_url"
   curl -fsSL "$archive_url" -o "$tmp_dir/repo.tar.gz"
   tar -xzf "$tmp_dir/repo.tar.gz" -C "$tmp_dir"
