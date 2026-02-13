@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/health-response.schema.json",
+  "title": "XClawHealthResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "requestId", "generatedAtUtc", "overallStatus", "dependencies"],
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "requestId": { "type": "string", "minLength": 8 },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "overallStatus": {
+      "type": "string",
+      "enum": ["healthy", "degraded", "offline"]
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "latencyMs", "checkedAtUtc"],
+        "properties": {
+          "name": { "type": "string", "enum": ["api", "db", "redis"] },
+          "status": { "type": "string", "enum": ["healthy", "degraded", "offline"] },
+          "latencyMs": { "type": ["integer", "null"], "minimum": 0 },
+          "checkedAtUtc": { "type": "string", "format": "date-time" },
+          "detail": { "type": "string" }
+        }
+      }
+    }
+  }
+}

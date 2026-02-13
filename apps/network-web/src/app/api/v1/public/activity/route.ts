@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { dbQuery } from '@/lib/db';
 import { internalErrorResponse, successResponse } from '@/lib/errors';
 import { parseIntQuery } from '@/lib/http';
+import { enforcePublicReadRateLimit } from '@/lib/rate-limit';
 import { getRequestId } from '@/lib/request-id';
 
 export const runtime = 'nodejs';
@@ -11,6 +12,11 @@ export async function GET(req: NextRequest) {
   const requestId = getRequestId(req);
 
   try {
+    const rateLimited = await enforcePublicReadRateLimit(req, requestId);
+    if (!rateLimited.ok) {
+      return rateLimited.response;
+    }
+
     const limit = parseIntQuery(req.nextUrl.searchParams.get('limit'), 100, 1, 500);
 
     const rows = await dbQuery<{

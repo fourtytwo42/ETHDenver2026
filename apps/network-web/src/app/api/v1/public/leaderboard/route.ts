@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { dbQuery } from '@/lib/db';
 import { errorResponse, internalErrorResponse, successResponse } from '@/lib/errors';
 import { LEADERBOARD_CACHE_PREFIX, LEADERBOARD_CACHE_TTL_SEC } from '@/lib/metrics';
+import { enforcePublicReadRateLimit } from '@/lib/rate-limit';
 import { getRedisClient } from '@/lib/redis';
 import { getRequestId } from '@/lib/request-id';
 
@@ -31,6 +32,11 @@ export async function GET(req: NextRequest) {
   const requestId = getRequestId(req);
 
   try {
+    const rateLimited = await enforcePublicReadRateLimit(req, requestId);
+    if (!rateLimited.ok) {
+      return rateLimited.response;
+    }
+
     const window = req.nextUrl.searchParams.get('window') ?? '7d';
     const mode = req.nextUrl.searchParams.get('mode') ?? 'mock';
     const chain = req.nextUrl.searchParams.get('chain') ?? 'all';

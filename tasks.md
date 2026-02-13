@@ -1,24 +1,20 @@
-# Slice 13 Tasks
+# Slice 14 Tasks
 
-Active slice: `Slice 13: Metrics + Leaderboard + Copy`
+Active slice: `Slice 14: Observability + Ops`
 
 ## Checklist
 - [x] Record pre-flight objective, acceptance checks, touched-file allowlist, and slice guardrails.
-- [x] Add migration for metrics snapshot v2 and copy intent linkage/indexes.
-- [x] Update migration parity script to evaluate all migrations including Slice 13 additions.
-- [x] Add copy subscription create/patch JSON schemas.
-- [x] Extend copy intent schema with follower trade linkage + updated timestamp.
-- [x] Implement metrics recompute + leaderboard cache utility.
-- [x] Implement copy lifecycle utility (intent generation, expiry, status sync).
-- [x] Implement `POST/GET /api/v1/copy/subscriptions`.
-- [x] Implement `PATCH /api/v1/copy/subscriptions/:subscriptionId`.
-- [x] Wire trade status transitions to copy lifecycle + metrics recompute.
-- [x] Update public leaderboard route for mode/chain-aware snapshot reads + Redis cache.
-- [x] Update public profile route to include self-vs-copied metrics breakdown.
-- [x] Update public trades route to include trade source lineage markers.
-- [x] Update homepage/profile UI to display mode row and copy breakdown/source signals.
-- [x] Sync OpenAPI copy subscription schema constraints.
+- [x] Implement canonical health/status routes and `/api/v1` aliases.
+- [x] Implement ops health aggregation utility (dependency, provider, heartbeat, queue views).
+- [x] Implement ops alerts utility (structured logs, incident categories, transition alerts, webhook dispatch).
+- [x] Implement Redis-backed per-minute rate limiter utility.
+- [x] Enforce public read rate limits on all `/api/v1/public/*` routes and `/api/status` path.
+- [x] Enforce sensitive management write limit centrally in management write auth path.
+- [x] Implement `/status` diagnostics page aligned with `/api/status`.
+- [x] Add health/status shared JSON schemas.
+- [x] Update OpenAPI with health/status routes and `429` coverage.
+- [x] Add Postgres backup/restore scripts and runbook.
 - [x] Run full required validation gates and capture outputs.
 - [x] Capture slice-specific functional/negative checks in acceptance evidence.
-- [x] Update source-of-truth/roadmap/tracker statuses for Slice 13 completion.
-- [ ] Commit/push Slice 13 and post evidence + commit hash to issue `#13`.
+- [x] Update source-of-truth/roadmap/tracker status for Slice 14.
+- [ ] Commit/push Slice 14 and post evidence + commit hash to issue `#14`.

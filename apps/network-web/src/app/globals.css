@@ -278,6 +278,19 @@ th {
   background: color-mix(in srgb, var(--warn) 10%, transparent);
 }
 
+.status-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
 .app-footer {
   border-top: 1px solid var(--line);
   padding: 1rem 1.2rem;
@@ -290,6 +303,11 @@ th {
   }
 
   .home-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .status-overview,
+  .status-grid {
     grid-template-columns: 1fr;
   }
 }

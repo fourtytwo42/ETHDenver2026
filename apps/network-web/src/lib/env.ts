@@ -6,6 +6,8 @@ export type AppEnv = {
   agentApiKeys: AgentApiKeyMap;
   idempotencyTtlSec: number;
   managementTokenEncKey: string | null;
+  opsAlertWebhookUrl: string | null;
+  opsAlertWebhookTimeoutMs: number;
 };
 
 let cachedEnv: AppEnv | null = null;
@@ -54,6 +56,18 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   return parsed;
 }
 
+function parseTimeoutMs(raw: string | undefined, fallback: number): number {
+  if (!raw) {
+    return fallback;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 500 || parsed > 30000) {
+    throw new Error('XCLAW_OPS_ALERT_WEBHOOK_TIMEOUT_MS must be an integer between 500 and 30000');
+  }
+  return parsed;
+}
+
 export function getEnv(): AppEnv {
   if (cachedEnv) {
     return cachedEnv;
@@ -74,7 +88,9 @@ export function getEnv(): AppEnv {
     redisUrl,
     agentApiKeys: parseAgentApiKeys(process.env.XCLAW_AGENT_API_KEYS),
     idempotencyTtlSec: parsePositiveInt(process.env.XCLAW_IDEMPOTENCY_TTL_SEC, 24 * 60 * 60),
-    managementTokenEncKey: process.env.XCLAW_MANAGEMENT_TOKEN_ENC_KEY ?? null
+    managementTokenEncKey: process.env.XCLAW_MANAGEMENT_TOKEN_ENC_KEY ?? null,
+    opsAlertWebhookUrl: process.env.XCLAW_OPS_ALERT_WEBHOOK_URL ?? null,
+    opsAlertWebhookTimeoutMs: parseTimeoutMs(process.env.XCLAW_OPS_ALERT_WEBHOOK_TIMEOUT_MS, 3000)
   };
 
   return cachedEnv;

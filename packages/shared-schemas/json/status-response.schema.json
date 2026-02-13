@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/status-response.schema.json",
+  "title": "XClawStatusResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ok",
+    "requestId",
+    "generatedAtUtc",
+    "overallStatus",
+    "dependencies",
+    "providers",
+    "heartbeat",
+    "queues",
+    "incidents"
+  ],
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "requestId": { "type": "string", "minLength": 8 },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "overallStatus": { "type": "string", "enum": ["healthy", "degraded", "offline"] },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "latencyMs", "checkedAtUtc"],
+        "properties": {
+          "name": { "type": "string", "enum": ["api", "db", "redis"] },
+          "status": { "type": "string", "enum": ["healthy", "degraded", "offline"] },
+          "latencyMs": { "type": ["integer", "null"], "minimum": 0 },
+          "checkedAtUtc": { "type": "string", "format": "date-time" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "providers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chainKey", "provider", "status", "latencyMs", "checkedAtUtc"],
+        "properties": {
+          "chainKey": { "type": "string" },
+          "provider": { "type": "string", "enum": ["primary", "fallback"] },
+          "status": { "type": "string", "enum": ["healthy", "degraded"] },
+          "latencyMs": { "type": ["integer", "null"], "minimum": 0 },
+          "checkedAtUtc": { "type": "string", "format": "date-time" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "heartbeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["totalAgents", "activeAgents", "offlineAgents", "degradedAgents", "heartbeatMisses"],
+      "properties": {
+        "totalAgents": { "type": "integer", "minimum": 0 },
+        "activeAgents": { "type": "integer", "minimum": 0 },
+        "offlineAgents": { "type": "integer", "minimum": 0 },
+        "degradedAgents": { "type": "integer", "minimum": 0 },
+        "heartbeatMisses": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "queues": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["copyIntentPending", "approvalPendingTrades", "totalDepth"],
+      "properties": {
+        "copyIntentPending": { "type": "integer", "minimum": 0 },
+        "approvalPendingTrades": { "type": "integer", "minimum": 0 },
+        "totalDepth": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "incidents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "atUtc", "category", "severity", "summary"],
+        "properties": {
+          "id": { "type": "string" },
+          "atUtc": { "type": "string", "format": "date-time" },
+          "category": {
+            "type": "string",
+            "enum": ["api_error_rate", "rpc_failure_rate", "queue_backlog", "heartbeat_miss", "dependency_outage"]
+          },
+          "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
+          "summary": { "type": "string" },
+          "details": { "type": "string" }
+        }
+      }
+    }
+  }
+}

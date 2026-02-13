@@ -1,38 +1,42 @@
 # X-Claw Context Pack
 
 ## 1) Goal
-- Primary objective: complete `Slice 13: Metrics + Leaderboard + Copy` end-to-end.
-- Success criteria (testable): mode-separated leaderboard, snapshot/cache metrics pipeline, copy subscription APIs, copy intent generation/materialization with rejection reasons, and self-vs-copied breakdown visible on profile.
+- Primary objective: complete `Slice 14: Observability + Ops` end-to-end.
+- Success criteria (testable): health/status APIs + public status page + rate limits + structured logs/alerts + backup/restore drill evidence.
 
 ## 2) Constraints
-- Strict slice order: Slice 13 only.
+- Strict slice order: Slice 14 only.
 - Canonical authority: `docs/XCLAW_SOURCE_OF_TRUTH.md`.
 - Runtime boundary: Node/Next.js for API/web, Python-first runtime for agent/OpenClaw commands.
 - No opportunistic refactors or dependency additions.
 
 ## 3) Contract Impact
-- Add copy subscription request schemas and management-scoped API route implementation.
-- Extend metrics snapshot model to include mode/chain and self-vs-copied breakdown dimensions.
-- Wire copy intent lifecycle to trade status transitions with explicit rejection reason persistence.
-- Align OpenAPI and source-of-truth wording for Slice 13 provisional metrics computation.
+- Add `/api/health`, `/api/status`, and `/api/v1/*` compatibility aliases.
+- Add health/status response schemas and OpenAPI route definitions.
+- Enforce public and sensitive-write rate limits per locked policy.
+- Add VM-native Postgres backup/restore scripts and runbook.
 
 ## 4) Files and Boundaries
 - Expected touched files:
-  - `infrastructure/migrations/0002_slice13_metrics_copy.sql`
-  - `infrastructure/scripts/check-migration-parity.mjs`
-  - `packages/shared-schemas/json/copy-intent.schema.json`
-  - `packages/shared-schemas/json/copy-subscription-create-request.schema.json`
-  - `packages/shared-schemas/json/copy-subscription-patch-request.schema.json`
-  - `apps/network-web/src/lib/metrics.ts`
-  - `apps/network-web/src/lib/copy-lifecycle.ts`
-  - `apps/network-web/src/app/api/v1/copy/subscriptions/route.ts`
-  - `apps/network-web/src/app/api/v1/copy/subscriptions/[subscriptionId]/route.ts`
-  - `apps/network-web/src/app/api/v1/trades/[tradeId]/status/route.ts`
+  - `apps/network-web/src/app/api/health/route.ts`
+  - `apps/network-web/src/app/api/status/route.ts`
+  - `apps/network-web/src/app/api/v1/health/route.ts`
+  - `apps/network-web/src/app/api/v1/status/route.ts`
+  - `apps/network-web/src/app/status/page.tsx`
+  - `apps/network-web/src/app/globals.css`
+  - `apps/network-web/src/lib/env.ts`
+  - `apps/network-web/src/lib/errors.ts`
+  - `apps/network-web/src/lib/management-auth.ts`
+  - `apps/network-web/src/lib/rate-limit.ts`
+  - `apps/network-web/src/lib/ops-health.ts`
+  - `apps/network-web/src/lib/ops-alerts.ts`
   - `apps/network-web/src/app/api/v1/public/leaderboard/route.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/route.ts`
   - `apps/network-web/src/app/api/v1/public/agents/[agentId]/route.ts`
   - `apps/network-web/src/app/api/v1/public/agents/[agentId]/trades/route.ts`
-  - `apps/network-web/src/app/page.tsx`
-  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+  - `apps/network-web/src/app/api/v1/public/activity/route.ts`
+  - `packages/shared-schemas/json/health-response.schema.json`
+  - `packages/shared-schemas/json/status-response.schema.json`
   - `docs/api/openapi.v1.yaml`
   - `docs/XCLAW_SOURCE_OF_TRUTH.md`
   - `docs/XCLAW_BUILD_ROADMAP.md`
@@ -41,9 +45,12 @@
   - `spec.md`
   - `tasks.md`
   - `acceptance.md`
+  - `infrastructure/scripts/ops/pg-backup.sh`
+  - `infrastructure/scripts/ops/pg-restore.sh`
+  - `docs/OPS_BACKUP_RESTORE_RUNBOOK.md`
 - Forbidden scope:
-  - Slice 14 observability/ops scope
   - Slice 15 Base Sepolia promotion scope
+  - Slice 16 MVP release-gate scope
 
 ## 5) Invariants (Must Not Change)
 - Error contract remains `code`, `message`, optional `actionHint`, optional `details`, `requestId`.
@@ -58,15 +65,17 @@
   - `npm run seed:verify`
   - `npm run build`
 - Slice-specific checks:
-  - copy subscription create/list/update auth + validation paths
-  - leader `filled` trade creates copy intents and follower trades
-  - rejection reasons persisted and surfaced
-  - profile trade/source and self-vs-copied metrics visibility
-  - mode-separated leaderboard payload behavior
+  - `/api/health` and `/api/status` payload/headers and public-safe diagnostics
+  - `/api/v1/health` and `/api/v1/status` alias parity
+  - `/status` page diagnostics sections rendering
+  - public and sensitive-write rate-limit negative checks
+  - correlation-id echo checks
+  - webhook alert + incident timeline check
+  - backup creation and restore drill check
 
 ## 7) Evidence + Rollback
 - Capture command outputs and route-level evidence in `acceptance.md`.
 - Rollback plan:
-  1. revert Slice 13 touched files only,
+  1. revert Slice 14 touched files only,
   2. rerun required gates,
   3. verify tracker/roadmap/source-of-truth synchronization.

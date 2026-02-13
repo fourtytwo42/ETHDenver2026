@@ -830,6 +830,7 @@ This section supersedes any earlier conflicting statements in this file.
 - Public read API rate limit is 120 req/min per IP.
 - Sensitive management writes rate limit is 10 req/min per agent/session.
 - `/api/health` and `/api/status` are both available.
+- Compatibility aliases `/api/v1/health` and `/api/v1/status` are available; canonical routes remain unversioned `/api/health` and `/api/status`.
 - `/api/status` is public and exposes provider names + health flags (no raw RPC URLs).
 - API versioning uses `/api/v1/...`.
 - Migrations are explicit runbook step only (not auto-run on startup).
@@ -1565,6 +1566,8 @@ The following files are now part of the canonical source-of-truth implementation
 - `packages/shared-schemas/json/copy-subscription-patch-request.schema.json`
 - `packages/shared-schemas/json/offdex-settlement-intent.schema.json`
 - `packages/shared-schemas/json/trade-status.schema.json`
+- `packages/shared-schemas/json/health-response.schema.json`
+- `packages/shared-schemas/json/status-response.schema.json`
 - `docs/api/openapi.v1.yaml`
 - `docs/api/AUTH_WIRE_EXAMPLES.md`
 - `docs/api/WALLET_COMMAND_CONTRACT.md`
@@ -1576,9 +1579,12 @@ The following files are now part of the canonical source-of-truth implementation
 - `infrastructure/scripts/seed-load.mjs`
 - `infrastructure/scripts/seed-live-activity.mjs`
 - `infrastructure/scripts/seed-verify.mjs`
+- `infrastructure/scripts/ops/pg-backup.sh`
+- `infrastructure/scripts/ops/pg-restore.sh`
 - `infrastructure/seed-data/fixtures.json`
 - `docs/test-vectors/ENGINE_TEST_VECTORS.md`
 - `docs/MVP_ACCEPTANCE_RUNBOOK.md`
+- `docs/OPS_BACKUP_RESTORE_RUNBOOK.md`
 - `docs/XCLAW_BUILD_ROADMAP.md`
 - `docs/XCLAW_SLICE_TRACKER.md`
 

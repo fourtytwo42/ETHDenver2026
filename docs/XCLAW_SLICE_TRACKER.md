@@ -212,17 +212,17 @@ DoD:
 ---
 
 ## Slice 14: Observability + Ops
-Status: [ ]
+Status: [x]
 
 Goal:
 - System is operable and diagnosable.
 
 DoD:
-- [ ] `/api/health` + `/api/status` working
-- [ ] `/status` diagnostics page implemented with public-safe health visibility
-- [ ] structured logs + core alerts active
-- [ ] rate limits + correlation IDs + degraded/offline observability verified
-- [ ] backup + restore drill completed
+- [x] `/api/health` + `/api/status` working
+- [x] `/status` diagnostics page implemented with public-safe health visibility
+- [x] structured logs + core alerts active
+- [x] rate limits + correlation IDs + degraded/offline observability verified
+- [x] backup + restore drill completed
 
 ---
 

@@ -30,7 +30,8 @@ export type ApiErrorPayload = {
 export function errorResponse(
   status: number,
   payload: Omit<ApiErrorPayload, 'requestId'>,
-  requestId: string
+  requestId: string,
+  headers?: Record<string, string>
 ): NextResponse<ApiErrorPayload> {
   return NextResponse.json(
     {
@@ -40,7 +41,7 @@ export function errorResponse(
       details: payload.details,
       requestId
     },
-    { status, headers: { 'x-request-id': requestId } }
+    { status, headers: { 'x-request-id': requestId, ...(headers ?? {}) } }
   );
 }
 

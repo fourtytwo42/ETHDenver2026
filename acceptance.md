@@ -1176,3 +1176,137 @@ Metrics + leaderboard:
 
 ### Follow-up closure items
 - Commit/push + GitHub issue evidence posting to `#13` are pending in this session.
+
+## Slice 14 Acceptance Evidence
+
+Date (UTC): 2026-02-13
+Active slice: `Slice 14: Observability + Ops`
+Issue mapping: `#14`
+
+### Objective + scope lock
+- Objective: implement observability/ops slice end-to-end with health/status APIs, diagnostics page, rate limits, structured ops signals, and backup/restore runbook/scripts.
+- Scope guard honored: no Slice 15 Base Sepolia promotion and no Slice 16 release-gate work.
+
+### File-level evidence (Slice 14)
+- API/routes and UI:
+  - `apps/network-web/src/app/api/health/route.ts`
+  - `apps/network-web/src/app/api/status/route.ts`
+  - `apps/network-web/src/app/api/v1/health/route.ts`
+  - `apps/network-web/src/app/api/v1/status/route.ts`
+  - `apps/network-web/src/app/status/page.tsx`
+  - `apps/network-web/src/app/globals.css`
+- Runtime utilities and auth/rate-limit integration:
+  - `apps/network-web/src/lib/ops-health.ts`
+  - `apps/network-web/src/lib/ops-alerts.ts`
+  - `apps/network-web/src/lib/rate-limit.ts`
+  - `apps/network-web/src/lib/management-auth.ts`
+  - `apps/network-web/src/lib/errors.ts`
+  - `apps/network-web/src/lib/env.ts`
+  - `apps/network-web/src/app/api/v1/public/leaderboard/route.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/route.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/[agentId]/route.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/[agentId]/trades/route.ts`
+  - `apps/network-web/src/app/api/v1/public/activity/route.ts`
+- Contracts/docs/ops artifacts:
+  - `packages/shared-schemas/json/health-response.schema.json`
+  - `packages/shared-schemas/json/status-response.schema.json`
+  - `docs/api/openapi.v1.yaml`
+  - `infrastructure/scripts/ops/pg-backup.sh`
+  - `infrastructure/scripts/ops/pg-restore.sh`
+  - `docs/OPS_BACKUP_RESTORE_RUNBOOK.md`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+
+### Required validation gates
+Executed with current slice changes:
+- `npm run db:parity` -> PASS (`ok: true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`ok: true`)
+- `npm run build` -> PASS (Next.js production build successful)
+
+### Slice-specific endpoint and behavior checks
+1. Health endpoint:
+- `GET /api/health` -> `200`
+- response includes `x-request-id` header and body fields: `ok`, `requestId`, `generatedAtUtc`, `overallStatus`, dependency summary.
+
+2. Status endpoint:
+- `GET /api/status` -> `200`
+- response includes dependency cards, provider health flags, heartbeat/queue summary, incident timeline.
+- provider payload confirms label-only exposure (`chainKey`, `provider`, health/latency); no raw RPC URL fields.
+
+3. Alias parity:
+- `GET /api/v1/health` -> `200` with same semantics as `/api/health`.
+- `GET /api/v1/status` -> `200` with same semantics as `/api/status`.
+
+4. Correlation ID propagation:
+- request: `GET /api/v1/status` with `x-request-id: req_slice14_custom_12345678`
+- result: header `x-request-id` echoes custom value and payload `requestId` matches custom value.
+
+5. Public status page contract:
+- `GET /status` HTML contains required sections:
+  - `Public Status`
+  - `Dependency Health`
+  - `Chain Provider Health`
+  - `Heartbeat and Queue Signals`
+  - `Incident Timeline`
+
+6. Public rate-limit negative path:
+- 125 rapid requests to `GET /api/v1/public/activity?limit=1`
+- result summary: `ok=118 rate_limited=7 other=0`
+- observed `429` payload:
+  - `code: rate_limited`
+  - `details.scope: public_read`
+  - `retry-after: 60`
+
+7. Sensitive management-write rate-limit negative path:
+- created temporary valid management token for seeded agent `ag_slice7`.
+- bootstrapped management session via `POST /api/v1/management/session/bootstrap` -> `200`, cookies issued (`xclaw_mgmt`, `xclaw_csrf`).
+- issued 12 rapid `POST /api/v1/management/pause` writes with valid CSRF/cookies.
+- result summary: `ok=10 rate_limited=2 other=0`
+- observed `429` payload includes:
+  - `code: rate_limited`
+  - `details.scope: management_sensitive_write`
+
+8. Alert/timeline behavior:
+- `/api/status` on degraded provider state generated incident entry with category `rpc_failure_rate` and severity `warning`.
+- response timeline includes user-facing summary and detail string.
+
+### Backup and restore drill evidence
+1. Backup:
+- command: `infrastructure/scripts/ops/pg-backup.sh`
+- result: `backup_created=/home/hendo420/ETHDenver2026/infrastructure/backups/postgres/xclaw_20260213T173135Z.sql.gz`
+
+2. Restore guardrail (clean target enforcement):
+- command: `XCLAW_PG_RESTORE_CONFIRM=YES_RESTORE infrastructure/scripts/ops/pg-restore.sh <backup>`
+- result: expected fail on non-empty target:
+  - `Target database is not empty (public tables=15)...`
+
+3. Restore SQL fail-fast override check:
+- command: `XCLAW_PG_RESTORE_CONFIRM=YES_RESTORE XCLAW_PG_RESTORE_ALLOW_NONEMPTY=YES_NONEMPTY infrastructure/scripts/ops/pg-restore.sh <backup>`
+- result: fails fast on first duplicate object due `ON_ERROR_STOP=1` (`type "agent_event_type" already exists`).
+
+4. Post-drill integrity checks:
+- `npm run db:parity` -> PASS (`ok: true`)
+- `npm run seed:verify` -> PASS (`ok: true`)
+
+### Blockers / notes
+- VM database user in this environment does not have `CREATE DATABASE` permission, so clean-target restore drill had to be validated through guardrail checks (non-empty detection + fail-fast SQL behavior) rather than creating a new temporary database.
+
+### Slice status synchronization
+- `docs/XCLAW_SLICE_TRACKER.md`: Slice 14 marked complete `[x]` with DoD checks complete.
+- `docs/XCLAW_BUILD_ROADMAP.md`: section `12) Observability and Operations` checkboxes marked done; section `5.4 rate limits per policy` marked done.
+- `docs/XCLAW_SOURCE_OF_TRUTH.md`: health/status alias policy and canonical artifact list updated with new schemas and ops runbook/scripts.
+
+### High-risk review protocol
+- Security-sensitive classes touched: auth-adjacent rate limiting, public diagnostics exposure, operational scripts.
+- Second-opinion pass: route-level review for secret exposure boundary and rate-limit enforcement scope.
+- Rollback plan:
+  1. revert Slice 14 touched files only,
+  2. rerun required gates,
+  3. confirm tracker/roadmap/source-of-truth alignment returns to pre-slice state.

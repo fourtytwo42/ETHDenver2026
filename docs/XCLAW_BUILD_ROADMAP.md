@@ -206,7 +206,7 @@ Exit criteria:
 
 ### 5.4 Reliability controls
 - [x] idempotency enforcement on writes
-- [ ] rate limits per policy
+- [x] rate limits per policy
 - [x] structured errors with `code/message/actionHint`
 - [x] correlation IDs and structured logging
 
@@ -381,20 +381,20 @@ Exit criteria:
 ## 12) Observability and Operations
 
 ### 12.1 Health and status
-- [ ] `/api/health` implemented
-- [ ] `/api/status` implemented with public-safe details
-- [ ] `/status` diagnostics page implemented and aligned with `/api/status`
-- [ ] provider health flags exposed (no secret endpoints)
+- [x] `/api/health` implemented
+- [x] `/api/status` implemented with public-safe details
+- [x] `/status` diagnostics page implemented and aligned with `/api/status`
+- [x] provider health flags exposed (no secret endpoints)
 
 ### 12.2 Logging and alerts
-- [ ] structured JSON logs
-- [ ] key counters/alerts wired (RPC failure, queue depth, heartbeat misses)
-- [ ] incident reason categories standardized
+- [x] structured JSON logs
+- [x] key counters/alerts wired (RPC failure, queue depth, heartbeat misses)
+- [x] incident reason categories standardized
 
 ### 12.3 Backup and recovery
-- [ ] nightly Postgres dump configured
-- [ ] restore drill performed and logged
-- [ ] recovery runbook updated with real commands
+- [x] nightly Postgres dump configured
+- [x] restore drill performed and logged
+- [x] recovery runbook updated with real commands
 
 Exit criteria:
 - Operators can detect, diagnose, and recover quickly.

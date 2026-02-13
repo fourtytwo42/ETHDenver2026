@@ -4,6 +4,7 @@ import { dbQuery } from '@/lib/db';
 import { errorResponse, internalErrorResponse, successResponse } from '@/lib/errors';
 import { parseIntQuery } from '@/lib/http';
 import { PUBLIC_STATUSES, isPublicStatus } from '@/lib/public-types';
+import { enforcePublicReadRateLimit } from '@/lib/rate-limit';
 import { getRequestId } from '@/lib/request-id';
 
 export const runtime = 'nodejs';
@@ -33,6 +34,11 @@ export async function GET(req: NextRequest) {
   const requestId = getRequestId(req);
 
   try {
+    const rateLimited = await enforcePublicReadRateLimit(req, requestId);
+    if (!rateLimited.ok) {
+      return rateLimited.response;
+    }
+
     const query = (req.nextUrl.searchParams.get('query') ?? '').trim();
     const mode = req.nextUrl.searchParams.get('mode') ?? 'all';
     const chain = req.nextUrl.searchParams.get('chain') ?? 'all';

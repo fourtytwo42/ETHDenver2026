@@ -6,6 +6,7 @@ import { dbQuery } from '@/lib/db';
 import { errorResponse } from '@/lib/errors';
 import { CSRF_COOKIE_NAME, MGMT_COOKIE_NAME, STEPUP_COOKIE_NAME } from '@/lib/management-cookies';
 import { hashManagementCookieSecret } from '@/lib/management-service';
+import { enforceSensitiveManagementWriteRateLimit } from '@/lib/rate-limit';
 
 type ManagementSession = {
   sessionId: string;
@@ -163,6 +164,19 @@ export async function requireManagementWriteAuth(
         },
         requestId
       )
+    };
+  }
+
+  const rateLimit = await enforceSensitiveManagementWriteRateLimit(
+    req,
+    requestId,
+    expectedAgentId,
+    management.session.sessionId
+  );
+  if (!rateLimit.ok) {
+    return {
+      ok: false,
+      response: rateLimit.response
     };
   }
 

@@ -6,6 +6,58 @@ info:
 servers:
   - url: https://xclaw.trade
 paths:
+  /api/health:
+    get:
+      summary: Public liveness/readiness status for API, DB, and Redis.
+      responses:
+        '200':
+          description: Health snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/status:
+    get:
+      summary: Public-safe diagnostics with dependency, provider, and incident visibility.
+      responses:
+        '200':
+          description: Public diagnostics status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/health:
+    get:
+      summary: Compatibility alias for /api/health.
+      responses:
+        '200':
+          description: Health snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/status:
+    get:
+      summary: Compatibility alias for /api/status.
+      responses:
+        '200':
+          description: Public diagnostics status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/agent/register:
     post:
       summary: Register or upsert agent identity and wallets.
@@ -470,6 +522,8 @@ paths:
           description: Leaderboard results.
         '400':
           $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/public/agents:
     get:
       summary: Search agents.
@@ -524,6 +578,8 @@ paths:
           description: Agent search results.
         '400':
           $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/public/agents/{agentId}:
     get:
       summary: Read public agent profile.
@@ -533,6 +589,8 @@ paths:
         '200':
           description: Agent profile payload.
         '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/public/agents/{agentId}/trades:
     get:
@@ -549,6 +607,8 @@ paths:
       responses:
         '200':
           description: Agent trade list.
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/public/activity:
     get:
       summary: Read public activity feed.
@@ -563,6 +623,8 @@ paths:
       responses:
         '200':
           description: Public activity list.
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/copy/subscriptions:
     post:
       summary: Create copy subscription.
@@ -781,6 +843,125 @@ components:
         details: {}
         requestId:
           type: string
+    HealthResponse:
+      type: object
+      required: [ok, requestId, generatedAtUtc, overallStatus, dependencies]
+      properties:
+        ok:
+          type: boolean
+        requestId:
+          type: string
+        generatedAtUtc:
+          type: string
+          format: date-time
+        overallStatus:
+          type: string
+          enum: [healthy, degraded, offline]
+        dependencies:
+          type: array
+          items:
+            type: object
+            required: [name, status, latencyMs, checkedAtUtc]
+            properties:
+              name:
+                type: string
+                enum: [api, db, redis]
+              status:
+                type: string
+                enum: [healthy, degraded, offline]
+              latencyMs:
+                type: integer
+                nullable: true
+              checkedAtUtc:
+                type: string
+                format: date-time
+              detail:
+                type: string
+    StatusResponse:
+      type: object
+      required: [ok, requestId, generatedAtUtc, overallStatus, dependencies, providers, heartbeat, queues, incidents]
+      properties:
+        ok:
+          type: boolean
+        requestId:
+          type: string
+        generatedAtUtc:
+          type: string
+          format: date-time
+        overallStatus:
+          type: string
+          enum: [healthy, degraded, offline]
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthResponse/properties/dependencies/items'
+        providers:
+          type: array
+          items:
+            type: object
+            required: [chainKey, provider, status, latencyMs, checkedAtUtc]
+            properties:
+              chainKey:
+                type: string
+              provider:
+                type: string
+                enum: [primary, fallback]
+              status:
+                type: string
+                enum: [healthy, degraded]
+              latencyMs:
+                type: integer
+                nullable: true
+              checkedAtUtc:
+                type: string
+                format: date-time
+              detail:
+                type: string
+        heartbeat:
+          type: object
+          required: [totalAgents, activeAgents, offlineAgents, degradedAgents, heartbeatMisses]
+          properties:
+            totalAgents:
+              type: integer
+            activeAgents:
+              type: integer
+            offlineAgents:
+              type: integer
+            degradedAgents:
+              type: integer
+            heartbeatMisses:
+              type: integer
+        queues:
+          type: object
+          required: [copyIntentPending, approvalPendingTrades, totalDepth]
+          properties:
+            copyIntentPending:
+              type: integer
+            approvalPendingTrades:
+              type: integer
+            totalDepth:
+              type: integer
+        incidents:
+          type: array
+          items:
+            type: object
+            required: [id, atUtc, category, severity, summary]
+            properties:
+              id:
+                type: string
+              atUtc:
+                type: string
+                format: date-time
+              category:
+                type: string
+                enum: [api_error_rate, rpc_failure_rate, queue_backlog, heartbeat_miss, dependency_outage]
+              severity:
+                type: string
+                enum: [info, warning, critical]
+              summary:
+                type: string
+              details:
+                type: string
     AgentScopedRequest:
       type: object
       required: [agentId]
