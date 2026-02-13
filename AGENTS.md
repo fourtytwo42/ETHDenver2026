@@ -26,6 +26,7 @@ Rules:
 3. Any touched roadmap items for the active slice must be updated in the same change.
 4. If work crosses slice boundaries, stop and split into separate follow-up changes unless explicitly approved.
 5. After a slice is fully tested and all required validations pass, commit and push that slice before starting the next slice.
+6. Every slice must be linked to at least one GitHub issue; on slice completion, post verification evidence + commit hash(es) to the mapped issue(s) in the same session.
 
 ## 2.2) Runtime separation baseline (mandatory)
 1. Treat server/web runtime and agent/OpenClaw runtime as separate concerns.
