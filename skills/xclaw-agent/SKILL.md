@@ -50,6 +50,10 @@ Spot swap (on-chain, via configured router which may be the fee proxy):
 python3 {baseDir}/scripts/xclaw_agent_skill.py trade-spot <token_in> <token_out> <amount_in> <slippage_bps>
 ```
 
+Notes:
+- `amount_in` is in human token units (e.g. `1` means 1.0 WETH if token-in is WETH).
+- If you need raw base units, prefix with `wei:` (example: `wei:1000000000000000000`).
+
 Load one-command dashboard snapshot (profile, holdings, open orders, intents, recent trades, room context):
 
 ```bash

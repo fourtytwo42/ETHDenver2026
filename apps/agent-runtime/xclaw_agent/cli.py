@@ -1285,14 +1285,19 @@ def _to_wei_uint(raw: str | None) -> str:
 
 
 def _to_units_uint(raw: str, decimals: int) -> str:
+    """Convert a human token amount string to base units.
+
+    IMPORTANT: This function treats inputs as human token units (e.g. "1" means
+    1.0 tokens, not 1 base unit). If callers need to accept raw base units, use
+    an explicit prefix such as "wei:<uint>" and handle it before calling here.
+    """
     trimmed = str(raw).strip()
     if not trimmed:
         raise WalletStoreError("Amount must not be empty.")
     if decimals < 0 or decimals > 255:
         raise WalletStoreError("Token decimals must be 0..255.")
-
-    if re.fullmatch(r"[0-9]+", trimmed):
-        return trimmed
+    if "e" in trimmed.lower():
+        raise WalletStoreError("Scientific notation is not supported for amounts. Use a normal decimal string.")
 
     try:
         decimal_value = Decimal(trimmed)
@@ -1309,7 +1314,52 @@ def _to_units_uint(raw: str, decimals: int) -> str:
     value = int(units)
     if value <= 0:
         raise WalletStoreError("Amount is too small after base-unit conversion.")
+    # uint256 bounds check (avoid generating transactions that will revert).
+    if value >= 2**256:
+        raise WalletStoreError("Amount is too large (exceeds uint256).")
     return str(value)
+
+
+def _parse_amount_in_units(raw: str, decimals: int) -> tuple[str, str]:
+    """Return (amount_units, input_mode). input_mode is 'human' or 'base_units'."""
+    trimmed = str(raw or "").strip()
+    if not trimmed:
+        raise WalletStoreError("Amount must not be empty.")
+    match = re.fullmatch(r"(wei|base|units):([0-9]+)", trimmed, flags=re.IGNORECASE)
+    if match:
+        value = match.group(2)
+        if not value or not re.fullmatch(r"[0-9]+", value):
+            raise WalletStoreError("Invalid base-units amount format.")
+        if int(value) <= 0:
+            raise WalletStoreError("Amount must be positive.")
+        if int(value) >= 2**256:
+            raise WalletStoreError("Amount is too large (exceeds uint256).")
+        return value, "base_units"
+    return _to_units_uint(trimmed, decimals), "human"
+
+
+def _format_units_pretty(amount_wei: int, decimals: int, max_frac: int = 6) -> str:
+    # Human-readable display helper; informational only.
+    raw = _format_units(amount_wei, decimals)
+    if raw in {"0", ""}:
+        return "0"
+    if "." in raw:
+        whole, frac = raw.split(".", 1)
+        frac = frac[:max_frac].rstrip("0")
+    else:
+        whole, frac = raw, ""
+    # comma-group whole part
+    sign = ""
+    if whole.startswith("-"):
+        sign = "-"
+        whole = whole[1:]
+    grouped = ""
+    for i, ch in enumerate(reversed(whole)):
+        if i and (i % 3) == 0:
+            grouped = "," + grouped
+        grouped = ch + grouped
+    whole = sign + grouped
+    return f"{whole}.{frac}" if frac else whole
 
 
 def _resolve_token_address(chain: str, token_or_symbol: str) -> str:
@@ -1379,7 +1429,7 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
         token_in_decimals = int(token_in_meta.get("decimals", 18))
         token_out_decimals = int(token_out_meta.get("decimals", 18))
 
-        amount_in_units = _to_units_uint(str(args.amount_in), token_in_decimals)
+        amount_in_units, amount_in_mode = _parse_amount_in_units(str(args.amount_in), token_in_decimals)
         amount_in_int = int(amount_in_units)
         state, day_key, current_spend, max_daily_wei = _enforce_spend_preconditions(chain, amount_in_int)
 
@@ -1399,30 +1449,34 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             )
         deadline = str(int(datetime.now(timezone.utc).timestamp()) + deadline_sec)
 
-        # Approve router (proxy) to spend tokenIn.
-        approve_data = _cast_calldata("approve(address,uint256)(bool)", [router, amount_in_units])
-        approve_tx_hash = _cast_rpc_send_transaction(
-            rpc_url,
-            {
-                "from": wallet_address,
-                "to": token_in,
-                "data": approve_data,
-            },
-            private_key_hex,
-        )
-        approve_receipt = subprocess.run(
-            [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, approve_tx_hash],
-            text=True,
-            capture_output=True,
-        )
-        if approve_receipt.returncode != 0:
-            stderr = (approve_receipt.stderr or "").strip()
-            stdout = (approve_receipt.stdout or "").strip()
-            raise WalletStoreError(stderr or stdout or "cast receipt failed for approve tx.")
-        approve_payload = json.loads((approve_receipt.stdout or "{}").strip() or "{}")
-        approve_status = str(approve_payload.get("status", "0x0")).lower()
-        if approve_status not in {"0x1", "1"}:
-            raise WalletStoreError(f"Approve receipt indicates failure status '{approve_status}'.")
+        approve_tx_hash: str | None = None
+        approve_receipt_payload: dict[str, Any] | None = None
+        # Approve router (proxy) to spend tokenIn if needed.
+        allowance_wei = int(_fetch_token_allowance_wei(chain, token_in, wallet_address, router))
+        if allowance_wei < int(amount_in_units):
+            approve_data = _cast_calldata("approve(address,uint256)(bool)", [router, amount_in_units])
+            approve_tx_hash = _cast_rpc_send_transaction(
+                rpc_url,
+                {
+                    "from": wallet_address,
+                    "to": token_in,
+                    "data": approve_data,
+                },
+                private_key_hex,
+            )
+            approve_receipt = subprocess.run(
+                [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, approve_tx_hash],
+                text=True,
+                capture_output=True,
+            )
+            if approve_receipt.returncode != 0:
+                stderr = (approve_receipt.stderr or "").strip()
+                stdout = (approve_receipt.stdout or "").strip()
+                raise WalletStoreError(stderr or stdout or "cast receipt failed for approve tx.")
+            approve_receipt_payload = json.loads((approve_receipt.stdout or "{}").strip() or "{}")
+            approve_status = str(approve_receipt_payload.get("status", "0x0")).lower()
+            if approve_status not in {"0x1", "1"}:
+                raise WalletStoreError(f"Approve receipt indicates failure status '{approve_status}'.")
 
         to_addr = str(args.to or "").strip() or wallet_address
         if not is_hex_address(to_addr):
@@ -1464,6 +1518,33 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
 
         _record_spend(state, chain, day_key, current_spend + amount_in_int)
 
+        def _parse_receipt_uint(field: str, payload: dict[str, Any]) -> int | None:
+            value = payload.get(field)
+            if value is None:
+                return None
+            try:
+                if isinstance(value, str):
+                    return _parse_uint_text(value)
+                if isinstance(value, int):
+                    return value
+            except Exception:
+                return None
+            return None
+
+        approve_gas_used = _parse_receipt_uint("gasUsed", approve_receipt_payload) if approve_receipt_payload else None
+        approve_gas_price = _parse_receipt_uint("effectiveGasPrice", approve_receipt_payload) if approve_receipt_payload else None
+        approve_cost_wei = (approve_gas_used * approve_gas_price) if (approve_gas_used is not None and approve_gas_price is not None) else None
+
+        swap_gas_used = _parse_receipt_uint("gasUsed", receipt_payload)
+        swap_gas_price = _parse_receipt_uint("effectiveGasPrice", receipt_payload)
+        swap_cost_wei = (swap_gas_used * swap_gas_price) if (swap_gas_used is not None and swap_gas_price is not None) else None
+
+        total_cost_wei: int | None = None
+        if approve_cost_wei is not None and swap_cost_wei is not None:
+            total_cost_wei = approve_cost_wei + swap_cost_wei
+        elif swap_cost_wei is not None:
+            total_cost_wei = swap_cost_wei
+
         return ok(
             "Spot swap executed on-chain via configured router (fee proxy).",
             chain=chain,
@@ -1477,11 +1558,16 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             amountOutMinUnits=str(min_out_int),
             slippageBps=slippage_bps,
             deadline=deadline,
+            approveTxHash=approve_tx_hash,
             txHash=tx_hash,
             # Provide formatted hints for agent readability (best-effort, informational only).
             amountIn=_format_units(int(amount_in_units), token_in_decimals),
             expectedOut=_format_units(int(expected_out_int), token_out_decimals),
             amountOutMin=_format_units(int(min_out_int), token_out_decimals),
+            amountInPretty=_format_units_pretty(int(amount_in_units), token_in_decimals),
+            expectedOutPretty=_format_units_pretty(int(expected_out_int), token_out_decimals),
+            amountOutMinPretty=_format_units_pretty(int(min_out_int), token_out_decimals),
+            amountInInputMode=amount_in_mode,
             tokenInDecimals=token_in_decimals,
             tokenOutDecimals=token_out_decimals,
             tokenInSymbol=token_in_meta.get("symbol"),
@@ -1489,6 +1575,14 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             day=day_key,
             dailySpendWei=str(current_spend + amount_in_int),
             maxDailyNativeWei=str(max_daily_wei),
+            approveGasUsed=str(approve_gas_used) if approve_gas_used is not None else None,
+            approveEffectiveGasPriceWei=str(approve_gas_price) if approve_gas_price is not None else None,
+            approveGasCostWei=str(approve_cost_wei) if approve_cost_wei is not None else None,
+            swapGasUsed=str(swap_gas_used) if swap_gas_used is not None else None,
+            swapEffectiveGasPriceWei=str(swap_gas_price) if swap_gas_price is not None else None,
+            swapGasCostWei=str(swap_cost_wei) if swap_cost_wei is not None else None,
+            totalGasCostWei=str(total_cost_wei) if total_cost_wei is not None else None,
+            totalGasCostEth=_format_units_pretty(int(total_cost_wei or 0), 18) if total_cost_wei is not None else None,
         )
     except WalletPolicyError as exc:
         return fail(exc.code, str(exc), exc.action_hint, exc.details, exit_code=1)
@@ -2258,6 +2352,23 @@ def _fetch_token_balance_wei(chain: str, address: str, token_address: str) -> st
     return str(parsed)
 
 
+def _fetch_token_allowance_wei(chain: str, token_address: str, owner: str, spender: str) -> str:
+    cast_bin = _require_cast_bin()
+    rpc_url = _chain_rpc_url(chain)
+    proc = subprocess.run(
+        [cast_bin, "call", token_address, "allowance(address,address)(uint256)", owner, spender, "--rpc-url", rpc_url],
+        text=True,
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        stdout = (proc.stdout or "").strip()
+        raise WalletStoreError(stderr or stdout or "cast call allowance failed.")
+    output = (proc.stdout or "").strip().splitlines()
+    parsed = _parse_uint_text(output[-1] if output else "")
+    return str(parsed)
+
+
 def _canonical_token_map(chain: str) -> dict[str, str]:
     cfg = _load_chain_config(chain)
     tokens = cfg.get("canonicalTokens")
@@ -2293,6 +2404,7 @@ def _fetch_wallet_holdings(chain: str) -> dict[str, Any]:
                     "token": token_address,
                     "balanceWei": balance_wei,
                     "balance": _format_units(int(balance_wei), decimals),
+                    "balancePretty": _format_units_pretty(int(balance_wei), decimals),
                     "decimals": decimals,
                 }
             )
@@ -2300,7 +2412,13 @@ def _fetch_wallet_holdings(chain: str) -> dict[str, Any]:
             token_errors.append({"symbol": symbol, "token": token_address, "message": str(exc)})
     return {
         "address": address,
-        "native": {"symbol": "ETH", "balanceWei": native_balance_wei, "balance": native_balance_eth, "decimals": 18},
+        "native": {
+            "symbol": "ETH",
+            "balanceWei": native_balance_wei,
+            "balance": native_balance_eth,
+            "balancePretty": _format_units_pretty(int(native_balance_wei), 18),
+            "decimals": 18,
+        },
         "tokens": token_balances,
         "tokenErrors": token_errors,
     }

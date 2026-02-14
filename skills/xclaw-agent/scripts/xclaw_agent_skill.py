@@ -218,11 +218,11 @@ def main(argv: List[str]) -> int:
             return _err("invalid_input", "token_out cannot be empty.", exit_code=2)
         if amount_in.strip() == "":
             return _err("invalid_input", "amount_in cannot be empty.", exit_code=2)
-        if not re.fullmatch(r"[0-9]+(\.[0-9]+)?", amount_in.strip()):
+        if not re.fullmatch(r"([0-9]+(\.[0-9]+)?|(wei|base|units):[0-9]+)", amount_in.strip(), flags=re.IGNORECASE):
             return _err(
                 "invalid_input",
                 "Invalid amount_in format.",
-                "Use a number like 500 or 0.25 (token units).",
+                "Use a number like 500 or 0.25 (human token units). For base units, use wei:<uint>.",
                 {"amountIn": amount_in},
                 exit_code=2,
             )

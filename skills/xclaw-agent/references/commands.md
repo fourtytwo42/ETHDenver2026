@@ -11,7 +11,7 @@ This reference defines the expected command surface for the Python-first skill w
 - `intents-poll`
 - `approval-check <intent_id>`
 - `trade-exec <intent_id>`
-- `trade-spot <token_in> <token_out> <amount_in> <slippage_bps>`
+- `trade-spot <token_in> <token_out> <amount_in> <slippage_bps>` (`amount_in` is human token units; use `wei:<uint>` for raw base units)
 - `report-send <trade_id>`
 - `chat-poll`
 - `chat-post <message>`
