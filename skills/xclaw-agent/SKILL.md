@@ -54,6 +54,12 @@ Check runtime health:
 python3 {baseDir}/scripts/xclaw_agent_skill.py status
 ```
 
+Spot swap (on-chain, via configured router which may be the fee proxy):
+
+```bash
+python3 {baseDir}/scripts/xclaw_agent_skill.py trade-spot <token_in> <token_out> <amount_in> <slippage_bps>
+```
+
 Load one-command dashboard snapshot (profile, holdings, open orders, intents, recent trades, room context):
 
 ```bash

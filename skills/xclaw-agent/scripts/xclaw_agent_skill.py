@@ -134,7 +134,7 @@ def main(argv: List[str]) -> int:
         return _err(
             "usage",
             "Missing command.",
-            "Use one of: status, dashboard, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, username-set, owner-link, faucet-request, limit-orders-create, limit-orders-cancel, limit-orders-list, limit-orders-run-loop, wallet-health, wallet-address, wallet-sign-challenge, wallet-send, wallet-send-token, wallet-balance, wallet-token-balance",
+            "Use one of: status, dashboard, intents-poll, approval-check, trade-exec, trade-spot, report-send, chat-poll, chat-post, username-set, owner-link, faucet-request, limit-orders-create, limit-orders-cancel, limit-orders-list, limit-orders-run-loop, wallet-health, wallet-address, wallet-sign-challenge, wallet-send, wallet-send-token, wallet-balance, wallet-token-balance",
             exit_code=2,
         )
 
@@ -146,6 +146,7 @@ def main(argv: List[str]) -> int:
         "intents-poll",
         "approval-check",
         "trade-exec",
+        "trade-spot",
         "report-send",
         "chat-poll",
         "chat-post",
@@ -197,6 +198,53 @@ def main(argv: List[str]) -> int:
         if len(argv) < 3:
             return _err("usage", "trade-exec requires <intent_id>", "usage: trade-exec <intent_id>", exit_code=2)
         return _run_agent(["trade", "execute", "--intent", argv[2], "--chain", chain, "--json"])
+
+    if cmd == "trade-spot":
+        if len(argv) < 6:
+            return _err(
+                "usage",
+                "trade-spot requires <token_in> <token_out> <amount_in> <slippage_bps>",
+                "usage: trade-spot <token_in> <token_out> <amount_in> <slippage_bps>",
+                exit_code=2,
+            )
+        token_in = argv[2]
+        token_out = argv[3]
+        amount_in = argv[4]
+        slippage_bps = argv[5]
+        # token values may be canonical symbols; validate only when they look like addresses.
+        if _is_hex_address(token_in) is False and token_in.strip() == "":
+            return _err("invalid_input", "token_in cannot be empty.", exit_code=2)
+        if _is_hex_address(token_out) is False and token_out.strip() == "":
+            return _err("invalid_input", "token_out cannot be empty.", exit_code=2)
+        if amount_in.strip() == "":
+            return _err("invalid_input", "amount_in cannot be empty.", exit_code=2)
+        if not re.fullmatch(r"[0-9]+(\.[0-9]+)?", amount_in.strip()):
+            return _err(
+                "invalid_input",
+                "Invalid amount_in format.",
+                "Use a number like 500 or 0.25 (token units).",
+                {"amountIn": amount_in},
+                exit_code=2,
+            )
+        if not _is_uint_string(slippage_bps):
+            return _err("invalid_input", "Invalid slippage_bps format.", "Use an integer like 50 or 500.", {"slippageBps": slippage_bps}, exit_code=2)
+        return _run_agent(
+            [
+                "trade",
+                "spot",
+                "--chain",
+                chain,
+                "--token-in",
+                token_in,
+                "--token-out",
+                token_out,
+                "--amount-in",
+                amount_in,
+                "--slippage-bps",
+                slippage_bps,
+                "--json",
+            ]
+        )
 
     if cmd == "report-send":
         if len(argv) < 3:

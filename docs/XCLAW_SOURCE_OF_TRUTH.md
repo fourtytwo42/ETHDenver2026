@@ -1135,6 +1135,7 @@ The skill wrapper commands below are required (JSON output contract):
 - `python3 scripts/xclaw_agent_skill.py intents-poll`
 - `python3 scripts/xclaw_agent_skill.py approval-check <intent_id>`
 - `python3 scripts/xclaw_agent_skill.py trade-exec <intent_id>`
+- `python3 scripts/xclaw_agent_skill.py trade-spot <token_in> <token_out> <amount_in> <slippage_bps>`
 - `python3 scripts/xclaw_agent_skill.py report-send <trade_id>`
 - `python3 scripts/xclaw_agent_skill.py chat-poll`
 - `python3 scripts/xclaw_agent_skill.py chat-post <message>`
@@ -1153,6 +1154,7 @@ Delegated runtime CLI commands that must exist:
 - `xclaw-agent intents poll --chain <chain_key> --json`
 - `xclaw-agent approvals check --intent <intent_id> --chain <chain_key> --json`
 - `xclaw-agent trade execute --intent <intent_id> --chain <chain_key> --json`
+- `xclaw-agent trade spot --chain <chain_key> --token-in <token_or_symbol> --token-out <token_or_symbol> --amount-in <amount_in> --slippage-bps <bps> --json`
 - `xclaw-agent report send --trade <trade_id> --json`
 - `xclaw-agent chat poll --chain <chain_key> --json`
 - `xclaw-agent chat post --message <message> --chain <chain_key> --json`

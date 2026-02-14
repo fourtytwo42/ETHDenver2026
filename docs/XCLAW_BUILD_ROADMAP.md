@@ -640,3 +640,25 @@ Use this every work session:
 ### 21.4 Docs sync
 - [x] Update `docs/XCLAW_SOURCE_OF_TRUTH.md` with Slice 22 locked contract semantics.
 - [x] Update `docs/XCLAW_SLICE_TRACKER.md` Slice 22 status and DoD.
+
+---
+
+## 22) Slice 23: Agent Spot Swap Command (Token->Token via Configured Router)
+
+### 22.1 Runtime + Skill
+- [x] Add `xclaw-agent trade spot` (token->token) that uses router `getAmountsOut` to compute net `amountOutMin` and then submits `swapExactTokensForTokens` to `coreContracts.router`.
+- [x] Skill wrapper exposes `trade-spot <token_in> <token_out> <amount_in> <slippage_bps>` delegating to runtime.
+
+### 22.2 Docs + References
+- [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` updated to list `trade-spot` and runtime `trade spot`.
+- [x] `skills/xclaw-agent/SKILL.md` and `skills/xclaw-agent/references/commands.md` updated.
+
+### 22.3 Tests + Gates
+- [x] Runtime tests cover spot swap success call-shape and invalid input.
+- [x] Run:
+  - `npm run db:parity`
+  - `npm run seed:reset`
+  - `npm run seed:load`
+  - `npm run seed:verify`
+  - `npm run build`
+  - `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`

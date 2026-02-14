@@ -1,32 +1,27 @@
-# Slice 22 Spec: Non-Upgradeable V2 Fee Router Proxy (0.5% Output Fee, Net Semantics)
+# Slice 23 Spec: Agent Spot Swap (Token->Token via Configured Router)
 
 ## Goal
-Deploy a non-upgradeable on-chain V2-compatible router proxy that:
-- preserves the existing agent runtime swap interface,
-- atomically takes a fixed 50 bps fee on the output token,
-- forwards net output to the caller-specified recipient,
-- sends fees to an immutable global treasury address,
-- enforces net-after-fee semantics for `getAmountsOut` and `amountOutMin`.
+Give agents a first-class one-shot "spot swap" command to trade from one ERC20 token to another via the chain's configured router (`config/chains/<chain>.json` `coreContracts.router`).
+
+This must work transparently with the Slice 22 fee-router proxy (router may be the proxy).
 
 ## Success Criteria
-1. Hardhat tests validate net quote behavior and fee accounting.
-2. Hardhat-local chain config uses proxy router address with underlying router preserved.
-3. Runtime swaps succeed unchanged by only updating router address in chain config.
-4. Base Sepolia deploy script can deploy the proxy and emit artifact fields for proxy + underlying router.
-5. Base Sepolia chain config is updated to point router to the proxy (once deployed).
+1. Runtime CLI supports `xclaw-agent trade spot` and returns JSON success/error bodies.
+2. The swap path uses router `getAmountsOut` to compute a net `amountOutMin` (slippage-bps applied) and then submits `swapExactTokensForTokens`.
+3. Skill wrapper exposes `trade-spot <token_in> <token_out> <amount_in> <slippage_bps>`.
+4. Tests cover success call-shape + at least one invalid input.
+5. Canonical docs/artifacts are synced for the new command surface.
 
 ## Non-Goals
-1. Supporting fee-on-transfer/rebasing token edge-cases.
-2. Supporting all router methods; Slice 22 is limited to exact-in token->token swaps used by runtime.
-3. Upgradeable proxy patterns; deploying a new proxy per DEX change is the model.
+1. Multi-hop paths (this slice supports a direct 2-token path only).
+2. Supporting ETH/native input/output; ERC20->ERC20 only.
+3. Decoding swap outputs/events or computing realized price; we rely on on-chain tx receipts and router quoting.
 
-## Locked Decisions
-1. Fee basis: output token.
-2. Fee bps: fixed 50 bps (0.5%).
-3. Treasury: global EVM address, immutable constructor arg.
-4. Interface: V2 router-compatible (`getAmountsOut`, `swapExactTokensForTokens`).
-5. Semantics: net-after-fee for `getAmountsOut` and `amountOutMin`.
-6. Upgradeability: none; deploy a new proxy if DEX changes.
+## Constraints / Safety
+1. Never exposes private keys/seed phrases.
+2. Uses the existing local signing boundary (`cast` + local wallet store).
+3. Uses chain config router address only (no direct underlying router).
+4. `slippage-bps` bounded to 0..5000; `deadline-sec` bounded to 30..3600.
 
 ## Acceptance Checks
 - `npm run db:parity`
@@ -34,6 +29,5 @@ Deploy a non-upgradeable on-chain V2-compatible router proxy that:
 - `npm run seed:load`
 - `npm run seed:verify`
 - `npm run build`
-- `npm run hardhat:deploy-local`
-- `npm run hardhat:verify-local`
-- `TS_NODE_PROJECT=tsconfig.hardhat.json npx hardhat test infrastructure/tests/fee-router.test.ts`
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+

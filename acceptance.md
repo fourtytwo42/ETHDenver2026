@@ -1563,6 +1563,39 @@ Active slice: `Slice 22: Non-Upgradeable V2 Fee Router Proxy (0.5% Output Fee)`
 - Runtime env used:
   - `XCLAW_AGENT_HOME=/tmp/xclaw-s15-agent2/.xclaw-agent`
   - `XCLAW_API_BASE_URL=http://127.0.0.1:3001/api/v1`
+
+---
+
+## Slice 23 Acceptance Evidence
+
+Date (UTC): 2026-02-14
+Active slice: `Slice 23: Agent Spot Swap Command (Token->Token via Configured Router)`
+
+### Objective + scope lock
+- Objective: add a runtime/skill command to execute a one-shot token->token swap on-chain via `coreContracts.router` (fee-proxy compatible).
+- Scope guard: no API/schema/DB changes in this slice.
+
+### File-level evidence (Slice 23)
+- Runtime:
+  - `apps/agent-runtime/xclaw_agent/cli.py` (adds `xclaw-agent trade spot`)
+- Tests:
+  - `apps/agent-runtime/tests/test_trade_path.py` (spot swap success + invalid slippage)
+- Skill wrapper/docs:
+  - `skills/xclaw-agent/scripts/xclaw_agent_skill.py` (adds `trade-spot`)
+  - `skills/xclaw-agent/SKILL.md`
+  - `skills/xclaw-agent/references/commands.md`
+- Canonical docs:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+
+### Required gates (Slice 23)
+- `npm run db:parity` -> PASS
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+- `npm run build` -> PASS
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS
   - `XCLAW_AGENT_API_KEY=slice7_token_abc12345`
   - `XCLAW_WALLET_PASSPHRASE=passphrase-123`
 - Real trade execute:

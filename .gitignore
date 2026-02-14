@@ -22,6 +22,16 @@
 /infrastructure/.hardhat-artifacts/
 /infrastructure/.hardhat-cache/
 
+# local postgres cluster (generated)
+/infrastructure/local-postgres/
+/infrastructure/local-postgres.bak-*/
+
+# seed state (generated)
+/infrastructure/seed-data/.seed-state.json
+
+# ops backups (generated)
+/infrastructure/backups/
+
 # production
 /build
 

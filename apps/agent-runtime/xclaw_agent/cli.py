@@ -1257,6 +1257,227 @@ def _to_wei_uint(raw: str | None) -> str:
     return str(wei)
 
 
+def _to_units_uint(raw: str, decimals: int) -> str:
+    trimmed = str(raw).strip()
+    if not trimmed:
+        raise WalletStoreError("Amount must not be empty.")
+    if decimals < 0 or decimals > 255:
+        raise WalletStoreError("Token decimals must be 0..255.")
+
+    if re.fullmatch(r"[0-9]+", trimmed):
+        return trimmed
+
+    try:
+        decimal_value = Decimal(trimmed)
+    except InvalidOperation as exc:
+        raise WalletStoreError(f"Invalid amount format '{raw}'.") from exc
+    if decimal_value <= 0:
+        raise WalletStoreError("Amount must be positive.")
+
+    scale = Decimal(10) ** Decimal(decimals)
+    units = decimal_value * scale
+    # Must be an integer number of base units.
+    if units != units.to_integral_value():
+        raise WalletStoreError("Amount has too many decimal places for token.")
+    value = int(units)
+    if value <= 0:
+        raise WalletStoreError("Amount is too small after base-unit conversion.")
+    return str(value)
+
+
+def _resolve_token_address(chain: str, token_or_symbol: str) -> str:
+    candidate = str(token_or_symbol or "").strip()
+    if is_hex_address(candidate):
+        return candidate
+    symbol = candidate.upper()
+    token_map = _canonical_token_map(chain)
+    value = token_map.get(symbol)
+    if value and is_hex_address(value):
+        return value
+    raise WalletStoreError("token must be a 0x address or a canonical token symbol for the active chain.")
+
+
+def _router_get_amount_out(chain: str, amount_in_units: str, token_in: str, token_out: str) -> int:
+    cast_bin = _require_cast_bin()
+    router = _require_chain_contract_address(chain, "router")
+    rpc_url = _chain_rpc_url(chain)
+    proc = subprocess.run(
+        [cast_bin, "call", "--rpc-url", rpc_url, router, "getAmountsOut(uint256,address[])(uint256[])", amount_in_units, f"[{token_in},{token_out}]"],
+        text=True,
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        stdout = (proc.stdout or "").strip()
+        raise WalletStoreError(stderr or stdout or "cast call getAmountsOut failed.")
+    return int(_parse_uint_from_cast_output(proc.stdout))
+
+
+def cmd_trade_spot(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+
+    chain = args.chain
+    try:
+        token_in = _resolve_token_address(chain, args.token_in)
+        token_out = _resolve_token_address(chain, args.token_out)
+        if token_in.lower() == token_out.lower():
+            return fail(
+                "invalid_input",
+                "token-in and token-out must be different.",
+                "Provide two distinct token addresses (or symbols).",
+                {"tokenIn": token_in, "tokenOut": token_out, "chain": chain},
+                exit_code=2,
+            )
+
+        slippage_bps = int(args.slippage_bps)
+        if slippage_bps < 0 or slippage_bps > 5000:
+            return fail(
+                "invalid_input",
+                "slippage-bps must be between 0 and 5000.",
+                "Use a value like 50 for 0.5% or 500 for 5%.",
+                {"slippageBps": args.slippage_bps},
+                exit_code=2,
+            )
+
+        store = load_wallet_store()
+        wallet_address, private_key_hex = _execution_wallet(store, chain)
+        cast_bin = _require_cast_bin()
+        rpc_url = _chain_rpc_url(chain)
+        router = _require_chain_contract_address(chain, "router")
+
+        token_in_meta = _fetch_erc20_metadata(chain, token_in)
+        token_out_meta = _fetch_erc20_metadata(chain, token_out)
+        token_in_decimals = int(token_in_meta.get("decimals", 18))
+        token_out_decimals = int(token_out_meta.get("decimals", 18))
+
+        amount_in_units = _to_units_uint(str(args.amount_in), token_in_decimals)
+        amount_in_int = int(amount_in_units)
+        state, day_key, current_spend, max_daily_wei = _enforce_spend_preconditions(chain, amount_in_int)
+
+        expected_out_int = _router_get_amount_out(chain, amount_in_units, token_in, token_out)
+        min_out_int = (expected_out_int * (10000 - slippage_bps)) // 10000
+        if min_out_int <= 0:
+            raise WalletStoreError("Computed amountOutMin is zero; reduce slippage or increase amount.")
+
+        deadline_sec = int(args.deadline_sec)
+        if deadline_sec < 30 or deadline_sec > 3600:
+            return fail(
+                "invalid_input",
+                "deadline-sec must be between 30 and 3600.",
+                "Use a value like 120.",
+                {"deadlineSec": args.deadline_sec},
+                exit_code=2,
+            )
+        deadline = str(int(datetime.now(timezone.utc).timestamp()) + deadline_sec)
+
+        # Approve router (proxy) to spend tokenIn.
+        approve_data = _cast_calldata("approve(address,uint256)(bool)", [router, amount_in_units])
+        approve_tx_hash = _cast_rpc_send_transaction(
+            rpc_url,
+            {
+                "from": wallet_address,
+                "to": token_in,
+                "data": approve_data,
+            },
+            private_key_hex,
+        )
+        approve_receipt = subprocess.run(
+            [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, approve_tx_hash],
+            text=True,
+            capture_output=True,
+        )
+        if approve_receipt.returncode != 0:
+            stderr = (approve_receipt.stderr or "").strip()
+            stdout = (approve_receipt.stdout or "").strip()
+            raise WalletStoreError(stderr or stdout or "cast receipt failed for approve tx.")
+        approve_payload = json.loads((approve_receipt.stdout or "{}").strip() or "{}")
+        approve_status = str(approve_payload.get("status", "0x0")).lower()
+        if approve_status not in {"0x1", "1"}:
+            raise WalletStoreError(f"Approve receipt indicates failure status '{approve_status}'.")
+
+        to_addr = str(args.to or "").strip() or wallet_address
+        if not is_hex_address(to_addr):
+            return fail(
+                "invalid_input",
+                "to must be a valid 0x address.",
+                "Provide a 0x-prefixed 20-byte hex address or omit to default to the execution wallet.",
+                {"to": args.to},
+                exit_code=2,
+            )
+
+        swap_data = _cast_calldata(
+            "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)(uint256[])",
+            [amount_in_units, str(min_out_int), f"[{token_in},{token_out}]", to_addr, deadline],
+        )
+        tx_hash = _cast_rpc_send_transaction(
+            rpc_url,
+            {
+                "from": wallet_address,
+                "to": router,
+                "data": swap_data,
+            },
+            private_key_hex,
+        )
+
+        receipt_proc = subprocess.run(
+            [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, tx_hash],
+            text=True,
+            capture_output=True,
+        )
+        if receipt_proc.returncode != 0:
+            stderr = (receipt_proc.stderr or "").strip()
+            stdout = (receipt_proc.stdout or "").strip()
+            raise WalletStoreError(stderr or stdout or "cast receipt failed.")
+        receipt_payload = json.loads((receipt_proc.stdout or "{}").strip() or "{}")
+        receipt_status = str(receipt_payload.get("status", "0x0")).lower()
+        if receipt_status not in {"0x1", "1"}:
+            raise WalletStoreError(f"On-chain receipt indicates failure status '{receipt_status}'.")
+
+        _record_spend(state, chain, day_key, current_spend + amount_in_int)
+
+        return ok(
+            "Spot swap executed on-chain via configured router (fee proxy).",
+            chain=chain,
+            router=router,
+            fromAddress=wallet_address,
+            toAddress=to_addr,
+            tokenIn=token_in,
+            tokenOut=token_out,
+            amountInUnits=amount_in_units,
+            expectedOutUnits=str(expected_out_int),
+            amountOutMinUnits=str(min_out_int),
+            slippageBps=slippage_bps,
+            deadline=deadline,
+            txHash=tx_hash,
+            # Provide formatted hints for agent readability (best-effort, informational only).
+            amountIn=_format_units(int(amount_in_units), token_in_decimals),
+            expectedOut=_format_units(int(expected_out_int), token_out_decimals),
+            amountOutMin=_format_units(int(min_out_int), token_out_decimals),
+            tokenInDecimals=token_in_decimals,
+            tokenOutDecimals=token_out_decimals,
+            tokenInSymbol=token_in_meta.get("symbol"),
+            tokenOutSymbol=token_out_meta.get("symbol"),
+            day=day_key,
+            dailySpendWei=str(current_spend + amount_in_int),
+            maxDailyNativeWei=str(max_daily_wei),
+        )
+    except WalletPolicyError as exc:
+        return fail(exc.code, str(exc), exc.action_hint, exc.details, exit_code=1)
+    except WalletSecurityError as exc:
+        return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": chain}, exit_code=1)
+    except WalletStoreError as exc:
+        msg = str(exc)
+        if "Missing dependency: cast" in msg:
+            return fail("missing_dependency", msg, "Install Foundry and ensure `cast` is on PATH.", {"dependency": "cast"}, exit_code=1)
+        if "Chain config" in msg:
+            return fail("chain_config_invalid", msg, "Repair config/chains/<chain>.json and retry.", {"chain": chain}, exit_code=1)
+        return fail("trade_spot_failed", msg, "Verify wallet, RPC, token addresses, and retry.", {"chain": chain}, exit_code=1)
+    except Exception as exc:
+        return fail("trade_spot_failed", str(exc), "Inspect runtime trade spot path and retry.", {"chain": chain}, exit_code=1)
+
+
 def _read_trade_details(trade_id: str) -> dict[str, Any]:
     status_code, body = _api_request("GET", f"/trades/{trade_id}")
     if status_code < 200 or status_code >= 300:
@@ -3156,6 +3377,17 @@ def build_parser() -> argparse.ArgumentParser:
     trade_exec.add_argument("--chain", required=True)
     trade_exec.add_argument("--json", action="store_true")
     trade_exec.set_defaults(func=cmd_trade_execute)
+
+    trade_spot = trade_sub.add_parser("spot")
+    trade_spot.add_argument("--chain", required=True)
+    trade_spot.add_argument("--token-in", required=True)
+    trade_spot.add_argument("--token-out", required=True)
+    trade_spot.add_argument("--amount-in", required=True)
+    trade_spot.add_argument("--slippage-bps", required=True)
+    trade_spot.add_argument("--to")
+    trade_spot.add_argument("--deadline-sec", default=120)
+    trade_spot.add_argument("--json", action="store_true")
+    trade_spot.set_defaults(func=cmd_trade_spot)
 
     report = sub.add_parser("report")
     report_sub = report.add_subparsers(dest="report_cmd")
