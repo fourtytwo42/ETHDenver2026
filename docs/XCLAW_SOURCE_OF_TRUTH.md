@@ -1152,6 +1152,18 @@ The skill wrapper commands below are required (JSON output contract):
 - `python3 scripts/xclaw_agent_skill.py wallet-balance`
 - `python3 scripts/xclaw_agent_skill.py wallet-token-balance <token_address>`
 
+Additional locked reliability requirements for skill/runtime usage:
+- Skill wrapper invocations must not hang by default; enforce a wrapper-level timeout via `XCLAW_SKILL_TIMEOUT_SEC` and return structured JSON `timeout` errors on expiry.
+- `limit-orders-run-loop` must emit exactly one JSON object per invocation (no multi-line JSON output).
+- Runtime cast/RPC operations must support timeouts via:
+  - `XCLAW_CAST_CALL_TIMEOUT_SEC` (default `30`)
+  - `XCLAW_CAST_RECEIPT_TIMEOUT_SEC` (default `90`)
+  - `XCLAW_CAST_SEND_TIMEOUT_SEC` (default `30`)
+- `status` output should include `agentName` best-effort when resolvable without making the command fail on profile lookup issues.
+- `wallet-health` ok responses should include actionable guidance (`nextAction` and `actionHint`).
+- `faucet-request` rate-limit failures should surface machine-readable retry timing when available (`retryAfterSec` from server details).
+- `trade-spot` gas output should include both exact numeric ETH (`totalGasCostEthExact`) and display-friendly pretty form (`totalGasCostEthPretty`), while keeping backward-compatible `totalGasCostEth`.
+
 Delegated runtime CLI commands that must exist:
 
 - `xclaw-agent status --json`

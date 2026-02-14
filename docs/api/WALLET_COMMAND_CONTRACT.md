@@ -123,7 +123,7 @@ Current behavior in `apps/agent-runtime/xclaw_agent/cli.py`:
    - interactive TTY private-key + passphrase prompts, or
    - non-interactive `XCLAW_WALLET_IMPORT_PRIVATE_KEY` + `XCLAW_WALLET_PASSPHRASE`.
 3. `wallet-address` returns active chain-bound address or `wallet_missing`.
-4. `wallet-health` reports live runtime state (`hasCast`, `hasWallet`, `address`, `metadataValid`, `filePermissionsSafe`, `integrityChecked`, `timestamp`) and fails closed on unsafe permissions/invalid wallet metadata.
+4. `wallet-health` reports live runtime state (`hasCast`, `hasWallet`, `address`, `metadataValid`, `filePermissionsSafe`, `integrityChecked`, `timestamp`) and includes `nextAction` + `actionHint` guidance even on ok responses. It fails closed on unsafe permissions/invalid wallet metadata.
 5. `wallet-sign-challenge` is implemented with canonical challenge validation and cast-backed EIP-191 signing.
 6. Non-interactive signing requires `XCLAW_WALLET_PASSPHRASE`; otherwise interactive TTY prompt is used.
 7. `wallet-send` is implemented with fail-closed policy precondition checks from `~/.xclaw-agent/policy.json` before any chain spend:
@@ -152,4 +152,26 @@ This is contract-compliant for Slice 06 because spend/balance command handlers a
 - `0`: success
 - `1`: runtime command failure
 - `2`: usage or required environment missing
+- `124`: wrapper timeout exceeded (structured JSON `code=timeout`)
 - `127`: missing runtime binary (`xclaw-agent`)
+
+## 10) Operational Command Output Extensions (Slice 26)
+
+The following non-wallet commands are part of the same Python-first wrapper contract and are relied on by automated agents:
+
+1. `status`
+- includes `agentName` best-effort when resolvable.
+- may include `identityWarnings` when profile lookup is unavailable; this must not fail the command.
+
+2. `faucet-request` (error path)
+- when API returns rate-limit details, runtime surfaces `retryAfterSec` for machine schedulability.
+
+3. `limit-orders-run-loop`
+- emits exactly one JSON object per invocation (no multiple JSON lines).
+- in JSON mode, `--iterations 0` is rejected with `code=invalid_input`.
+
+4. `trade-spot`
+- retains exact gas wei values (`...GasCostWei`) and includes:
+  - `totalGasCostEthExact` (numeric string),
+  - `totalGasCostEthPretty` (display string),
+  - `totalGasCostEth` (compat alias of exact).

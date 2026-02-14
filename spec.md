@@ -64,3 +64,47 @@ Harden the Python-first X-Claw agent skill UX based on Worksheets A-H:
 - `npm run seed:verify`
 - `npm run build`
 - `python3 -m pytest apps/agent-runtime/tests` (fallback: `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`)
+
+---
+
+# Slice 26 Spec: Agent Skill Robustness Hardening (Timeouts + Identity + Single-JSON)
+
+## Goal
+Harden the agent runtime/skill command surface to prevent hangs, improve identity/health clarity, and standardize parseable JSON behavior for automation.
+
+## Success Criteria
+1. Wrapper enforces timeout (`XCLAW_SKILL_TIMEOUT_SEC`, default 240) and returns structured `code=timeout`.
+2. Runtime cast/RPC operations are timeout-bounded with actionable timeout codes (`rpc_timeout`, `tx_receipt_timeout`).
+3. `status` includes `agentName` best-effort and remains resilient when profile lookup fails.
+4. `wallet-health` includes `nextAction` + `actionHint` on ok responses.
+5. `faucet-request` surfaces `retryAfterSec` from server rate-limit details when available.
+6. `limit-orders-run-loop` emits one JSON object per invocation.
+7. `trade-spot` exposes exact + pretty gas cost ETH fields (`totalGasCostEthExact`, `totalGasCostEthPretty`) while preserving compatibility.
+
+## Non-Goals
+1. No changes to wallet custody boundaries.
+2. No dependency additions.
+3. No Node/npm requirement introduced for agent runtime command invocation.
+
+## Constraints / Safety
+1. No secrets in outputs/logs.
+2. AI output remains untrusted input; retain strict command/input validation.
+3. Keep source-of-truth + tracker + roadmap + command contract in sync.
+
+## Acceptance Checks
+- `npm run db:parity`
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:verify`
+- `npm run build`
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+- `python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -k wallet_health_includes_next_action_on_ok -v`
+
+## Close-Out Session (2026-02-14)
+- Objective: close Slice 26 using evidence-only updates (no new behavior scope).
+- Expected touched files allowlist:
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`

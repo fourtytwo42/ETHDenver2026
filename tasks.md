@@ -38,3 +38,39 @@ Active slice: `Slice 25: Agent Skill UX Upgrade (Security + Reliability + Contra
 - [x] Run gates: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.
 - [x] Run runtime tests.
 - [x] Post evidence + commit hash to GitHub issue #20.
+
+---
+
+# Slice 26 Tasks: Agent Skill Robustness Hardening (Timeouts + Identity + Single-JSON)
+
+Active slice: `Slice 26: Agent Skill Robustness Hardening (Timeouts + Identity + Single-JSON)`
+
+## Checklist
+- [x] Create and map issue: #21.
+- [x] Wrapper:
+  - [x] add `XCLAW_SKILL_TIMEOUT_SEC` handling (default 240)
+  - [x] return structured `timeout` JSON on expiration
+- [x] Runtime:
+  - [x] add cast timeout envs (`XCLAW_CAST_CALL_TIMEOUT_SEC`, `XCLAW_CAST_RECEIPT_TIMEOUT_SEC`, `XCLAW_CAST_SEND_TIMEOUT_SEC`)
+  - [x] centralize subprocess timeout handling
+  - [x] `trade-spot` maps timeout failures to actionable codes
+- [x] UX payloads:
+  - [x] `status` includes best-effort `agentName` and warnings
+  - [x] `wallet-health` includes `nextAction` + `actionHint`
+  - [x] `faucet-request` surfaces `retryAfterSec` on rate limit
+  - [x] `limit-orders-run-loop` emits single JSON; reject `--iterations 0` in JSON mode
+  - [x] `trade-spot` includes `totalGasCostEthExact` + `totalGasCostEthPretty`
+- [x] Tests:
+  - [x] `test_trade_path` updates for status/faucet/run-loop behavior
+  - [x] wallet-health guidance test added
+- [x] Docs sync:
+  - [x] `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - [x] `docs/XCLAW_SLICE_TRACKER.md`
+  - [x] `docs/XCLAW_BUILD_ROADMAP.md`
+  - [x] `docs/api/WALLET_COMMAND_CONTRACT.md`
+  - [x] `skills/xclaw-agent/SKILL.md`
+  - [x] `docs/CONTEXT_PACK.md`, `spec.md`, `tasks.md`, `acceptance.md`
+- [x] Run all required gates (`db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`) and record evidence.
+- [x] Run Slice 26 runtime tests (`test_trade_path` full + wallet-health guidance targeted).
+- [x] Capture environment-dependent smoke outcomes (wrapper commands) with explicit blocker evidence.
+- [ ] Commit/push Slice 26 close-out and post verification evidence + commit hash to issue #21.

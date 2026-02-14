@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import io
 import getpass
 import hashlib
 import json
@@ -25,6 +26,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -64,8 +66,8 @@ CHALLENGE_ALLOWED_DOMAINS = {"xclaw.trade", "localhost", "127.0.0.1", "::1", "st
 RETRY_WINDOW_SEC = 600
 MAX_TRADE_RETRIES = 3
 DEFAULT_TX_GAS_PRICE_GWEI = 5
-DEFAULT_TX_SEND_MAX_ATTEMPTS = 3
-TX_GAS_PRICE_BUMP_GWEI = 2
+DEFAULT_TX_SEND_MAX_ATTEMPTS = 5
+TX_GAS_PRICE_BUMP_GWEI = 5
 LIMIT_ORDER_STORE_VERSION = 1
 AGENT_RECOVERY_ACTION = "agent_key_recovery"
 
@@ -90,6 +92,16 @@ class WalletPolicyError(Exception):
         self.code = code
         self.action_hint = action_hint
         self.details = details or {}
+
+
+class SubprocessTimeout(WalletStoreError):
+    """A subprocess operation timed out (cast call/receipt/send/etc)."""
+
+    def __init__(self, kind: str, timeout_sec: int, cmd: list[str]):
+        super().__init__(f"Timed out after {timeout_sec}s running: {' '.join(cmd)}")
+        self.kind = kind
+        self.timeout_sec = timeout_sec
+        self.cmd = cmd
 
 
 def utc_now() -> str:
@@ -121,6 +133,37 @@ def require_json_flag(args: argparse.Namespace) -> int | None:
     if getattr(args, "json", False):
         return None
     return fail("missing_flag", "This command requires --json output mode.", "Re-run with --json.", exit_code=2)
+
+
+def _env_timeout_sec(name: str, default: int) -> int:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    if not re.fullmatch(r"[0-9]+", raw):
+        raise WalletStoreError(f"{name} must be an integer number of seconds.")
+    value = int(raw)
+    if value < 1:
+        raise WalletStoreError(f"{name} must be >= 1.")
+    return value
+
+
+def _cast_call_timeout_sec() -> int:
+    return _env_timeout_sec("XCLAW_CAST_CALL_TIMEOUT_SEC", 30)
+
+
+def _cast_receipt_timeout_sec() -> int:
+    return _env_timeout_sec("XCLAW_CAST_RECEIPT_TIMEOUT_SEC", 90)
+
+
+def _cast_send_timeout_sec() -> int:
+    return _env_timeout_sec("XCLAW_CAST_SEND_TIMEOUT_SEC", 30)
+
+
+def _run_subprocess(cmd: list[str], *, timeout_sec: int, kind: str) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(cmd, text=True, capture_output=True, timeout=timeout_sec)
+    except subprocess.TimeoutExpired as exc:
+        raise SubprocessTimeout(kind=kind, timeout_sec=timeout_sec, cmd=cmd) from exc
 
 
 def ensure_app_dir() -> None:
@@ -801,10 +844,10 @@ def _parse_canonical_challenge(message: str, expected_chain: str) -> dict[str, s
 def _cast_sign_message(private_key_hex: str, message: str) -> str:
     cast_bin = _require_cast_bin()
 
-    proc = subprocess.run(
+    proc = _run_subprocess(
         [cast_bin, "wallet", "sign", "--private-key", private_key_hex, message],
-        text=True,
-        capture_output=True,
+        timeout_sec=_cast_call_timeout_sec(),
+        kind="cast_call",
     )
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip()
@@ -1041,12 +1084,41 @@ def _normalize_address(value: str) -> str:
 
 
 def _fetch_outbound_transfer_policy(chain: str) -> dict[str, Any]:
-    status_code, body = _api_request("GET", f"/agent/transfers/policy?chainKey={urllib.parse.quote(chain)}")
-    if status_code < 200 or status_code >= 300:
-        code = str(body.get("code", "api_error"))
-        message = str(body.get("message", f"transfer policy read failed ({status_code})"))
-        raise WalletStoreError(f"{code}: {message}")
-    return body
+    path = f"/agent/transfers/policy?chainKey={urllib.parse.quote(chain)}"
+    try:
+        status_code, body = _api_request("GET", path)
+        if status_code < 200 or status_code >= 300:
+            code = str(body.get("code", "api_error"))
+            message = str(body.get("message", f"transfer policy read failed ({status_code})"))
+            raise WalletStoreError(f"{code}: {message}")
+        # Cache last-known policy so runtime can fail-closed deterministically during API outages.
+        try:
+            state = load_state()
+            cache = state.get("transferPolicyCache")
+            if not isinstance(cache, dict):
+                cache = {}
+            cache[chain] = {"cachedAt": utc_now(), "policy": body}
+            state["transferPolicyCache"] = cache
+            save_state(state)
+        except Exception:
+            pass
+        return body
+    except Exception:
+        # Fallback to cached policy when server/API is unavailable.
+        state = load_state()
+        cache = state.get("transferPolicyCache")
+        if isinstance(cache, dict):
+            cached = cache.get(chain)
+            if isinstance(cached, dict):
+                policy = cached.get("policy")
+                if isinstance(policy, dict):
+                    return policy
+        raise WalletPolicyError(
+            "transfer_policy_unavailable",
+            "Outbound transfer policy could not be fetched (API unavailable) and no cached policy exists.",
+            "Verify XCLAW_API_BASE_URL and XCLAW_AGENT_API_KEY, then retry; outbound transfers fail closed when policy is unavailable.",
+            {"chain": chain, "path": path},
+        )
 
 
 def _enforce_outbound_transfer_policy(chain: str, destination: str) -> dict[str, Any]:
@@ -1154,10 +1226,10 @@ def _fetch_erc20_metadata(chain: str, token_address: str) -> dict[str, Any]:
     decimals: int | None = None
     symbol: str | None = None
 
-    dec_proc = subprocess.run(
+    dec_proc = _run_subprocess(
         [cast_bin, "call", token_address, "decimals()(uint8)", "--rpc-url", rpc_url],
-        text=True,
-        capture_output=True,
+        timeout_sec=_cast_call_timeout_sec(),
+        kind="cast_call",
     )
     if dec_proc.returncode == 0:
         out = (dec_proc.stdout or "").strip().splitlines()
@@ -1166,10 +1238,10 @@ def _fetch_erc20_metadata(chain: str, token_address: str) -> dict[str, Any]:
         except Exception:
             decimals = None
 
-    sym_proc = subprocess.run(
+    sym_proc = _run_subprocess(
         [cast_bin, "call", token_address, "symbol()(string)", "--rpc-url", rpc_url],
-        text=True,
-        capture_output=True,
+        timeout_sec=_cast_call_timeout_sec(),
+        kind="cast_call",
     )
     if sym_proc.returncode == 0:
         out = (sym_proc.stdout or "").strip()
@@ -1201,7 +1273,7 @@ def _quote_router_price(chain: str, token_in: str, token_out: str) -> Decimal:
     token_out_decimals = int(token_out_meta.get("decimals", 18))
 
     one_token_out_units = str(10**token_out_decimals)
-    proc = subprocess.run(
+    proc = _run_subprocess(
         [
             cast_bin,
             "call",
@@ -1212,8 +1284,8 @@ def _quote_router_price(chain: str, token_in: str, token_out: str) -> Decimal:
             one_token_out_units,
             f"[{token_out},{token_in}]",
         ],
-        text=True,
-        capture_output=True,
+        timeout_sec=_cast_call_timeout_sec(),
+        kind="cast_call",
     )
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip()
@@ -1427,10 +1499,10 @@ def _router_get_amount_out(chain: str, amount_in_units: str, token_in: str, toke
     cast_bin = _require_cast_bin()
     router = _require_chain_contract_address(chain, "router")
     rpc_url = _chain_rpc_url(chain)
-    proc = subprocess.run(
+    proc = _run_subprocess(
         [cast_bin, "call", "--rpc-url", rpc_url, router, "getAmountsOut(uint256,address[])(uint256[])", amount_in_units, f"[{token_in},{token_out}]"],
-        text=True,
-        capture_output=True,
+        timeout_sec=_cast_call_timeout_sec(),
+        kind="cast_call",
     )
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip()
@@ -1445,6 +1517,8 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
         return chk
 
     chain = args.chain
+    last_tx_hash: str | None = None
+    last_approve_tx_hash: str | None = None
     try:
         token_in = _resolve_token_address(chain, args.token_in)
         token_out = _resolve_token_address(chain, args.token_out)
@@ -1513,10 +1587,11 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
                 },
                 private_key_hex,
             )
-            approve_receipt = subprocess.run(
+            last_approve_tx_hash = approve_tx_hash
+            approve_receipt = _run_subprocess(
                 [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, approve_tx_hash],
-                text=True,
-                capture_output=True,
+                timeout_sec=_cast_receipt_timeout_sec(),
+                kind="cast_receipt",
             )
             if approve_receipt.returncode != 0:
                 stderr = (approve_receipt.stderr or "").strip()
@@ -1550,11 +1625,12 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             },
             private_key_hex,
         )
+        last_tx_hash = tx_hash
 
-        receipt_proc = subprocess.run(
+        receipt_proc = _run_subprocess(
             [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, tx_hash],
-            text=True,
-            capture_output=True,
+            timeout_sec=_cast_receipt_timeout_sec(),
+            kind="cast_receipt",
         )
         if receipt_proc.returncode != 0:
             stderr = (receipt_proc.stderr or "").strip()
@@ -1594,6 +1670,8 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
         elif swap_cost_wei is not None:
             total_cost_wei = swap_cost_wei
 
+        total_gas_cost_eth_exact = _format_units(int(total_cost_wei or 0), 18) if total_cost_wei is not None else None
+
         return ok(
             "Spot swap executed on-chain via configured router (fee proxy).",
             chain=chain,
@@ -1631,7 +1709,30 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             swapEffectiveGasPriceWei=str(swap_gas_price) if swap_gas_price is not None else None,
             swapGasCostWei=str(swap_cost_wei) if swap_cost_wei is not None else None,
             totalGasCostWei=str(total_cost_wei) if total_cost_wei is not None else None,
-            totalGasCostEth=_format_eth_cost_from_wei(total_cost_wei),
+            totalGasCostEth=total_gas_cost_eth_exact,
+            totalGasCostEthExact=total_gas_cost_eth_exact,
+            totalGasCostEthPretty=_format_eth_cost_from_wei(total_cost_wei),
+        )
+    except SubprocessTimeout as exc:
+        details: dict[str, Any] = {"chain": chain, "timeoutSec": exc.timeout_sec, "kind": exc.kind}
+        if last_tx_hash:
+            details["txHash"] = last_tx_hash
+        if last_approve_tx_hash:
+            details["approveTxHash"] = last_approve_tx_hash
+        if exc.kind == "cast_receipt":
+            return fail(
+                "tx_receipt_timeout",
+                "Timed out waiting for on-chain receipt.",
+                "Tx may still be pending. Check explorer/receipt later or re-run dashboard, then retry if needed.",
+                details,
+                exit_code=1,
+            )
+        return fail(
+            "rpc_timeout",
+            "Timed out waiting for RPC response.",
+            "Verify RPC connectivity and cast health, then retry.",
+            details,
+            exit_code=1,
         )
     except WalletPolicyError as exc:
         return fail(exc.code, str(exc), exc.action_hint, exc.details, exit_code=1)
@@ -1678,7 +1779,7 @@ def _execution_wallet(store: dict[str, Any], chain: str) -> tuple[str, str]:
 
 def _cast_calldata(signature: str, args: list[str]) -> str:
     cast_bin = _require_cast_bin()
-    proc = subprocess.run([cast_bin, "calldata", signature, *args], text=True, capture_output=True)
+    proc = _run_subprocess([cast_bin, "calldata", signature, *args], timeout_sec=_cast_call_timeout_sec(), kind="cast_call")
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip()
         stdout = (proc.stdout or "").strip()
@@ -1724,6 +1825,18 @@ def _tx_send_max_attempts() -> int:
     return value
 
 
+def _tx_gas_price_bump_gwei() -> int:
+    raw = (os.environ.get("XCLAW_TX_GAS_PRICE_BUMP_GWEI") or "").strip()
+    if not raw:
+        return TX_GAS_PRICE_BUMP_GWEI
+    if not re.fullmatch(r"[0-9]+", raw):
+        raise WalletStoreError("XCLAW_TX_GAS_PRICE_BUMP_GWEI must be an integer >= 1.")
+    value = int(raw)
+    if value < 1:
+        raise WalletStoreError("XCLAW_TX_GAS_PRICE_BUMP_GWEI must be >= 1.")
+    return value
+
+
 def _tx_gas_price_gwei(attempt_index: int) -> int:
     raw = (os.environ.get("XCLAW_TX_GAS_PRICE_GWEI") or "").strip()
     if raw:
@@ -1734,14 +1847,17 @@ def _tx_gas_price_gwei(attempt_index: int) -> int:
         base = DEFAULT_TX_GAS_PRICE_GWEI
     if base < 1:
         raise WalletStoreError("XCLAW_TX_GAS_PRICE_GWEI must be >= 1.")
-    return base + (attempt_index * TX_GAS_PRICE_BUMP_GWEI)
+    bump = _tx_gas_price_bump_gwei()
+    # Exponential escalation helps clear "replacement transaction underpriced"
+    # when another pending tx already occupies the nonce with a higher gas price.
+    return base + ((2**attempt_index - 1) * bump)
 
 
 def _cast_nonce(cast_bin: str, rpc_url: str, from_addr: str, block_tag: str) -> int | None:
-    nonce_proc = subprocess.run(
+    nonce_proc = _run_subprocess(
         [cast_bin, "nonce", "--rpc-url", rpc_url, from_addr, "--block", block_tag],
-        text=True,
-        capture_output=True,
+        timeout_sec=_cast_call_timeout_sec(),
+        kind="cast_call",
     )
     if nonce_proc.returncode != 0:
         return None
@@ -1798,7 +1914,7 @@ def _cast_rpc_send_transaction(rpc_url: str, tx_obj: dict[str, str], private_key
                     data,
                 ]
             )
-            proc = subprocess.run(send_cmd, text=True, capture_output=True)
+            proc = _run_subprocess(send_cmd, timeout_sec=_cast_send_timeout_sec(), kind="cast_send")
             if proc.returncode == 0:
                 return _extract_tx_hash(proc.stdout)
 
@@ -1818,10 +1934,10 @@ def _cast_rpc_send_transaction(rpc_url: str, tx_obj: dict[str, str], private_key
 
         raise WalletStoreError(f"{last_err} (after {attempts} attempts)")
     else:
-        proc = subprocess.run(
+        proc = _run_subprocess(
             [cast_bin, "rpc", "--rpc-url", rpc_url, "eth_sendTransaction", json.dumps(tx_obj, separators=(",", ":"))],
-            text=True,
-            capture_output=True,
+            timeout_sec=_cast_send_timeout_sec(),
+            kind="cast_send",
         )
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip()
@@ -1844,6 +1960,8 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     agent_id: str | None = None
     wallet_address: str | None = None
+    agent_name: str | None = None
+    identity_warnings: list[dict[str, str]] = []
     if default_chain:
         try:
             agent_id = _resolve_agent_id(_resolve_api_key())
@@ -1853,6 +1971,22 @@ def cmd_status(args: argparse.Namespace) -> int:
             wallet_address = _wallet_address_for_chain(default_chain)
         except Exception:
             wallet_address = None
+        if agent_id:
+            try:
+                base_url = _require_api_base_url()
+                status_code, body = _http_json_request("GET", f"{base_url}/public/agents/{urllib.parse.quote(agent_id)}")
+                if 200 <= status_code < 300:
+                    agent_obj = body.get("agent")
+                    if isinstance(agent_obj, dict):
+                        raw_name = agent_obj.get("agent_name") or agent_obj.get("agentName")
+                        if isinstance(raw_name, str) and raw_name.strip():
+                            agent_name = raw_name.strip()
+                else:
+                    identity_warnings.append(
+                        {"code": str(body.get("code", "api_error")), "message": str(body.get("message", f"profile read failed ({status_code})"))}
+                    )
+            except Exception as exc:
+                identity_warnings.append({"code": "agent_name_unavailable", "message": str(exc)})
 
     return ok(
         "Agent runtime scaffold is healthy.",
@@ -1861,9 +1995,11 @@ def cmd_status(args: argparse.Namespace) -> int:
         scaffold=True,
         defaultChain=default_chain,
         agentId=agent_id,
+        agentName=agent_name,
         walletAddress=wallet_address,
         hostname=hostname,
         hasCast=has_cast,
+        identityWarnings=identity_warnings or None,
     )
 
 
@@ -2034,10 +2170,10 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
             },
             private_key_hex,
         )
-        approve_receipt = subprocess.run(
+        approve_receipt = _run_subprocess(
             [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, approve_tx_hash],
-            text=True,
-            capture_output=True,
+            timeout_sec=_cast_receipt_timeout_sec(),
+            kind="cast_receipt",
         )
         if approve_receipt.returncode != 0:
             stderr = (approve_receipt.stderr or "").strip()
@@ -2066,10 +2202,10 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
         _post_trade_status(args.intent, "executing", "verifying", {"txHash": tx_hash})
         transition_state = "verifying"
 
-        receipt_proc = subprocess.run(
+        receipt_proc = _run_subprocess(
             [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, tx_hash],
-            text=True,
-            capture_output=True,
+            timeout_sec=_cast_receipt_timeout_sec(),
+            kind="cast_receipt",
         )
         if receipt_proc.returncode != 0:
             stderr = (receipt_proc.stderr or "").strip()
@@ -2414,13 +2550,28 @@ def cmd_faucet_request(args: argparse.Namespace) -> int:
         }
         status_code, body = _api_request("POST", "/agent/faucet/request", payload=payload, include_idempotency=True)
         if status_code < 200 or status_code >= 300:
-            return fail(
-                str(body.get("code", "api_error")),
-                str(body.get("message", f"faucet request failed ({status_code})")),
-                str(body.get("actionHint", "Retry later or check faucet availability.")),
-                {"status": status_code, "chain": args.chain},
-                exit_code=1,
-            )
+            retry_after_sec: int | None = None
+            api_details = body.get("details")
+            if isinstance(api_details, dict):
+                raw_retry = api_details.get("retryAfterSeconds")
+                try:
+                    if raw_retry is not None:
+                        retry_after_sec = int(raw_retry)
+                except Exception:
+                    retry_after_sec = None
+
+            details = _api_error_details(status_code, body, "/agent/faucet/request", chain=args.chain)
+            payload = {
+                "ok": False,
+                "code": str(body.get("code", "api_error")),
+                "message": str(body.get("message", f"faucet request failed ({status_code})")),
+                "actionHint": str(body.get("actionHint", "Retry later or check faucet availability.")),
+                "details": details,
+            }
+            if retry_after_sec is not None:
+                payload["retryAfterSec"] = retry_after_sec
+            emit(payload)
+            return 1
         token_drips = body.get("tokenDrips")
         if not isinstance(token_drips, list):
             token_drips = None
@@ -2445,10 +2596,10 @@ def cmd_faucet_request(args: argparse.Namespace) -> int:
 def _fetch_native_balance_wei(chain: str, address: str) -> str:
     cast_bin = _require_cast_bin()
     rpc_url = _chain_rpc_url(chain)
-    proc = subprocess.run(
+    proc = _run_subprocess(
         [cast_bin, "balance", address, "--rpc-url", rpc_url],
-        text=True,
-        capture_output=True,
+        timeout_sec=_cast_call_timeout_sec(),
+        kind="cast_call",
     )
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip()
@@ -2462,10 +2613,10 @@ def _fetch_native_balance_wei(chain: str, address: str) -> str:
 def _fetch_token_balance_wei(chain: str, address: str, token_address: str) -> str:
     cast_bin = _require_cast_bin()
     rpc_url = _chain_rpc_url(chain)
-    proc = subprocess.run(
+    proc = _run_subprocess(
         [cast_bin, "call", token_address, "balanceOf(address)(uint256)", address, "--rpc-url", rpc_url],
-        text=True,
-        capture_output=True,
+        timeout_sec=_cast_call_timeout_sec(),
+        kind="cast_call",
     )
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip()
@@ -2479,10 +2630,10 @@ def _fetch_token_balance_wei(chain: str, address: str, token_address: str) -> st
 def _fetch_token_allowance_wei(chain: str, token_address: str, owner: str, spender: str) -> str:
     cast_bin = _require_cast_bin()
     rpc_url = _chain_rpc_url(chain)
-    proc = subprocess.run(
+    proc = _run_subprocess(
         [cast_bin, "call", token_address, "allowance(address,address)(uint256)", owner, spender, "--rpc-url", rpc_url],
-        text=True,
-        capture_output=True,
+        timeout_sec=_cast_call_timeout_sec(),
+        kind="cast_call",
     )
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip()
@@ -2717,10 +2868,10 @@ def _execute_limit_order_real(order: dict[str, Any], chain: str) -> str:
         },
         private_key_hex,
     )
-    approve_receipt = subprocess.run(
+    approve_receipt = _run_subprocess(
         [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, approve_tx_hash],
-        text=True,
-        capture_output=True,
+        timeout_sec=_cast_receipt_timeout_sec(),
+        kind="cast_receipt",
     )
     if approve_receipt.returncode != 0:
         stderr = (approve_receipt.stderr or "").strip()
@@ -2741,10 +2892,10 @@ def _execute_limit_order_real(order: dict[str, Any], chain: str) -> str:
         private_key_hex,
     )
 
-    receipt_proc = subprocess.run(
+    receipt_proc = _run_subprocess(
         [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, tx_hash],
-        text=True,
-        capture_output=True,
+        timeout_sec=_cast_receipt_timeout_sec(),
+        kind="cast_receipt",
     )
     if receipt_proc.returncode != 0:
         stderr = (receipt_proc.stderr or "").strip()
@@ -2890,11 +3041,12 @@ def cmd_limit_orders_run_once(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
         return chk
-    try:
+
+    def _limit_orders_run_once_result(chain: str, sync: bool) -> dict[str, Any]:
         replayed, remaining = _replay_limit_order_outbox()
         synced = False
-        if bool(args.sync):
-            _sync_limit_orders(args.chain)
+        if sync:
+            _sync_limit_orders(chain)
             synced = True
         store = load_limit_order_store()
         orders = [entry for entry in store.get("orders", []) if isinstance(entry, dict)]
@@ -2902,7 +3054,7 @@ def cmd_limit_orders_run_once(args: argparse.Namespace) -> int:
         skipped = 0
         now = datetime.now(timezone.utc)
         for order in orders:
-            if str(order.get("chainKey")) != args.chain:
+            if str(order.get("chainKey")) != chain:
                 skipped += 1
                 continue
             if str(order.get("status")) != "open":
@@ -2926,7 +3078,7 @@ def cmd_limit_orders_run_once(args: argparse.Namespace) -> int:
                 mock_price_raw = (os.environ.get("XCLAW_MOCK_LIMIT_PRICE") or "1").strip()
                 current_price = Decimal(mock_price_raw)
             else:
-                current_price = _quote_router_price(args.chain, str(order.get("tokenIn")), str(order.get("tokenOut")))
+                current_price = _quote_router_price(chain, str(order.get("tokenIn")), str(order.get("tokenOut")))
             if not _limit_order_triggered(side, current_price, limit_price):
                 skipped += 1
                 continue
@@ -2943,7 +3095,7 @@ def cmd_limit_orders_run_once(args: argparse.Namespace) -> int:
                 continue
 
             try:
-                tx_hash = _execute_limit_order_real(order, args.chain)
+                tx_hash = _execute_limit_order_real(order, chain)
                 _post_limit_order_status(order_id, {"status": "filled", "triggerPrice": str(current_price), "triggerAt": utc_now(), "txHash": tx_hash})
                 executed += 1
             except WalletPolicyError as exc:
@@ -2969,15 +3121,17 @@ def cmd_limit_orders_run_once(args: argparse.Namespace) -> int:
                     },
                 )
 
-        return ok(
-            "Limit-order run completed.",
-            chain=args.chain,
-            synced=synced,
-            replayed=replayed,
-            outboxRemaining=remaining,
-            executed=executed,
-            skipped=skipped,
-        )
+        return {
+            "synced": synced,
+            "replayed": replayed,
+            "outboxRemaining": remaining,
+            "executed": executed,
+            "skipped": skipped,
+        }
+
+    try:
+        result = _limit_orders_run_once_result(args.chain, bool(args.sync))
+        return ok("Limit-order run completed.", chain=args.chain, **result)
     except WalletStoreError as exc:
         return fail("limit_orders_run_failed", str(exc), "Verify local wallet/policy/chain setup and retry.", {"chain": args.chain}, exit_code=1)
     except Exception as exc:
@@ -2992,23 +3146,52 @@ def cmd_limit_orders_run_loop(args: argparse.Namespace) -> int:
     interval_sec = int(args.interval_sec)
     if iterations < 0:
         return fail("invalid_input", "--iterations must be >= 0.", "Use 0 for infinite loop or positive count.", {"iterations": iterations}, exit_code=2)
+    if iterations == 0:
+        return fail(
+            "invalid_input",
+            "--iterations 0 (infinite loop) is not allowed in JSON skill mode.",
+            "Provide --iterations >= 1 (or use run-once).",
+            {"iterations": iterations},
+            exit_code=2,
+        )
     if interval_sec < 1:
         return fail("invalid_input", "--interval-sec must be >= 1.", "Provide interval in seconds >= 1.", {"intervalSec": interval_sec}, exit_code=2)
 
     completed = 0
+    totals = {"executed": 0, "skipped": 0, "replayed": 0}
+    last_run: dict[str, Any] | None = None
     try:
         while True:
             nested = argparse.Namespace(chain=args.chain, json=True, sync=args.sync)
-            code = cmd_limit_orders_run_once(nested)
+            # Call the underlying handler directly to keep output single-JSON.
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = cmd_limit_orders_run_once(nested)
             if code != 0:
+                # cmd_limit_orders_run_once already emitted a structured JSON error; forward it.
+                print(buf.getvalue().strip())
                 return code
+            run_payload = json.loads(buf.getvalue().strip() or "{}")
+            if not isinstance(run_payload, dict):
+                return fail("limit_orders_run_failed", "Unexpected run-once output shape.", "Inspect runtime output and retry.", {"chain": args.chain}, exit_code=1)
+            last_run = run_payload
+            totals["executed"] += int(run_payload.get("executed") or 0)
+            totals["skipped"] += int(run_payload.get("skipped") or 0)
+            totals["replayed"] += int(run_payload.get("replayed") or 0)
             completed += 1
             if iterations > 0 and completed >= iterations:
                 break
             time.sleep(interval_sec)
-        return ok("Limit-order loop finished.", chain=args.chain, iterations=completed, intervalSec=interval_sec)
+        return ok(
+            "Limit-order loop finished.",
+            chain=args.chain,
+            iterations=completed,
+            intervalSec=interval_sec,
+            totals=totals,
+            lastRun=last_run,
+        )
     except KeyboardInterrupt:
-        return ok("Limit-order loop interrupted.", chain=args.chain, iterations=completed, interrupted=True)
+        return ok("Limit-order loop interrupted.", chain=args.chain, iterations=completed, interrupted=True, totals=totals, lastRun=last_run)
 
 
 def cmd_wallet_health(args: argparse.Namespace) -> int:
@@ -3065,15 +3248,28 @@ def cmd_wallet_health(args: argparse.Namespace) -> int:
         metadata_valid = False
         return fail("wallet_health_failed", str(exc), "Inspect wallet files and retry wallet health.", {"chain": chain}, exit_code=1)
 
+    has_cast = cast_exists()
+    next_action = "No action needed."
+    if not has_cast:
+        next_action = "Install Foundry so `cast` is available, then rerun wallet-health."
+    elif not has_wallet:
+        next_action = "Wallet not found. Re-run hosted installer/bootstrap (wallet creation is installer-managed), then rerun wallet-health."
+    elif not permission_safe or not metadata_valid:
+        next_action = "Fix wallet metadata/permissions per message, then rerun wallet-health."
+    elif not integrity_checked:
+        next_action = "Integrity check skipped (no passphrase provided). If available, set XCLAW_WALLET_PASSPHRASE to enable deeper verification; do not share it."
+
     return ok(
         "Wallet health checked.",
         chain=chain,
-        hasCast=cast_exists(),
+        hasCast=has_cast,
         hasWallet=has_wallet,
         address=address,
         metadataValid=metadata_valid,
         filePermissionsSafe=permission_safe,
         integrityChecked=integrity_checked,
+        actionHint=next_action,
+        nextAction=next_action,
         timestamp=utc_now(),
     )
 
@@ -3343,17 +3539,17 @@ def cmd_wallet_send(args: argparse.Namespace) -> int:
             )
         _validate_wallet_entry_shape(wallet)
 
-        transfer_policy = _enforce_outbound_transfer_policy(chain, args.to)
         state, day_key, current_spend, max_daily_wei = _enforce_spend_preconditions(chain, amount_wei)
+        transfer_policy = _enforce_outbound_transfer_policy(chain, args.to)
         passphrase = _require_wallet_passphrase_for_signing(chain)
         private_key_hex = _decrypt_private_key(wallet, passphrase).hex()
         cast_bin = _require_cast_bin()
         rpc_url = _chain_rpc_url(chain)
 
-        proc = subprocess.run(
+        proc = _run_subprocess(
             [cast_bin, "send", "--json", "--rpc-url", rpc_url, "--private-key", private_key_hex, args.to, args.amount_wei],
-            text=True,
-            capture_output=True,
+            timeout_sec=_cast_send_timeout_sec(),
+            kind="cast_send",
         )
         if proc.returncode != 0:
             stderr = (proc.stderr or "").strip()
@@ -3423,8 +3619,8 @@ def cmd_wallet_send_token(args: argparse.Namespace) -> int:
             )
         _validate_wallet_entry_shape(wallet)
 
-        transfer_policy = _enforce_outbound_transfer_policy(chain, args.to)
         state, day_key, current_spend, max_daily_wei = _enforce_spend_preconditions(chain, amount_wei)
+        transfer_policy = _enforce_outbound_transfer_policy(chain, args.to)
         passphrase = _require_wallet_passphrase_for_signing(chain)
         private_key_hex = _decrypt_private_key(wallet, passphrase).hex()
         from_address = str(wallet.get("address"))
@@ -3441,10 +3637,10 @@ def cmd_wallet_send_token(args: argparse.Namespace) -> int:
             private_key_hex,
         )
         cast_bin = _require_cast_bin()
-        receipt_proc = subprocess.run(
+        receipt_proc = _run_subprocess(
             [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, tx_hash],
-            text=True,
-            capture_output=True,
+            timeout_sec=_cast_receipt_timeout_sec(),
+            kind="cast_receipt",
         )
         if receipt_proc.returncode != 0:
             stderr = (receipt_proc.stderr or "").strip()
@@ -3511,10 +3707,10 @@ def cmd_wallet_balance(args: argparse.Namespace) -> int:
         address = str(wallet.get("address"))
         cast_bin = _require_cast_bin()
         rpc_url = _chain_rpc_url(chain)
-        proc = subprocess.run(
+        proc = _run_subprocess(
             [cast_bin, "balance", address, "--rpc-url", rpc_url],
-            text=True,
-            capture_output=True,
+            timeout_sec=_cast_call_timeout_sec(),
+            kind="cast_call",
         )
         if proc.returncode != 0:
             stderr = (proc.stderr or "").strip()
@@ -3572,10 +3768,10 @@ def cmd_wallet_token_balance(args: argparse.Namespace) -> int:
         address = str(wallet.get("address"))
         cast_bin = _require_cast_bin()
         rpc_url = _chain_rpc_url(chain)
-        proc = subprocess.run(
+        proc = _run_subprocess(
             [cast_bin, "call", args.token, "balanceOf(address)(uint256)", address, "--rpc-url", rpc_url],
-            text=True,
-            capture_output=True,
+            timeout_sec=_cast_call_timeout_sec(),
+            kind="cast_call",
         )
         if proc.returncode != 0:
             stderr = (proc.stderr or "").strip()

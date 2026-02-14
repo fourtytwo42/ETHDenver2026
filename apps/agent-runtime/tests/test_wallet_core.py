@@ -122,6 +122,16 @@ class WalletCoreCliTests(unittest.TestCase):
             os.chmod(wallet_path, stat.S_IRUSR | stat.S_IWUSR)
         return address, private_key_hex
 
+    def test_wallet_health_includes_next_action_on_ok(self) -> None:
+        with tempfile.TemporaryDirectory() as home:
+            self._seed_wallet(home)
+            code, payload = self._run("wallet", "health", "--chain", "base_sepolia", "--json", home=home)
+            self.assertEqual(code, 0)
+            self.assertTrue(payload.get("ok"))
+            self.assertIsInstance(payload.get("nextAction"), str)
+            self.assertIsInstance(payload.get("actionHint"), str)
+            self.assertEqual(payload.get("nextAction"), payload.get("actionHint"))
+
     def _seed_multi_chain_wallet(self, home: str) -> str:
         private_key_hex = "33" * 32
         address = cli._derive_address(private_key_hex)

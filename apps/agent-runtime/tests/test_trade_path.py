@@ -35,7 +35,7 @@ class TradePathRuntimeTests(unittest.TestCase):
         }
         commands: list[list[str]] = []
 
-        def fake_run(cmd: list[str], text: bool = True, capture_output: bool = True):  # type: ignore[override]
+        def fake_run(cmd: list[str], text: bool = True, capture_output: bool = True, **kwargs):  # type: ignore[override]
             commands.append(cmd)
             if cmd[1] == "nonce":
                 return mock.Mock(returncode=0, stdout="0x1", stderr="")
@@ -55,7 +55,7 @@ class TradePathRuntimeTests(unittest.TestCase):
         send_cmds = [entry for entry in commands if len(entry) > 1 and entry[1] == "send"]
         self.assertEqual(len(send_cmds), 2)
         self.assertIn("5gwei", send_cmds[0])
-        self.assertIn("7gwei", send_cmds[1])
+        self.assertIn("10gwei", send_cmds[1])
 
     def test_cast_send_non_retryable_error_fails_immediately(self) -> None:
         tx_obj = {
@@ -65,7 +65,7 @@ class TradePathRuntimeTests(unittest.TestCase):
         }
         commands: list[list[str]] = []
 
-        def fake_run(cmd: list[str], text: bool = True, capture_output: bool = True):  # type: ignore[override]
+        def fake_run(cmd: list[str], text: bool = True, capture_output: bool = True, **kwargs):  # type: ignore[override]
             commands.append(cmd)
             if cmd[1] == "nonce":
                 return mock.Mock(returncode=0, stdout="0x2", stderr="")
@@ -89,7 +89,7 @@ class TradePathRuntimeTests(unittest.TestCase):
             "data": "0xdeadbeef",
         }
 
-        def fake_run(cmd: list[str], text: bool = True, capture_output: bool = True):  # type: ignore[override]
+        def fake_run(cmd: list[str], text: bool = True, capture_output: bool = True, **kwargs):  # type: ignore[override]
             if cmd[1] == "nonce":
                 return mock.Mock(returncode=0, stdout="0x3", stderr="")
             if cmd[1] == "send":
@@ -256,6 +256,39 @@ class TradePathRuntimeTests(unittest.TestCase):
         self.assertIsInstance(payload.get("recommendedDelaySec"), int)
         self.assertIsInstance(payload.get("nextAction"), str)
 
+    def test_status_includes_agent_name_best_effort(self) -> None:
+        args = argparse.Namespace(json=True)
+        with mock.patch.dict(cli.os.environ, {"XCLAW_DEFAULT_CHAIN": "base_sepolia", "XCLAW_API_BASE_URL": "https://xclaw.trade"}, clear=False), mock.patch.object(
+            cli, "_resolve_api_key", return_value="xak1.ag_1.sig.payload"
+        ), mock.patch.object(cli, "_resolve_agent_id", return_value="ag_1"), mock.patch.object(
+            cli, "_wallet_address_for_chain", return_value="0x" + "11" * 20
+        ), mock.patch.object(
+            cli,
+            "_http_json_request",
+            return_value=(200, {"agent": {"agent_id": "ag_1", "agent_name": "harvey-ops"}}),
+        ):
+            payload = self._run_and_parse_stdout(lambda: cli.cmd_status(args))
+        self.assertTrue(payload.get("ok"))
+        self.assertEqual(payload.get("agentId"), "ag_1")
+        self.assertEqual(payload.get("agentName"), "harvey-ops")
+
+    def test_limit_orders_run_loop_emits_single_json(self) -> None:
+        args = argparse.Namespace(chain="base_sepolia", sync=False, interval_sec=1, iterations=1, json=True)
+
+        def fake_run_once(nested):
+            return cli.ok("Limit-order run completed.", chain=nested.chain, synced=False, replayed=0, outboxRemaining=0, executed=0, skipped=0)
+
+        with mock.patch.object(cli, "cmd_limit_orders_run_once", side_effect=fake_run_once):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = cli.cmd_limit_orders_run_loop(args)
+        self.assertEqual(code, 0)
+        raw_lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+        self.assertEqual(len(raw_lines), 1)
+        parsed = json.loads(raw_lines[0])
+        self.assertTrue(parsed.get("ok"))
+        self.assertEqual(parsed.get("code"), "ok")
+
     def test_trade_spot_builds_quote_and_swap_calls(self) -> None:
         args = argparse.Namespace(
             chain="base_sepolia",
@@ -270,7 +303,7 @@ class TradePathRuntimeTests(unittest.TestCase):
 
         commands: list[list[str]] = []
 
-        def fake_run(cmd: list[str], text: bool = True, capture_output: bool = True):  # type: ignore[override]
+        def fake_run(cmd: list[str], text: bool = True, capture_output: bool = True, **kwargs):  # type: ignore[override]
             commands.append(cmd)
             # Quote call
             if cmd[:3] == ["cast", "call", "--rpc-url"] and "getAmountsOut(uint256,address[])(uint256[])" in cmd:
@@ -335,11 +368,20 @@ class TradePathRuntimeTests(unittest.TestCase):
                     "code": "rate_limited",
                     "message": "Faucet request limit reached for today.",
                     "actionHint": "Retry after next UTC day begins.",
+                    "details": {"retryAfterSeconds": 123},
                 },
             ),
         ):
-            code = cli.cmd_faucet_request(args)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = cli.cmd_faucet_request(args)
         self.assertEqual(code, 1)
+        out = json.loads(buf.getvalue().strip())
+        self.assertFalse(out.get("ok"))
+        self.assertEqual(out.get("code"), "rate_limited")
+        self.assertEqual(out.get("retryAfterSec"), 123)
+        details = out.get("details") or {}
+        self.assertEqual((details.get("apiDetails") or {}).get("retryAfterSeconds"), 123)
 
     def test_limit_orders_create_omits_expires_at_when_missing(self) -> None:
         args = argparse.Namespace(

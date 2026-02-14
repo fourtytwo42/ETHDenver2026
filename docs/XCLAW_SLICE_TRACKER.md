@@ -429,3 +429,27 @@ DoD:
   - [x] limit-orders-create failure surfaces server `details` for schema errors
 - [x] docs sync: source-of-truth + roadmap + skill docs updated in same change.
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
+
+---
+
+## Slice 26: Agent Skill Robustness Hardening (Timeouts + Identity + Single-JSON)
+Status: [!]
+Issue: #21 ("Slice 26: Agent Skill Robustness Hardening (timeouts + single-JSON + identity)")
+
+Goal:
+- Make agent skill/runtime safer and more reliable for autonomous use (hang prevention, clearer identity/health, schedulable faucet rate-limit, single-JSON outputs).
+
+DoD:
+- [x] skill wrapper enforces `XCLAW_SKILL_TIMEOUT_SEC` (default 240s) and returns structured JSON `timeout` error when exceeded.
+- [x] runtime enforces per-step cast/RPC timeouts (`XCLAW_CAST_CALL_TIMEOUT_SEC`, `XCLAW_CAST_RECEIPT_TIMEOUT_SEC`, `XCLAW_CAST_SEND_TIMEOUT_SEC`) with actionable timeout codes.
+- [x] `status` includes `agentName` best-effort without making `status` brittle.
+- [x] `wallet-health` includes `nextAction` and `actionHint` on ok responses.
+- [x] `faucet-request` surfaces `retryAfterSec` on rate-limit responses (machine schedulable).
+- [x] `limit-orders-run-loop` emits exactly one JSON object per invocation (no multi-line JSON).
+- [x] `trade-spot` includes numeric `totalGasCostEthExact` and keeps a pretty display field.
+- [x] docs sync: source-of-truth + wallet contract + skill docs updated in same change.
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
+
+Blocker:
+- DoD gates are now passing in-session; close-out traceability (commit/push + issue #21 evidence post) remains pending.
+- Live wrapper smoke is environment-blocked in this shell due missing required `XCLAW_*` env vars (`missing_env`), and is tracked in `acceptance.md` with exact unblock commands.

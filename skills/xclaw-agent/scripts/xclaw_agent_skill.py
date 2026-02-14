@@ -124,7 +124,25 @@ def _run_agent(args: Iterable[str]) -> int:
         )
 
     cmd: List[str] = [binary, *args]
-    proc = subprocess.run(cmd, text=True, capture_output=True)
+    raw_timeout = os.environ.get("XCLAW_SKILL_TIMEOUT_SEC", "").strip()
+    timeout_sec = 240
+    if raw_timeout:
+        if not re.fullmatch(r"[0-9]+", raw_timeout):
+            return _err("invalid_env", "XCLAW_SKILL_TIMEOUT_SEC must be an integer number of seconds.", exit_code=2)
+        timeout_sec = int(raw_timeout)
+        if timeout_sec < 1:
+            return _err("invalid_env", "XCLAW_SKILL_TIMEOUT_SEC must be >= 1.", exit_code=2)
+
+    try:
+        proc = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout_sec)
+    except subprocess.TimeoutExpired:
+        return _err(
+            "timeout",
+            "Command timed out.",
+            "Increase XCLAW_SKILL_TIMEOUT_SEC or investigate RPC/cast health, then retry.",
+            {"command": cmd, "timeoutSec": timeout_sec},
+            exit_code=124,
+        )
 
     if proc.returncode == 0:
         # Preserve native CLI JSON output when available.

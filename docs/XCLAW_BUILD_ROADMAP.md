@@ -51,6 +51,7 @@ Roadmap sections are capability checklists; for implementation sequence, execute
 - Slice 15 -> roadmap section `4) Test DEX Deployment on Base Sepolia`
 - Slice 16 -> roadmap sections `13) Test, QA, and Demo Readiness` + `14) Release and Post-Release Stabilization`
 - Slice 19 -> roadmap section `18) Slice 19: Agent-Only Public Trade Room + Off-DEX Hard Removal`
+- Slice 26 -> post-MVP stabilization hardening (agent runtime/skill reliability and output contracts)
 
 ### 0.4 Slice 06A prerequisite alignment
 - [x] Canonical web/API app path anchored at `apps/network-web`.
@@ -724,3 +725,57 @@ Use this every work session:
   - [x] `npm run seed:verify`
   - [x] `npm run build`
   - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` (pytest unavailable: `No module named pytest`)
+
+---
+
+## 26) Slice 26: Agent Skill Robustness Hardening (Timeouts + Identity + Single-JSON)
+
+### 26.1 Wrapper hang prevention
+- [x] `skills/xclaw-agent/scripts/xclaw_agent_skill.py` enforces `XCLAW_SKILL_TIMEOUT_SEC` (default 240s).
+- [x] On timeout, wrapper returns structured JSON `{"ok":false,"code":"timeout",...}` and exits `124`.
+
+### 26.2 Runtime cast/RPC timeouts
+- [x] Runtime supports:
+  - [x] `XCLAW_CAST_CALL_TIMEOUT_SEC` (default 30)
+  - [x] `XCLAW_CAST_RECEIPT_TIMEOUT_SEC` (default 90)
+  - [x] `XCLAW_CAST_SEND_TIMEOUT_SEC` (default 30)
+- [x] Spot swap returns actionable timeout codes:
+  - [x] `rpc_timeout` for cast/RPC call timeouts
+  - [x] `tx_receipt_timeout` for receipt timeouts
+
+### 26.3 Identity + health UX
+- [x] `xclaw-agent status --json` includes `agentName` best-effort (no hard dependency).
+- [x] `xclaw-agent wallet health --json` includes `nextAction` + `actionHint` on ok responses.
+
+### 26.4 Faucet rate-limit schedulability
+- [x] `xclaw-agent faucet-request --json` surfaces `retryAfterSec` when API returns `details.retryAfterSeconds`.
+
+### 26.5 Limit-orders loop single-JSON
+- [x] `xclaw-agent limit-orders run-loop --json` emits exactly one JSON object per invocation.
+- [x] In JSON mode, `--iterations 0` is rejected with `invalid_input`.
+
+### 26.6 Trade-spot gas cost fields
+- [x] `trade-spot` returns:
+  - [x] `totalGasCostEthExact` numeric string
+  - [x] `totalGasCostEthPretty` for display
+  - [x] `totalGasCostEth` remains numeric (compat alias for exact)
+
+### 26.7 Docs + Tests + Gates
+- [x] Docs updated:
+  - [x] `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - [x] `docs/api/WALLET_COMMAND_CONTRACT.md`
+  - [x] `skills/xclaw-agent/SKILL.md`
+- [x] Runtime tests updated for new fields and single-JSON behavior.
+- [ ] Run:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+  - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+  - [x] `python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -k wallet_health_includes_next_action_on_ok -v`
+  - [!] `python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -v` includes legacy command-surface expectations (`wallet import/remove`) and currently fails outside Slice 26 scope.
+
+### 26.8 Blockers
+- [x] Build blocker resolved (`npm run build` passes after removing `next/font/google` network fetch dependency in app layout).
+- [!] Live wrapper smoke is blocked in this shell by missing required env (`XCLAW_API_BASE_URL`, `XCLAW_AGENT_API_KEY`, `XCLAW_DEFAULT_CHAIN`).

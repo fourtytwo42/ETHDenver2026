@@ -1,12 +1,16 @@
 # X-Claw Context Pack
 
-## 1) Goal (Active: Slice 25)
-- Primary objective: complete `Slice 25: Agent Skill UX Upgrade (Security + Reliability + Contract Fixes)`.
+## 1) Goal (Active: Slice 26)
+- Primary objective: complete `Slice 26: Agent Skill Robustness Hardening (Timeouts + Identity + Single-JSON)`.
 - Success criteria:
-  - owner-link is safe-by-default (sensitive fields redacted unless explicitly opted-in)
-  - faucet response is pending-aware and provides next-step guidance
-  - limit-orders-create does not fail schema validation due to `expiresAt: null`
-  - docs/artifacts remain synchronized (source-of-truth + tracker + roadmap + skill docs)
+  - wrapper never hangs by default (timeout + structured JSON error)
+  - runtime cast/RPC calls have timeouts and actionable timeout errors
+  - `status` returns `agentName` best-effort (identity completeness)
+  - `wallet-health` always includes `nextAction`/`actionHint`
+  - faucet rate-limit responses are schedulable (`retryAfterSec`)
+  - `limit-orders-run-loop` returns a single JSON object per invocation
+  - trade-spot gas cost fields include exact numeric ETH (plus pretty)
+  - docs/artifacts remain synchronized (source-of-truth + tracker + roadmap + contract docs + skill docs)
 
 ## 2) Constraints
 - Canonical authority: `docs/XCLAW_SOURCE_OF_TRUTH.md`.
@@ -22,7 +26,7 @@
   - faucet includes `pending`, `recommendedDelaySec`, `nextAction`.
 - Limit orders: payload shape remains per existing schema; fix is to omit `expiresAt` when not provided.
 
-## 4) Files and Boundaries (Slice 25 allowlist)
+## 4) Files and Boundaries (Slice 26 allowlist)
 - Source-of-truth + slice process:
   - `docs/XCLAW_SOURCE_OF_TRUTH.md`
   - `docs/XCLAW_SLICE_TRACKER.md`
@@ -34,8 +38,8 @@
 - Runtime + tests:
   - `apps/agent-runtime/xclaw_agent/cli.py`
   - `apps/agent-runtime/tests/test_trade_path.py`
-- API (copy-only string change for UX hint):
-  - `apps/network-web/src/app/api/v1/limit-orders/route.ts`
+- Contract docs:
+  - `docs/api/WALLET_COMMAND_CONTRACT.md`
 
 ## 5) Invariants
 - Error contract remains `code`, `message`, optional `actionHint`, optional `details`, and preserve `requestId` when provided by API.
@@ -50,8 +54,7 @@
   - `npm run seed:verify`
   - `npm run build`
 - Runtime tests:
-  - `python3 -m pytest apps/agent-runtime/tests` (preferred)
-  - fallback: `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+  - `python3 -m unittest -q`
 - Manual evidence (worksheets):
   - A (status/wallet identity)
   - C (faucet pending guidance + delayed dashboard check)

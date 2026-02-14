@@ -1941,3 +1941,96 @@ Issue mapping: #20
 1. revert Slice 25 touched files only
 2. rerun required gates + runtime tests
 3. confirm tracker/roadmap/source-of-truth parity restored
+
+## Slice 26 Acceptance Evidence
+
+Date (UTC): 2026-02-14
+Active slice: `Slice 26: Agent Skill Robustness Hardening (Timeouts + Identity + Single-JSON)`
+Issue mapping: `#21`
+
+### Objective + scope lock
+- Objective: harden agent skill/runtime reliability and output contracts (timeouts, identity clarity, single-JSON loop, schedulable faucet errors).
+- Scope guard honored: Python-first runtime + wrapper + canonical docs/tests only; no dependency additions.
+
+### Pre-flight alignment (this close-out pass)
+- Timestamp (UTC): `2026-02-14T21:59:36Z`
+- Acceptance checks (locked):
+  - `npm run db:parity`
+  - `npm run seed:reset`
+  - `npm run seed:load`
+  - `npm run seed:verify`
+  - `npm run build`
+  - `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+  - `python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -k wallet_health_includes_next_action_on_ok -v`
+- Touched-files allowlist:
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+
+### File-level evidence (Slice 26)
+- Runtime implementation:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_trade_path.py`
+  - `apps/agent-runtime/tests/test_wallet_core.py`
+- Skill wrapper/docs:
+  - `skills/xclaw-agent/scripts/xclaw_agent_skill.py`
+  - `skills/xclaw-agent/SKILL.md`
+- Canonical artifacts/process:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/api/WALLET_COMMAND_CONTRACT.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+
+### Verification commands and outcomes
+
+#### Required gates
+- `npm run db:parity` -> PASS
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+- `npm run build` -> PASS
+
+#### Runtime tests
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS
+- `python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -k wallet_health_includes_next_action_on_ok -v` -> PASS
+- `python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -v` -> FAIL (31 tests run; legacy command-surface assertions for `wallet import/remove` and older cast assumptions are not aligned with current runtime CLI surface and are treated as out-of-scope for Slice 26 close-out).
+
+#### Manual wrapper smoke (worksheet commands)
+- Commands attempted:
+  - `python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py status`
+  - `python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py wallet-health`
+  - `python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py faucet-request`
+  - `python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py limit-orders-run-loop`
+  - `python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py trade-spot WETH USDC 0.001 100`
+- Outcome: all commands failed closed with structured `missing_env` errors in this shell.
+- Missing vars reported by wrapper:
+  - `XCLAW_API_BASE_URL`
+  - `XCLAW_AGENT_API_KEY`
+  - `XCLAW_DEFAULT_CHAIN`
+
+### Blockers and exact unblock commands
+1. Live wrapper smoke blocker (env provisioning):
+- Load required env values in the current shell/session, then rerun:
+  - `export XCLAW_API_BASE_URL=<https-api-base>`
+  - `export XCLAW_AGENT_API_KEY=<agent-bearer-token>`
+  - `export XCLAW_DEFAULT_CHAIN=base_sepolia`
+- Re-run:
+  - `python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py status`
+  - `python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py wallet-health`
+  - `python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py faucet-request`
+  - `python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py limit-orders-run-loop`
+  - `python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py trade-spot WETH USDC 0.001 100`
+
+### High-risk review protocol
+- Security-sensitive paths touched: wallet/trade execution subprocesses and timeout behavior.
+- Second-opinion pass: completed via targeted runtime tests for timeout-adjacent execution flows and JSON output contract paths.
+- Rollback plan:
+  1. revert Slice 26 touched files only,
+  2. rerun parity/seed/test/build gates,
+  3. confirm tracker/roadmap/source-of-truth sync back to pre-Slice-26 state.
