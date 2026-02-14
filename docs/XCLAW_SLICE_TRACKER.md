@@ -347,7 +347,7 @@ DoD:
 ---
 
 ## Slice 22: Non-Upgradeable V2 Fee Router Proxy (0.5% Output Fee)
-Status: [!]
+Status: [x]
 
 Goal:
 - Deploy a non-upgradeable V2-compatible router proxy that takes a fixed 50 bps fee on output token atomically and preserves net semantics for quotes/minOut.
@@ -361,6 +361,5 @@ DoD:
 - [x] `docs/XCLAW_BUILD_ROADMAP.md` updated with Slice 22 checklist.
 - [x] Base Sepolia deploy script updated to deploy proxy router and write both underlying + proxy addresses to artifact.
 - [x] Base Sepolia verify script updated to verify proxy router code presence and deployment tx receipts.
-- [ ] Base Sepolia deploy executed and verified (requires deploy environment variables).
-- [ ] `config/chains/base_sepolia.json` updated to use proxy router address (and preserve underlying router).
-- [!] Blocker: Base Sepolia deploy/verify + config update require `BASE_SEPOLIA_RPC_URL` and `BASE_SEPOLIA_DEPLOYER_PRIVATE_KEY` in the deploy environment.
+- [x] Base Sepolia deploy executed and verified (evidence artifacts written under `infrastructure/seed-data/`).
+- [x] `config/chains/base_sepolia.json` updated to use proxy router address (and preserve underlying router).

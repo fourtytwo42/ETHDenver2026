@@ -1516,6 +1516,15 @@ Active slice: `Slice 22: Non-Upgradeable V2 Fee Router Proxy (0.5% Output Fee)`
   - `npm run hardhat:deploy-base-sepolia`
   - `npm run hardhat:verify-base-sepolia`
   - update `config/chains/base_sepolia.json` `coreContracts.router` to proxy and preserve `coreContracts.dexRouter`.
+
+### Base Sepolia promotion (evidence)
+- `npm run hardhat:deploy-base-sepolia` -> PASS (artifact written to `infrastructure/seed-data/base-sepolia-deploy.json`)
+- `npm run hardhat:verify-base-sepolia` -> PASS (artifact written to `infrastructure/seed-data/base-sepolia-verify.json`)
+- Net semantics spot-check:
+  - proxy `getAmountsOut(1e18,[WETH,USDC])` returns less than underlying by 50 bps (post-fee net quote).
+- `config/chains/base_sepolia.json` updated:
+  - `coreContracts.router` set to proxy router address
+  - `coreContracts.dexRouter` set to underlying router address
   - new checks: underpriced retry success, non-retryable fail-fast, retry budget exhaustion.
 
 ### Required global gates re-run

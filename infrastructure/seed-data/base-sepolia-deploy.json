@@ -2,40 +2,48 @@
   "ok": true,
   "chainId": 84532,
   "network": "base_sepolia",
-  "deployedAt": "2026-02-14T06:35:55.042Z",
+  "deployedAt": "2026-02-14T07:55:51.788Z",
   "deployer": "0x5051911710429F7E68B525e0D21dE5951fd9C97d",
   "rpcUrlFingerprint": "https://sepolia.base.org...",
   "contracts": {
-    "factory": "0x786402a2705CF5E1048CF509Bd40975805936060",
-    "router": "0x9BCf764f617Fb8065B4c73AF11feFeCE0E494b3b",
-    "quoter": "0xf9f4b27A81740509801fcd66c8E794FF58CC6d8E",
-    "escrow": "0x864A2D94140C128345A18487251797f5F99c01c5",
-    "WETH": "0xEda60a2AA2a134a2f2CF0B1500817Dbc71317d28",
-    "USDC": "0x9C1C653724E089C6247f0827Fb76f681C2A2cF46"
+    "factory": "0xf5C44221f5dDc473dE38bfE2490259D2987030F8",
+    "dexRouter": "0xA55c52512d02bA2BAfF5e6DD89be8Cf991C9E918",
+    "router": "0x6dA4720De207105e4Ce1fDD48Dc845798AE2153F",
+    "quoter": "0x8c78091AD62C71Ede974460d0Ee2125A917105F3",
+    "escrow": "0x6D7B9878F56a91fFd7203835c7b158DBA41805Ed",
+    "WETH": "0xC97e903056f679ea1Db80893008A92578aDfE609",
+    "USDC": "0x39A0C0D1b3dDcE1B49fAa5c6e1D300C14012F4E2"
   },
   "deploymentTxHashes": {
-    "factory": "0xf895b00161c727efb08c628841ef1e9ed31eb7149a9505921eadee79ef3354fe",
-    "router": "0xdc120de8227980c643ff084c09147994dfc03ab9037e67ab633749ddf8f7dd29",
-    "quoter": "0xdf640f8cf822e7548f420b76dc1094e09643cfe96a24a8cc5463ec4f478b1b04",
-    "escrow": "0xde014e8c022d0246291404d249f835513a12e03551c93c8795c259bc9d343ddc"
+    "factory": "0x34aef05818d74aeee11477ee492ca0ac33c66d49f1f78f07aa9b404f2ed0bc65",
+    "dexRouter": "0x2494e10f249d96b0539d151b1034a0a592803451daf3724f9fe200e2a9038643",
+    "router": "0x6c7071108dfc22205eda69a78543daeb682dd4fe2ff05f579778d5cc21d1120b",
+    "quoter": "0x00c40ca1df4ca7bdfef9f1d71b56c4bf334872faf9454548155d431c0c174a3c",
+    "escrow": "0x66872eb08f80cb1ca8a26ece5f2a133709a1e177bb9e422a5bdc716b75f2798f"
   },
   "explorerLinks": {
-    "factory": "https://sepolia.basescan.org/tx/0xf895b00161c727efb08c628841ef1e9ed31eb7149a9505921eadee79ef3354fe",
-    "router": "https://sepolia.basescan.org/tx/0xdc120de8227980c643ff084c09147994dfc03ab9037e67ab633749ddf8f7dd29",
-    "quoter": "https://sepolia.basescan.org/tx/0xdf640f8cf822e7548f420b76dc1094e09643cfe96a24a8cc5463ec4f478b1b04",
-    "escrow": "https://sepolia.basescan.org/tx/0xde014e8c022d0246291404d249f835513a12e03551c93c8795c259bc9d343ddc"
+    "factory": "https://sepolia.basescan.org/tx/0x34aef05818d74aeee11477ee492ca0ac33c66d49f1f78f07aa9b404f2ed0bc65",
+    "dexRouter": "https://sepolia.basescan.org/tx/0x2494e10f249d96b0539d151b1034a0a592803451daf3724f9fe200e2a9038643",
+    "router": "https://sepolia.basescan.org/tx/0x6c7071108dfc22205eda69a78543daeb682dd4fe2ff05f579778d5cc21d1120b",
+    "quoter": "https://sepolia.basescan.org/tx/0x00c40ca1df4ca7bdfef9f1d71b56c4bf334872faf9454548155d431c0c174a3c",
+    "escrow": "https://sepolia.basescan.org/tx/0x66872eb08f80cb1ca8a26ece5f2a133709a1e177bb9e422a5bdc716b75f2798f"
   },
   "seeded": {
     "ethUsdPrice": {
-      "value": "2050.555",
+      "value": "2057.515",
       "source": "coinbase",
       "usedFallback": false
     },
     "routerBalances": {
       "USDC": "1000000000000000000000000",
-      "WETH": "487672849545610822435"
+      "WETH": "486023188166307414526"
     },
-    "faucetAddress": "0x5051911710429F7E68B525e0D21dE5951fd9C97d"
+    "faucetAddress": null
+  },
+  "slice22": {
+    "feeBps": 50,
+    "feeTreasury": "0x5051911710429F7E68B525e0D21dE5951fd9C97d",
+    "netSemantics": true
   },
   "sourceVerification": {
     "provider": "basescan",

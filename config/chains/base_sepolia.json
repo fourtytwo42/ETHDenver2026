@@ -10,18 +10,19 @@
   "coreContracts": {
     "dex": "uniswap_fork",
     "deploymentStatus": "deployed",
-    "factory": "0x786402a2705CF5E1048CF509Bd40975805936060",
-    "router": "0x9BCf764f617Fb8065B4c73AF11feFeCE0E494b3b",
-    "quoter": "0xf9f4b27A81740509801fcd66c8E794FF58CC6d8E",
-    "escrow": "0x864A2D94140C128345A18487251797f5F99c01c5",
+    "factory": "0xf5C44221f5dDc473dE38bfE2490259D2987030F8",
+    "dexRouter": "0xA55c52512d02bA2BAfF5e6DD89be8Cf991C9E918",
+    "router": "0x6dA4720De207105e4Ce1fDD48Dc845798AE2153F",
+    "quoter": "0x8c78091AD62C71Ede974460d0Ee2125A917105F3",
+    "escrow": "0x6D7B9878F56a91fFd7203835c7b158DBA41805Ed",
     "escrowAbiVersion": "xclaw_escrow_v1",
-    "notes": "Slice-21 redeploy (mock tokens + router quoting + configured token pair). Evidence artifact: infrastructure/seed-data/base-sepolia-deploy.json. Deployment tx hashes: factory=0xf895b00161c727efb08c628841ef1e9ed31eb7149a9505921eadee79ef3354fe, router=0xdc120de8227980c643ff084c09147994dfc03ab9037e67ab633749ddf8f7dd29, quoter=0xdf640f8cf822e7548f420b76dc1094e09643cfe96a24a8cc5463ec4f478b1b04, escrow=0xde014e8c022d0246291404d249f835513a12e03551c93c8795c259bc9d343ddc. Token deployments recorded in same artifact."
+    "notes": "Slice-22 redeploy. coreContracts.router is the XClaw fee-router proxy (50 bps fee on output, net semantics). coreContracts.dexRouter is the underlying mock router. Evidence artifacts: infrastructure/seed-data/base-sepolia-deploy.json and base-sepolia-verify.json. Deployment tx hashes: factory=0x34aef05818d74aeee11477ee492ca0ac33c66d49f1f78f07aa9b404f2ed0bc65, dexRouter=0x2494e10f249d96b0539d151b1034a0a592803451daf3724f9fe200e2a9038643, router=0x6c7071108dfc22205eda69a78543daeb682dd4fe2ff05f579778d5cc21d1120b, quoter=0x00c40ca1df4ca7bdfef9f1d71b56c4bf334872faf9454548155d431c0c174a3c, escrow=0x66872eb08f80cb1ca8a26ece5f2a133709a1e177bb9e422a5bdc716b75f2798f. Token deployments recorded in same artifact."
   },
   "canonicalTokens": {
-    "WETH": "0xEda60a2AA2a134a2f2CF0B1500817Dbc71317d28",
-    "USDC": "0x9C1C653724E089C6247f0827Fb76f681C2A2cF46"
+    "WETH": "0xC97e903056f679ea1Db80893008A92578aDfE609",
+    "USDC": "0x39A0C0D1b3dDcE1B49fAa5c6e1D300C14012F4E2"
   },
-  "updatedAt": "2026-02-14T06:35:55.042Z",
+  "updatedAt": "2026-02-14T07:55:51.788Z",
   "version": 1,
   "sources": {
     "rpcEndpoints": [
@@ -43,20 +44,22 @@
       "infrastructure/seed-data/base-sepolia-verify.json"
     ],
     "deploymentEvidence": [
-      "https://sepolia.basescan.org/tx/0x96b82d7bd18577e70ab291ded88621c2fe2418eca330b7d4314c368d171f4014",
-      "https://sepolia.basescan.org/tx/0xb0398eea471579575a0e13b91f92dacd8b9f438ee8544deb6a65df1500eb02d1",
-      "https://sepolia.basescan.org/tx/0xf28a64fec510c794962655f6664f649830a0183663407a259902da0a7cf9c76c",
-      "https://sepolia.basescan.org/tx/0xc8aac4783d6a3a6ae97b9352070c87ae849631bf94d20a99622063298d2786b3"
+      "https://sepolia.basescan.org/tx/0x34aef05818d74aeee11477ee492ca0ac33c66d49f1f78f07aa9b404f2ed0bc65",
+      "https://sepolia.basescan.org/tx/0x2494e10f249d96b0539d151b1034a0a592803451daf3724f9fe200e2a9038643",
+      "https://sepolia.basescan.org/tx/0x6c7071108dfc22205eda69a78543daeb682dd4fe2ff05f579778d5cc21d1120b",
+      "https://sepolia.basescan.org/tx/0x00c40ca1df4ca7bdfef9f1d71b56c4bf334872faf9454548155d431c0c174a3c",
+      "https://sepolia.basescan.org/tx/0x66872eb08f80cb1ca8a26ece5f2a133709a1e177bb9e422a5bdc716b75f2798f"
     ]
   },
   "verification": {
-    "verifiedAt": "2026-02-14T06:33:27.560Z",
+    "verifiedAt": "2026-02-14T07:55:57.807Z",
     "verifiedViaRpc": true,
     "verifiedChainIdHex": "0x14a34",
     "verifiedContractCodePresent": {
       "WETH": true,
       "USDC": true,
       "factory": true,
+      "dexRouter": true,
       "router": true,
       "quoter": true,
       "escrow": true
