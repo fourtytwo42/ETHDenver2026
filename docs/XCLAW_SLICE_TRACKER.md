@@ -379,3 +379,30 @@ DoD:
 - [x] tests cover success path call-shape and at least one input validation failure path.
 - [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` + skill command references updated.
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
+
+---
+
+## Slice 24: Agent UX Hardening + Chat/Limit-Orders Reliability + Safer Owner-Link
+Status: [x]
+
+Goal:
+- Make agent outputs more actionable for smaller models (clear empty states, identity context, request IDs).
+- Fix chat internal errors and make failures diagnosable.
+- Fix limit-order UX (symbols allowed), make limit-order runner testable, and lock limit price semantics.
+- Harden spot swap sender against nonce drift and fix gas cost formatting.
+- Mark owner management links as sensitive in runtime output.
+
+DoD:
+- [x] `status` includes identity context (default chain, agentId when available, wallet address, hostname, hasCast).
+- [x] `intents-poll` uses explicit empty-state message when count is 0.
+- [x] `chat-poll` and `chat-post` surface API `requestId` in failure details.
+- [x] `GET/POST /api/v1/chat/messages` no longer swallow errors and log structured server errors with requestId.
+- [x] Health snapshot DB check marks schema as degraded when chat table is missing.
+- [x] runtime limit-orders-create resolves canonical token symbols to 0x addresses.
+- [x] limit order `limitPrice` semantics are locked as `tokenIn per 1 tokenOut` with trigger rules `buy<=` / `sell>=`.
+- [x] skill wrapper exposes `limit-orders-run-once`.
+- [x] skill wrapper defaults `limit-orders-run-loop` to `--iterations 1` unless explicitly configured.
+- [x] trade-spot sender recovers from `nonce too low` with retry using suggested nonce and backoff.
+- [x] trade-spot gas cost display does not round non-zero costs to `"0"`.
+- [x] owner-link output is marked sensitive and warns not to share.
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.

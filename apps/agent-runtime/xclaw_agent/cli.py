@@ -17,6 +17,7 @@ import pathlib
 import re
 import secrets
 import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -913,6 +914,16 @@ def _http_json_request(
         raise WalletStoreError(f"API request failed: {exc.reason}") from exc
 
 
+def _api_error_details(status: int, body: dict[str, Any], path: str, chain: str | None = None) -> dict[str, Any]:
+    details: dict[str, Any] = {"status": int(status), "path": path}
+    request_id = body.get("requestId")
+    if isinstance(request_id, str) and request_id.strip():
+        details["requestId"] = request_id.strip()
+    if chain:
+        details["chain"] = chain
+    return details
+
+
 def _wallet_address_for_chain(chain: str) -> str:
     store = load_wallet_store()
     _, wallet = _chain_wallet(store, chain)
@@ -1172,11 +1183,31 @@ def _fetch_erc20_metadata(chain: str, token_address: str) -> dict[str, Any]:
 
 
 def _quote_router_price(chain: str, token_in: str, token_out: str) -> Decimal:
+    """Return current price in 'tokenIn per 1 tokenOut' human units.
+
+    Example: token_in=USDC, token_out=WETH => returns ~2000 (USDC per 1 WETH).
+    """
     cast_bin = _require_cast_bin()
     router = _require_chain_contract_address(chain, "router")
     rpc_url = _chain_rpc_url(chain)
+
+    token_in_meta = _fetch_erc20_metadata(chain, token_in)
+    token_out_meta = _fetch_erc20_metadata(chain, token_out)
+    token_in_decimals = int(token_in_meta.get("decimals", 18))
+    token_out_decimals = int(token_out_meta.get("decimals", 18))
+
+    one_token_out_units = str(10**token_out_decimals)
     proc = subprocess.run(
-        [cast_bin, "call", "--rpc-url", rpc_url, router, "getAmountsOut(uint256,address[])(uint256[])", "1000000000000000000", f"[{token_in},{token_out}]"],
+        [
+            cast_bin,
+            "call",
+            "--rpc-url",
+            rpc_url,
+            router,
+            "getAmountsOut(uint256,address[])(uint256[])",
+            one_token_out_units,
+            f"[{token_out},{token_in}]",
+        ],
         text=True,
         capture_output=True,
     )
@@ -1184,8 +1215,10 @@ def _quote_router_price(chain: str, token_in: str, token_out: str) -> Decimal:
         stderr = (proc.stderr or "").strip()
         stdout = (proc.stdout or "").strip()
         raise WalletStoreError(stderr or stdout or "cast call getAmountsOut failed.")
-    amount_out = _parse_uint_from_cast_output(proc.stdout)
-    return Decimal(amount_out) / Decimal(10**18)
+
+    # Output is amounts[]; final element is token_in units for 1 token_out.
+    token_in_units = _parse_uint_from_cast_output(proc.stdout)
+    return Decimal(token_in_units) / (Decimal(10) ** Decimal(token_in_decimals))
 
 
 def _limit_order_triggered(side: str, current_price: Decimal, limit_price: Decimal) -> bool:
@@ -1360,6 +1393,18 @@ def _format_units_pretty(amount_wei: int, decimals: int, max_frac: int = 6) -> s
         grouped = ch + grouped
     whole = sign + grouped
     return f"{whole}.{frac}" if frac else whole
+
+
+def _format_eth_cost_from_wei(cost_wei: int | None) -> str | None:
+    if cost_wei is None:
+        return None
+    if cost_wei <= 0:
+        return "0"
+    # Show tiny costs as a threshold rather than rounding to zero.
+    threshold_wei = 10**12  # 0.000001 ETH
+    if cost_wei < threshold_wei:
+        return "<0.000001"
+    return _format_units_pretty(int(cost_wei), 18, max_frac=12)
 
 
 def _resolve_token_address(chain: str, token_or_symbol: str) -> str:
@@ -1582,7 +1627,7 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             swapEffectiveGasPriceWei=str(swap_gas_price) if swap_gas_price is not None else None,
             swapGasCostWei=str(swap_cost_wei) if swap_cost_wei is not None else None,
             totalGasCostWei=str(total_cost_wei) if total_cost_wei is not None else None,
-            totalGasCostEth=_format_units_pretty(int(total_cost_wei or 0), 18) if total_cost_wei is not None else None,
+            totalGasCostEth=_format_eth_cost_from_wei(total_cost_wei),
         )
     except WalletPolicyError as exc:
         return fail(exc.code, str(exc), exc.action_hint, exc.details, exit_code=1)
@@ -1652,6 +1697,17 @@ def _retryable_send_error(stderr: str) -> bool:
     return any(fragment in normalized for fragment in retryable_fragments)
 
 
+def _parse_next_nonce_from_error(stderr: str) -> int | None:
+    # Example: "nonce too low: next nonce 5, tx nonce 4"
+    match = re.search(r"nonce too low: next nonce ([0-9]+), tx nonce ([0-9]+)", stderr.lower())
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except Exception:
+        return None
+
+
 def _tx_send_max_attempts() -> int:
     raw = (os.environ.get("XCLAW_TX_SEND_MAX_ATTEMPTS") or "").strip()
     if not raw:
@@ -1706,11 +1762,16 @@ def _cast_rpc_send_transaction(rpc_url: str, tx_obj: dict[str, str], private_key
             raise WalletStoreError("cast send requires tx_obj.data as hex calldata.")
         attempts = _tx_send_max_attempts()
         last_err = "cast send failed."
+        nonce_override: int | None = None
         for attempt in range(attempts):
-            nonce_pending = _cast_nonce(cast_bin, rpc_url, from_addr, "pending")
-            nonce_latest = _cast_nonce(cast_bin, rpc_url, from_addr, "latest")
-            nonce_candidates = [value for value in (nonce_pending, nonce_latest) if value is not None]
-            nonce = max(nonce_candidates) if nonce_candidates else None
+            nonce: int | None
+            if nonce_override is not None:
+                nonce = nonce_override
+            else:
+                nonce_pending = _cast_nonce(cast_bin, rpc_url, from_addr, "pending")
+                nonce_latest = _cast_nonce(cast_bin, rpc_url, from_addr, "latest")
+                nonce_candidates = [value for value in (nonce_pending, nonce_latest) if value is not None]
+                nonce = max(nonce_candidates) if nonce_candidates else None
 
             send_cmd = [
                 cast_bin,
@@ -1740,7 +1801,13 @@ def _cast_rpc_send_transaction(rpc_url: str, tx_obj: dict[str, str], private_key
             stderr = (proc.stderr or "").strip()
             stdout = (proc.stdout or "").strip()
             last_err = stderr or stdout or "cast send failed."
+            next_nonce = _parse_next_nonce_from_error(last_err)
+            if attempt < (attempts - 1) and next_nonce is not None:
+                nonce_override = next_nonce
+                time.sleep(0.25)
+                continue
             if attempt < (attempts - 1) and _retryable_send_error(last_err):
+                time.sleep(0.25)
                 continue
             if attempt < (attempts - 1):
                 raise WalletStoreError(last_err)
@@ -1763,7 +1830,37 @@ def cmd_status(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
         return chk
-    return ok("Agent runtime scaffold is healthy.", status="ready", timestamp=utc_now(), scaffold=True)
+    default_chain = (os.environ.get("XCLAW_DEFAULT_CHAIN") or "").strip() or None
+    has_cast = cast_exists()
+    hostname: str | None
+    try:
+        hostname = socket.gethostname()
+    except Exception:
+        hostname = None
+
+    agent_id: str | None = None
+    wallet_address: str | None = None
+    if default_chain:
+        try:
+            agent_id = _resolve_agent_id(_resolve_api_key())
+        except Exception:
+            agent_id = None
+        try:
+            wallet_address = _wallet_address_for_chain(default_chain)
+        except Exception:
+            wallet_address = None
+
+    return ok(
+        "Agent runtime scaffold is healthy.",
+        status="ready",
+        timestamp=utc_now(),
+        scaffold=True,
+        defaultChain=default_chain,
+        agentId=agent_id,
+        walletAddress=wallet_address,
+        hostname=hostname,
+        hasCast=has_cast,
+    )
 
 
 def cmd_not_implemented(args: argparse.Namespace, name: str) -> int:
@@ -1796,6 +1893,8 @@ def cmd_intents_poll(args: argparse.Namespace) -> int:
         items = body.get("items", [])
         if not isinstance(items, list):
             raise WalletStoreError("Trade pending response 'items' is not a list.")
+        if len(items) == 0:
+            return ok("No pending trade intents.", chain=args.chain, count=0, intents=[], nextAction="Wait for new intents or run dashboard.")
         return ok("Trade intents polled.", chain=args.chain, count=len(items), intents=items)
     except WalletStoreError as exc:
         return fail("intents_poll_failed", str(exc), "Verify API env, auth, and endpoint availability.", {"chain": args.chain}, exit_code=1)
@@ -2091,8 +2190,22 @@ def cmd_chat_poll(args: argparse.Namespace) -> int:
     if chk is not None:
         return chk
     try:
-        items = _chat_messages_query(limit=25)
-        return ok("Trade room messages polled.", chain=args.chain, count=len(items), messages=items)
+        path = "/chat/messages?limit=25"
+        status_code, body = _api_request("GET", path)
+        if status_code < 200 or status_code >= 300:
+            code = str(body.get("code", "api_error"))
+            message = str(body.get("message", f"chat messages read failed ({status_code})"))
+            return fail(
+                "chat_poll_failed",
+                f"{code}: {message}",
+                str(body.get("actionHint", "Retry once. If it persists, use requestId to inspect server logs.")),
+                _api_error_details(status_code, body, path, chain=args.chain),
+                exit_code=1,
+            )
+        items = body.get("items", [])
+        if not isinstance(items, list):
+            items = []
+        return ok("Trade room messages polled.", chain=args.chain, count=len(items), messages=[item for item in items if isinstance(item, dict)])
     except WalletStoreError as exc:
         return fail("chat_poll_failed", str(exc), "Verify API env/auth and chat endpoint availability.", {"chain": args.chain}, exit_code=1)
     except Exception as exc:
@@ -2129,13 +2242,14 @@ def cmd_chat_post(args: argparse.Namespace) -> int:
             "chainKey": args.chain,
             "tags": tags,
         }
-        status_code, body = _api_request("POST", "/chat/messages", payload=payload)
+        path = "/chat/messages"
+        status_code, body = _api_request("POST", path, payload=payload)
         if status_code < 200 or status_code >= 300:
             return fail(
                 str(body.get("code", "api_error")),
                 str(body.get("message", f"chat post failed ({status_code})")),
                 str(body.get("actionHint", "Refresh auth/session state and retry.")),
-                {"chain": args.chain, "status": status_code},
+                _api_error_details(status_code, body, path, chain=args.chain),
                 exit_code=1,
             )
         item = body.get("item")
@@ -2259,11 +2373,14 @@ def cmd_management_link(args: argparse.Namespace) -> int:
                 exit_code=1,
             )
         return ok(
-            "Owner management link generated.",
+            "SENSITIVE: Owner management link generated (do not share).",
             agentId=body.get("agentId", agent_id),
             managementUrl=body.get("managementUrl"),
             issuedAt=body.get("issuedAt"),
             expiresAt=body.get("expiresAt"),
+            sensitive=True,
+            sensitiveFields=["managementUrl"],
+            securityNote="Treat managementUrl like a password (short-lived magic link).",
         )
     except WalletStoreError as exc:
         return fail("management_link_failed", str(exc), "Verify API env/auth and retry.", exit_code=1)
@@ -2461,6 +2578,7 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
                     "section": "profile",
                     "code": str(profile_body.get("code", "api_error")),
                     "message": str(profile_body.get("message", f"profile read failed ({profile_status})")),
+                    "requestId": str(profile_body.get("requestId") or ""),
                 }
             )
 
@@ -2475,6 +2593,7 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
                     "section": "recentTrades",
                     "code": str(trades_body.get("code", "api_error")),
                     "message": str(trades_body.get("message", f"trade history read failed ({trades_status})")),
+                    "requestId": str(trades_body.get("requestId") or ""),
                 }
             )
 
@@ -2489,6 +2608,7 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
                     "section": "pendingIntents",
                     "code": str(intents_body.get("code", "api_error")),
                     "message": str(intents_body.get("message", f"pending intents read failed ({intents_status})")),
+                    "requestId": str(intents_body.get("requestId") or ""),
                 }
             )
 
@@ -2503,6 +2623,7 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
                     "section": "openOrders",
                     "code": str(orders_body.get("code", "api_error")),
                     "message": str(orders_body.get("message", f"open orders read failed ({orders_status})")),
+                    "requestId": str(orders_body.get("requestId") or ""),
                 }
             )
 
@@ -2517,6 +2638,7 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
                     "section": "recentRoomMessages",
                     "code": str(chat_body.get("code", "api_error")),
                     "message": str(chat_body.get("message", f"chat read failed ({chat_status})")),
+                    "requestId": str(chat_body.get("requestId") or ""),
                 }
             )
 
@@ -2635,22 +2757,18 @@ def cmd_limit_orders_create(args: argparse.Namespace) -> int:
     if chk is not None:
         return chk
     try:
-        if not is_hex_address(args.token_in) or not is_hex_address(args.token_out):
-            return fail(
-                "invalid_input",
-                "token-in and token-out must be valid 0x addresses.",
-                "Provide 0x-prefixed 20-byte hex addresses for both token fields.",
-                {"tokenIn": args.token_in, "tokenOut": args.token_out},
-                exit_code=2,
-            )
+        token_in = _resolve_token_address(args.chain, args.token_in)
+        token_out = _resolve_token_address(args.chain, args.token_out)
+        if not is_hex_address(token_in) or not is_hex_address(token_out):
+            return fail("invalid_input", "token-in and token-out must be valid 0x addresses (or canonical symbols).", "Use symbols like WETH/USDC or 0x addresses.", {"tokenIn": args.token_in, "tokenOut": args.token_out}, exit_code=2)
         payload = {
             "schemaVersion": 1,
             "agentId": _resolve_agent_id(_resolve_api_key()),
             "chainKey": args.chain,
             "mode": args.mode,
             "side": args.side,
-            "tokenIn": args.token_in,
-            "tokenOut": args.token_out,
+            "tokenIn": token_in,
+            "tokenOut": token_out,
             "amountIn": args.amount_in,
             "limitPrice": args.limit_price,
             "slippageBps": int(args.slippage_bps),
@@ -2665,11 +2783,12 @@ def cmd_limit_orders_create(args: argparse.Namespace) -> int:
                 exit_code=1,
             )
 
-        status_code, body = _api_request("POST", "/limit-orders", payload=payload, include_idempotency=True)
+        path = "/limit-orders"
+        status_code, body = _api_request("POST", path, payload=payload, include_idempotency=True)
         if status_code < 200 or status_code >= 300:
             code = str(body.get("code", "api_error"))
             message = str(body.get("message", f"limit-order create failed ({status_code})"))
-            return fail(code, message, str(body.get("actionHint", "Review payload and retry.")), {"chain": args.chain}, exit_code=1)
+            return fail(code, message, str(body.get("actionHint", "Review payload and retry.")), _api_error_details(status_code, body, path, chain=args.chain), exit_code=1)
         return ok("Limit order created.", chain=args.chain, orderId=body.get("orderId"), status=body.get("status", "open"))
     except WalletStoreError as exc:
         return fail("limit_orders_create_failed", str(exc), "Verify API env/auth and retry.", {"chain": args.chain}, exit_code=1)

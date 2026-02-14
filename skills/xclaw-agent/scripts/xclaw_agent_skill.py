@@ -134,7 +134,7 @@ def main(argv: List[str]) -> int:
         return _err(
             "usage",
             "Missing command.",
-            "Use one of: status, dashboard, intents-poll, approval-check, trade-exec, trade-spot, report-send, chat-poll, chat-post, username-set, owner-link, faucet-request, limit-orders-create, limit-orders-cancel, limit-orders-list, limit-orders-run-loop, wallet-health, wallet-address, wallet-sign-challenge, wallet-send, wallet-send-token, wallet-balance, wallet-token-balance",
+            "Use one of: status, dashboard, intents-poll, approval-check, trade-exec, trade-spot, report-send, chat-poll, chat-post, username-set, owner-link, faucet-request, limit-orders-create, limit-orders-cancel, limit-orders-list, limit-orders-run-once, limit-orders-run-loop, wallet-health, wallet-address, wallet-sign-challenge, wallet-send, wallet-send-token, wallet-balance, wallet-token-balance",
             exit_code=2,
         )
 
@@ -156,6 +156,7 @@ def main(argv: List[str]) -> int:
         "limit-orders-create",
         "limit-orders-cancel",
         "limit-orders-list",
+        "limit-orders-run-once",
         "limit-orders-run-loop",
     }
     wallet_commands = {
@@ -407,18 +408,27 @@ def main(argv: List[str]) -> int:
             args.append("--sync")
         iterations = os.environ.get("XCLAW_LIMIT_ORDERS_LOOP_ITERATIONS")
         interval = os.environ.get("XCLAW_LIMIT_ORDERS_LOOP_INTERVAL_SEC")
+        if not iterations:
+            # Default to a single iteration so the skill does not hang by default.
+            iterations = "1"
         if iterations:
             args.extend(["--iterations", iterations])
         if interval:
             args.extend(["--interval-sec", interval])
         return _run_agent(args)
 
-    return _err(
-        "unknown_command",
-        f"Unknown command: {cmd}",
-        "Use one of: status, dashboard, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, username-set, owner-link, faucet-request, limit-orders-create, limit-orders-cancel, limit-orders-list, limit-orders-run-loop, wallet-health, wallet-address, wallet-sign-challenge, wallet-send, wallet-send-token, wallet-balance, wallet-token-balance",
-        exit_code=2,
-    )
+    if cmd == "limit-orders-run-once":
+        args = ["limit-orders", "run-once", "--chain", chain, "--json"]
+        if os.environ.get("XCLAW_LIMIT_ORDERS_SYNC_LOOP", "1") != "0":
+            args.append("--sync")
+        return _run_agent(args)
+
+        return _err(
+            "unknown_command",
+            f"Unknown command: {cmd}",
+            "Use one of: status, dashboard, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, username-set, owner-link, faucet-request, limit-orders-create, limit-orders-cancel, limit-orders-list, limit-orders-run-once, limit-orders-run-loop, wallet-health, wallet-address, wallet-sign-challenge, wallet-send, wallet-send-token, wallet-balance, wallet-token-balance",
+            exit_code=2,
+        )
 
 
 if __name__ == "__main__":

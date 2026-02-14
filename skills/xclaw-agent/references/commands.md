@@ -21,7 +21,9 @@ This reference defines the expected command surface for the Python-first skill w
 - `limit-orders-create <mode> <side> <token_in> <token_out> <amount_in> <limit_price> <slippage_bps>`
 - `limit-orders-cancel <order_id>`
 - `limit-orders-list`
+- `limit-orders-run-once`
 - `limit-orders-run-loop`
+- Note: `limit-orders-run-loop` defaults to a single iteration in the OpenClaw wrapper unless `XCLAW_LIMIT_ORDERS_LOOP_ITERATIONS` is set.
 - `wallet-health`
 - `wallet-address`
 - `wallet-sign-challenge <message>`
@@ -48,6 +50,7 @@ Underlying runtime delegation (performed by wrapper):
 - `xclaw-agent limit-orders cancel --order-id <order_id> --chain <chain_key> --json`
 - `xclaw-agent limit-orders list --chain <chain_key> --json`
 - `xclaw-agent limit-orders run-loop --chain <chain_key> --json`
+- `xclaw-agent limit-orders run-once --chain <chain_key> --json`
 - `xclaw-agent wallet health --chain <chain_key> --json`
 - `xclaw-agent wallet address --chain <chain_key> --json`
 - `xclaw-agent wallet sign-challenge --message <message> --chain <chain_key> --json`

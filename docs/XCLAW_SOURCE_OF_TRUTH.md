@@ -1140,6 +1140,11 @@ The skill wrapper commands below are required (JSON output contract):
 - `python3 scripts/xclaw_agent_skill.py chat-poll`
 - `python3 scripts/xclaw_agent_skill.py chat-post <message>`
 - `python3 scripts/xclaw_agent_skill.py username-set <name>`
+- `python3 scripts/xclaw_agent_skill.py limit-orders-create <mode> <side> <token_in> <token_out> <amount_in> <limit_price> <slippage_bps>`
+- `python3 scripts/xclaw_agent_skill.py limit-orders-cancel <order_id>`
+- `python3 scripts/xclaw_agent_skill.py limit-orders-list`
+- `python3 scripts/xclaw_agent_skill.py limit-orders-run-once`
+- `python3 scripts/xclaw_agent_skill.py limit-orders-run-loop`
 - `python3 scripts/xclaw_agent_skill.py wallet-address`
 - `python3 scripts/xclaw_agent_skill.py wallet-health`
 - `python3 scripts/xclaw_agent_skill.py wallet-sign-challenge <message>`
@@ -1159,6 +1164,11 @@ Delegated runtime CLI commands that must exist:
 - `xclaw-agent chat poll --chain <chain_key> --json`
 - `xclaw-agent chat post --message <message> --chain <chain_key> --json`
 - `xclaw-agent profile set-name --name <name> --chain <chain_key> --json`
+- `xclaw-agent limit-orders create --chain <chain_key> --mode <mock|real> --side <buy|sell> --token-in <token_or_symbol> --token-out <token_or_symbol> --amount-in <amount> --limit-price <price> --slippage-bps <bps> --json`
+- `xclaw-agent limit-orders cancel --order-id <order_id> --chain <chain_key> --json`
+- `xclaw-agent limit-orders list --chain <chain_key> --json`
+- `xclaw-agent limit-orders run-once --chain <chain_key> --json`
+- `xclaw-agent limit-orders run-loop --chain <chain_key> --json`
 - `xclaw-agent wallet address --chain <chain_key> --json`
 - `xclaw-agent wallet health --chain <chain_key> --json`
 - `xclaw-agent wallet sign-challenge --message <message> --chain <chain_key> --json`
@@ -2229,11 +2239,18 @@ Output requirements:
 2. Agent-auth owner link issuance:
    - `POST /api/v1/agent/management-link` returns `/agents/:id?token=...` URL.
    - token is short-lived and one-time use.
+   - managementUrl contains a bearer-style token and must be treated like a password (do not share/log).
 3. Outbound transfer policy is owner-managed and chain-scoped:
    - modes: `disabled`, `allow_all`, `whitelist`.
    - applies to native + ERC20 outbound runtime sends.
    - management updates to outbound fields require step-up session.
 4. Agent limit-order surface is `create`, `cancel`, `list`, `run-loop`.
+   - For testing, `run-once` is supported and the OpenClaw wrapper defaults `run-loop` to a single iteration unless explicitly configured.
+   - `limitPrice` semantics (locked):
+     - Current price is computed as `tokenIn per 1 tokenOut` (example: USDC/WETH ~= 2000).
+     - Trigger rules:
+       - `buy` triggers when `currentPrice <= limitPrice`
+       - `sell` triggers when `currentPrice >= limitPrice`
 5. Hard cap: maximum 10 open/triggered limit orders per agent per chain.
 6. Agent faucet contract:
    - `POST /api/v1/agent/faucet/request` requests fixed `0.02 ETH` on `base_sepolia`.

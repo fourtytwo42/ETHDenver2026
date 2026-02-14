@@ -633,9 +633,9 @@ Use this every work session:
   - `TS_NODE_PROJECT=tsconfig.hardhat.json npx hardhat test infrastructure/tests/fee-router.test.ts`
 
 ### 21.3 Base Sepolia promotion
-- [ ] Update `infrastructure/scripts/hardhat/deploy-base-sepolia.ts` to deploy fee proxy router and emit artifact fields for both underlying + proxy router.
-- [ ] Update `infrastructure/scripts/hardhat/verify-base-sepolia.ts` to verify proxy router code presence and deployment tx receipts.
-- [ ] Update `config/chains/base_sepolia.json` to set `coreContracts.router` to proxy and preserve `coreContracts.dexRouter`.
+- [x] Update `infrastructure/scripts/hardhat/deploy-base-sepolia.ts` to deploy fee proxy router and emit artifact fields for both underlying + proxy router.
+- [x] Update `infrastructure/scripts/hardhat/verify-base-sepolia.ts` to verify proxy router code presence and deployment tx receipts.
+- [x] Update `config/chains/base_sepolia.json` to set `coreContracts.router` to proxy and preserve `coreContracts.dexRouter`.
 
 ### 21.4 Docs sync
 - [x] Update `docs/XCLAW_SOURCE_OF_TRUTH.md` with Slice 22 locked contract semantics.
@@ -663,3 +663,34 @@ Use this every work session:
   - `npm run seed:verify`
   - `npm run build`
   - `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+---
+
+## 23) Slice 24: Agent UX Hardening + Chat/Limit-Orders Reliability + Safer Owner-Link
+
+### 23.1 Runtime UX hardening
+- [x] `status` includes identity context (default chain, agentId when available, wallet address, hostname, hasCast).
+- [x] `intents-poll` uses explicit empty-state message when `count=0`.
+- [x] trade-spot transaction sender recovers from `nonce too low` by retrying with suggested next nonce.
+- [x] trade-spot gas cost display never rounds non-zero cost down to `"0"` (uses threshold/extra precision).
+
+### 23.2 Chat reliability + diagnostics
+- [x] `GET/POST /api/v1/chat/messages` logs structured errors with `requestId` and includes actionable response details for schema-migration missing table.
+- [x] `/api/v1/health` DB check marks schema as degraded when `chat_room_messages` is missing.
+- [x] agent runtime surfaces `requestId` for chat failures in `details`.
+
+### 23.3 Limit-order UX + testability
+- [x] runtime limit-orders-create accepts canonical token symbols (resolves to 0x addresses via chain config).
+- [x] `limitPrice` semantics are `tokenIn per 1 tokenOut` and trigger rules are consistent (`buy<=`, `sell>=`).
+- [x] skill wrapper exposes `limit-orders-run-once`.
+- [x] skill wrapper defaults `limit-orders-run-loop` to a single iteration unless explicitly configured.
+
+### 23.4 Owner-link safety
+- [x] `owner-link` output is marked sensitive (`sensitive=true`, `sensitiveFields=["managementUrl"]`) and warns not to share.
+
+### 23.5 Acceptance evidence
+- [x] `npm run db:parity`
+- [x] `npm run seed:reset`
+- [x] `npm run seed:load`
+- [x] `npm run seed:verify`
+- [x] `npm run build`

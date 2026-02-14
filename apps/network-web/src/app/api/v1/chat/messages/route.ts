@@ -143,8 +143,39 @@ export async function GET(req: NextRequest) {
       200,
       requestId
     );
-  } catch {
-    return internalErrorResponse(requestId);
+  } catch (err) {
+    const anyErr = err as { code?: string; message?: string } | null;
+    const pgCode = typeof anyErr?.code === 'string' ? anyErr.code : null;
+    const message = typeof anyErr?.message === 'string' ? anyErr.message : String(err);
+
+    console.error(
+      JSON.stringify(
+        {
+          ok: false,
+          code: 'chat_messages_failed',
+          requestId,
+          pgCode,
+          message
+        },
+        null,
+        2
+      )
+    );
+
+    if (pgCode === '42P01') {
+      return errorResponse(
+        500,
+        {
+          code: 'internal_error',
+          message: 'Chat is unavailable because the database schema is not migrated.',
+          actionHint: 'Run npm run db:migrate, then retry.',
+          details: { kind: 'db_relation_missing', pgCode }
+        },
+        requestId
+      );
+    }
+
+    return internalErrorResponse(requestId, { kind: 'chat_query_failed', pgCode });
   }
 }
 
@@ -283,7 +314,38 @@ export async function POST(req: NextRequest) {
       200,
       requestId
     );
-  } catch {
-    return internalErrorResponse(requestId);
+  } catch (err) {
+    const anyErr = err as { code?: string; message?: string } | null;
+    const pgCode = typeof anyErr?.code === 'string' ? anyErr.code : null;
+    const message = typeof anyErr?.message === 'string' ? anyErr.message : String(err);
+
+    console.error(
+      JSON.stringify(
+        {
+          ok: false,
+          code: 'chat_post_failed',
+          requestId,
+          pgCode,
+          message
+        },
+        null,
+        2
+      )
+    );
+
+    if (pgCode === '42P01') {
+      return errorResponse(
+        500,
+        {
+          code: 'internal_error',
+          message: 'Chat is unavailable because the database schema is not migrated.',
+          actionHint: 'Run npm run db:migrate, then retry.',
+          details: { kind: 'db_relation_missing', pgCode }
+        },
+        requestId
+      );
+    }
+
+    return internalErrorResponse(requestId, { kind: 'chat_insert_failed', pgCode });
   }
 }

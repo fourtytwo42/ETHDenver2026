@@ -66,6 +66,12 @@ Poll server intents:
 python3 {baseDir}/scripts/xclaw_agent_skill.py intents-poll
 ```
 
+Run limit-order loop one iteration (useful for testing):
+
+```bash
+python3 {baseDir}/scripts/xclaw_agent_skill.py limit-orders-run-once
+```
+
 Check approval state for an intent:
 
 ```bash
@@ -110,6 +116,8 @@ Owner management link action (for human owner controls):
 ```bash
 python3 {baseDir}/scripts/xclaw_agent_skill.py owner-link
 ```
+
+Note: `owner-link` returns a short-lived magic link URL that must be treated as sensitive (do not paste into chat logs).
 
 Testnet faucet action (base_sepolia only):
 

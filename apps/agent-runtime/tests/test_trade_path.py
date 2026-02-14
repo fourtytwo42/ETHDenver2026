@@ -199,8 +199,8 @@ class TradePathRuntimeTests(unittest.TestCase):
         args = argparse.Namespace(chain="hardhat_local", json=True)
         with mock.patch.object(
             cli,
-            "_chat_messages_query",
-            return_value=[{"messageId": "msg_1", "agentId": "ag_1", "message": "Watching WETH/USDC"}],
+            "_api_request",
+            return_value=(200, {"items": [{"messageId": "msg_1", "agentId": "ag_1", "message": "Watching WETH/USDC"}]}),
         ):
             code = cli.cmd_chat_poll(args)
         self.assertEqual(code, 0)
@@ -272,6 +272,8 @@ class TradePathRuntimeTests(unittest.TestCase):
         ), mock.patch.object(cli, "_chain_rpc_url", return_value="https://rpc.example"), mock.patch.object(
             cli, "_require_chain_contract_address", return_value="0x" + "44" * 20
         ), mock.patch.object(cli, "_fetch_erc20_metadata", side_effect=[{"decimals": 18, "symbol": "USDC"}, {"decimals": 18, "symbol": "WETH"}]), mock.patch.object(
+            cli, "_fetch_token_allowance_wei", return_value=str(10**30)
+        ), mock.patch.object(
             cli, "_enforce_spend_preconditions", return_value=({}, "2026-02-14", 0, 10**30)
         ), mock.patch.object(
             cli, "_record_spend"

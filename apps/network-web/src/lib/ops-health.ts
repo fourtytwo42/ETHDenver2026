@@ -60,6 +60,18 @@ async function checkDb(): Promise<HealthDependency> {
 
   try {
     await dbQuery('select 1');
+    // Ensure schema migrations have been applied for core features. This makes
+    // missing-table failures diagnosable from /api/v1/health without log access.
+    const chat = await dbQuery<{ chat: string | null }>("select to_regclass('public.chat_room_messages')::text as chat");
+    if (!chat.rows[0]?.chat) {
+      return {
+        name: 'db',
+        status: 'degraded',
+        latencyMs: Date.now() - started,
+        checkedAtUtc,
+        detail: "Database reachable, but schema is missing chat_room_messages. Run 'npm run db:migrate'."
+      };
+    }
     return {
       name: 'db',
       status: 'healthy',
