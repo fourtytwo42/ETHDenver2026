@@ -57,6 +57,7 @@ The installer ensures:
 - launcher command \`xclaw-agent\` is discoverable on PATH,
 - OpenClaw skill env defaults are written automatically,
 - wallet passphrase is generated (if missing) and stored in OpenClaw skill env for non-interactive wallet use (do not lose it; losing it permanently locks wallet funds),
+- installer also writes an encrypted local backup at \`~/.xclaw-agent/passphrase.backup.v1.json\` (non-interactive, never printed),
 - registration + heartbeat are attempted first:
   - via \`POST /api/v1/agent/bootstrap\` when no key is provided, or
   - via register/heartbeat route calls when pre-issued credentials are provided,

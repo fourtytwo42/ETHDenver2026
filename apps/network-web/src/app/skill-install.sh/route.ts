@@ -140,15 +140,112 @@ if [ -z "\${XCLAW_WALLET_PASSPHRASE:-}" ]; then
     export XCLAW_WALLET_PASSPHRASE
     openclaw config set skills.entries.xclaw-agent.env.XCLAW_WALLET_PASSPHRASE "$XCLAW_WALLET_PASSPHRASE" || true
     echo "[xclaw] generated new wallet passphrase for first install"
-    echo "[xclaw] IMPORTANT: back up your wallet passphrase now."
-    echo "[xclaw] It is stored in: ~/.openclaw/openclaw.json under skills.entries.xclaw-agent.env.XCLAW_WALLET_PASSPHRASE"
-    echo "[xclaw] Losing it permanently locks funds in the wallet (AES-GCM InvalidTag)."
   else
     echo "[xclaw] existing wallet detected; preserving existing passphrase/config"
   fi
 fi
 if [ -n "\${XCLAW_WALLET_PASSPHRASE:-}" ]; then
   openclaw config set skills.entries.xclaw-agent.env.XCLAW_WALLET_PASSPHRASE "$XCLAW_WALLET_PASSPHRASE" || true
+fi
+
+# Encrypted passphrase backup (non-interactive, no prompting).
+# This provides redundancy if OpenClaw config is accidentally overwritten or lost.
+passphrase_backup_path="$wallet_home/passphrase.backup.v1.json"
+
+backup_write() {
+  if [ -z "\${XCLAW_WALLET_PASSPHRASE:-}" ]; then
+    return 0
+  fi
+  python3 - <<'PY' >/dev/null 2>&1 || true
+import base64, hashlib, json, os, pathlib
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+backup_path = pathlib.Path(os.environ.get("XCLAW_PASSPHRASE_BACKUP_PATH", "")).expanduser()
+if not str(backup_path):
+    raise SystemExit(0)
+backup_path.parent.mkdir(parents=True, exist_ok=True)
+
+passphrase = os.environ.get("XCLAW_WALLET_PASSPHRASE", "")
+if not passphrase:
+    raise SystemExit(0)
+
+machine_id = ""
+for candidate in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
+    try:
+        machine_id = pathlib.Path(candidate).read_text(encoding="utf-8").strip()
+        if machine_id:
+            break
+    except Exception:
+        pass
+
+ikm = hashlib.sha256(("|".join([machine_id, str(os.getuid()), str(pathlib.Path.home())])).encode("utf-8")).digest()
+hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=b"xclaw-passphrase-backup-v1", info=b"xclaw", backend=None)
+key = hkdf.derive(ikm)
+
+nonce = os.urandom(12)
+aad = b"xclaw-passphrase-backup-v1"
+ct = AESGCM(key).encrypt(nonce, passphrase.encode("utf-8"), aad)
+
+payload = {
+    "schemaVersion": 1,
+    "algo": "AES-256-GCM+HKDF-SHA256(machine-id,uid,home)",
+    "nonceB64": base64.b64encode(nonce).decode("ascii"),
+    "ciphertextB64": base64.b64encode(ct).decode("ascii"),
+}
+backup_path.write_text(json.dumps(payload, separators=(",", ":")) + "\\n", encoding="utf-8")
+try:
+    os.chmod(backup_path, 0o600)
+except Exception:
+    pass
+PY
+}
+
+backup_read() {
+  python3 - <<'PY' 2>/dev/null || true
+import base64, hashlib, json, os, pathlib, sys
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+backup_path = pathlib.Path(os.environ.get("XCLAW_PASSPHRASE_BACKUP_PATH", "")).expanduser()
+if not backup_path.exists():
+    raise SystemExit(0)
+
+payload = json.loads(backup_path.read_text(encoding="utf-8"))
+nonce = base64.b64decode(payload.get("nonceB64", ""))
+ct = base64.b64decode(payload.get("ciphertextB64", ""))
+
+machine_id = ""
+for candidate in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
+    try:
+        machine_id = pathlib.Path(candidate).read_text(encoding="utf-8").strip()
+        if machine_id:
+            break
+    except Exception:
+        pass
+
+ikm = hashlib.sha256(("|".join([machine_id, str(os.getuid()), str(pathlib.Path.home())])).encode("utf-8")).digest()
+hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=b"xclaw-passphrase-backup-v1", info=b"xclaw", backend=None)
+key = hkdf.derive(ikm)
+
+aad = b"xclaw-passphrase-backup-v1"
+pt = AESGCM(key).decrypt(nonce, ct, aad)
+sys.stdout.write(pt.decode("utf-8"))
+PY
+}
+
+export XCLAW_PASSPHRASE_BACKUP_PATH="$passphrase_backup_path"
+backup_write
+
+# If a wallet exists and passphrase is missing, attempt to recover from encrypted backup.
+if [ "$wallet_exists" = "1" ] && [ -z "\${XCLAW_WALLET_PASSPHRASE:-}" ]; then
+  recovered="$(backup_read || true)"
+  if [ -n "$recovered" ]; then
+    export XCLAW_WALLET_PASSPHRASE="$recovered"
+    openclaw config set skills.entries.xclaw-agent.env.XCLAW_WALLET_PASSPHRASE "$XCLAW_WALLET_PASSPHRASE" >/dev/null 2>&1 || true
+  fi
 fi
 if [ -n "\${XCLAW_AGENT_API_KEY:-}" ]; then
   openclaw config set skills.entries.xclaw-agent.apiKey "$XCLAW_AGENT_API_KEY" || true
@@ -200,10 +297,24 @@ if [ "$wallet_exists" = "1" ]; then
   set -e
 
   if [ "$wallet_health_ok" != "1" ] || [ "$wallet_integrity_checked" != "1" ]; then
-    echo "[xclaw] ERROR: wallet health check failed; wallet cannot be decrypted with current passphrase."
-    echo "[xclaw] This usually means XCLAW_WALLET_PASSPHRASE does not match the wallet encryption key (AES-GCM InvalidTag)."
-    echo "[xclaw] Fix: restore the original passphrase in OpenClaw config, then restart gateway: openclaw gateway restart"
-    exit 1
+    # Try encrypted local backup recovery before failing.
+    recovered="$(backup_read || true)"
+    if [ -n "$recovered" ]; then
+      export XCLAW_WALLET_PASSPHRASE="$recovered"
+      openclaw config set skills.entries.xclaw-agent.env.XCLAW_WALLET_PASSPHRASE "$XCLAW_WALLET_PASSPHRASE" >/dev/null 2>&1 || true
+      set +e
+      wallet_health_json="$(xclaw-agent wallet health --chain "$XCLAW_DEFAULT_CHAIN" --json 2>/dev/null)"
+      wallet_health_ok="$(printf "%s" "$wallet_health_json" | python3 -c 'import json,sys\ns=sys.stdin.read().strip()\ntry:\n d=json.loads(s) if s else {}\n print(\"1\" if d.get(\"ok\") else \"0\")\nexcept Exception:\n print(\"0\")')"
+      wallet_integrity_checked="$(printf "%s" "$wallet_health_json" | python3 -c 'import json,sys\ns=sys.stdin.read().strip()\ntry:\n d=json.loads(s) if s else {}\n print(\"1\" if d.get(\"integrityChecked\") else \"0\")\nexcept Exception:\n print(\"0\")')"
+      set -e
+    fi
+
+    if [ "$wallet_health_ok" != "1" ] || [ "$wallet_integrity_checked" != "1" ]; then
+      echo "[xclaw] ERROR: wallet health check failed; wallet cannot be decrypted with current passphrase."
+      echo "[xclaw] This usually means XCLAW_WALLET_PASSPHRASE does not match the wallet encryption key (AES-GCM InvalidTag)."
+      echo "[xclaw] Fix: restore the original passphrase in OpenClaw config, then restart gateway: openclaw gateway restart"
+      exit 1
+    fi
   fi
 fi
 
