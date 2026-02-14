@@ -2179,6 +2179,9 @@ def cmd_faucet_request(args: argparse.Namespace) -> int:
                 {"status": status_code, "chain": args.chain},
                 exit_code=1,
             )
+        token_drips = body.get("tokenDrips")
+        if not isinstance(token_drips, list):
+            token_drips = None
         return ok(
             "Faucet request submitted.",
             agentId=agent_id,
@@ -2186,6 +2189,7 @@ def cmd_faucet_request(args: argparse.Namespace) -> int:
             amountWei=str(body.get("amountWei", "50000000000000000")),
             txHash=body.get("txHash"),
             to=body.get("to"),
+            tokenDrips=token_drips,
         )
     except WalletStoreError as exc:
         return fail("faucet_request_failed", str(exc), "Verify API env/auth and retry.", {"chain": args.chain}, exit_code=1)
