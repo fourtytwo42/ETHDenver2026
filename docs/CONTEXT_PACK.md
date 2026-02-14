@@ -1,53 +1,71 @@
 # X-Claw Context Pack
 
-## 1) Goal
-- Primary objective: complete `Slice 17: Deposits + Agent-Local Limit Orders` after closing Slice 16.
-- Success criteria: working management deposit flow, management-authored limit orders executed locally by agent, outage replay proof, and synchronized canonical artifacts.
+## 1) Goal (Active: Slice 25)
+- Primary objective: complete `Slice 25: Agent Skill UX Upgrade (Security + Reliability + Contract Fixes)`.
+- Success criteria:
+  - owner-link is safe-by-default (sensitive fields redacted unless explicitly opted-in)
+  - faucet response is pending-aware and provides next-step guidance
+  - limit-orders-create does not fail schema validation due to `expiresAt: null`
+  - docs/artifacts remain synchronized (source-of-truth + tracker + roadmap + skill docs)
 
 ## 2) Constraints
-- Strict slice order: Slice 16 closed first, then Slice 17 implementation.
 - Canonical authority: `docs/XCLAW_SOURCE_OF_TRUTH.md`.
+- Strict slice order: Slice 25 only (no cross-slice opportunistic work).
 - Runtime boundary: Node/Next.js for web/API, Python-first for agent/OpenClaw runtime.
-- No dependency additions without explicit justification.
+- No new dependencies without explicit justification.
+- Security-first: treat stdout as loggable; do not emit secrets/tokens by default.
 
 ## 3) Contract Impact
-- OpenAPI additions for deposit and limit-order endpoints.
-- Shared schema additions for deposit/limit-order request/response contracts.
-- Data-model migration adds deposit + limit-order persistence tables.
+- Skill wrapper output hardening:
+  - if response includes `sensitive=true` and `sensitiveFields`, wrapper must redact those fields by default.
+- Agent runtime output additions:
+  - faucet includes `pending`, `recommendedDelaySec`, `nextAction`.
+- Limit orders: payload shape remains per existing schema; fix is to omit `expiresAt` when not provided.
 
-## 4) Files and Boundaries
-- API/routes:
-  - `apps/network-web/src/app/api/v1/management/deposit/route.ts`
-  - `apps/network-web/src/app/api/v1/management/limit-orders/route.ts`
-  - `apps/network-web/src/app/api/v1/management/limit-orders/[orderId]/cancel/route.ts`
-  - `apps/network-web/src/app/api/v1/limit-orders/pending/route.ts`
-  - `apps/network-web/src/app/api/v1/limit-orders/[orderId]/status/route.ts`
-- Runtime:
-  - `apps/agent-runtime/xclaw_agent/cli.py`
+## 4) Files and Boundaries (Slice 25 allowlist)
+- Source-of-truth + slice process:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/CONTEXT_PACK.md`
+- Skill wrapper:
   - `skills/xclaw-agent/scripts/xclaw_agent_skill.py`
-- Contracts/data:
-  - `infrastructure/migrations/0003_slice17_deposit_limit_orders.sql`
-  - `packages/shared-schemas/json/*.schema.json` (new limit/deposit schemas)
-  - `docs/api/openapi.v1.yaml`
-- UX/e2e:
-  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
-  - `infrastructure/scripts/e2e-full-pass.sh`
+  - `skills/xclaw-agent/SKILL.md`
+- Runtime + tests:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_trade_path.py`
+- API (copy-only string change for UX hint):
+  - `apps/network-web/src/app/api/v1/limit-orders/route.ts`
 
 ## 5) Invariants
-- Error contract remains `code`, `message`, optional `actionHint`, optional `details`, `requestId`.
+- Error contract remains `code`, `message`, optional `actionHint`, optional `details`, and preserve `requestId` when provided by API.
 - Canonical status vocabulary remains exactly `active`, `offline`, `degraded`, `paused`, `deactivated`.
 - Agent key custody remains local-only.
 
 ## 6) Verification Plan
-- Global gates: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.
-- Runtime tests: `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`.
-- E2E checks:
-  - `npm run e2e:full`
-  - `XCLAW_E2E_SIMULATE_API_OUTAGE=1 npm run e2e:full`
+- Global gates:
+  - `npm run db:parity`
+  - `npm run seed:reset`
+  - `npm run seed:load`
+  - `npm run seed:verify`
+  - `npm run build`
+- Runtime tests:
+  - `python3 -m pytest apps/agent-runtime/tests` (preferred)
+  - fallback: `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+- Manual evidence (worksheets):
+  - A (status/wallet identity)
+  - C (faucet pending guidance + delayed dashboard check)
+  - F (limit-orders-create)
+  - H (owner-link redaction)
 
 ## 7) Evidence + Rollback
-- Capture route/runtime/e2e outputs in `acceptance.md`.
+- Capture outputs and command evidence in `acceptance.md` (Slice 25 section).
 - Rollback plan:
-  1. revert Slice 17 touched files only,
-  2. rerun global gates,
+  1. revert Slice 25 touched files only,
+  2. rerun global gates + runtime tests,
   3. confirm tracker/roadmap/source-of-truth consistency.
+
+---
+
+## Archive (Prior Context Packs)
+- Slice 17 context pack content was superseded by Slice 25 and is intentionally removed from the active section above.

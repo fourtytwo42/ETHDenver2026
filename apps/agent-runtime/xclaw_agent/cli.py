@@ -919,6 +919,10 @@ def _api_error_details(status: int, body: dict[str, Any], path: str, chain: str 
     request_id = body.get("requestId")
     if isinstance(request_id, str) and request_id.strip():
         details["requestId"] = request_id.strip()
+    api_details = body.get("details")
+    # Preserve server-side validation details (schema errors, field hints) when present.
+    if api_details is not None:
+        details["apiDetails"] = api_details
     if chain:
         details["chain"] = chain
     return details
@@ -2428,6 +2432,9 @@ def cmd_faucet_request(args: argparse.Namespace) -> int:
             txHash=body.get("txHash"),
             to=body.get("to"),
             tokenDrips=token_drips,
+            pending=True,
+            recommendedDelaySec=20,
+            nextAction="Wait ~1-2 blocks, then run dashboard. Balances may not update immediately after tx submission.",
         )
     except WalletStoreError as exc:
         return fail("faucet_request_failed", str(exc), "Verify API env/auth and retry.", {"chain": args.chain}, exit_code=1)
@@ -2772,8 +2779,9 @@ def cmd_limit_orders_create(args: argparse.Namespace) -> int:
             "amountIn": args.amount_in,
             "limitPrice": args.limit_price,
             "slippageBps": int(args.slippage_bps),
-            "expiresAt": args.expires_at,
         }
+        if args.expires_at:
+            payload["expiresAt"] = args.expires_at
         if not payload["agentId"]:
             return fail(
                 "auth_invalid",

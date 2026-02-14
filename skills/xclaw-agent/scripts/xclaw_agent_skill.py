@@ -48,6 +48,45 @@ def _resolve_agent_binary() -> Optional[str]:
     return None
 
 
+def _show_sensitive() -> bool:
+    # Default: redact sensitive fields because stdout is often logged/transcribed.
+    return os.environ.get("XCLAW_SHOW_SENSITIVE", "").strip() == "1"
+
+
+def _redact_sensitive_payload(payload: dict) -> dict:
+    sensitive = payload.get("sensitive") is True
+    fields = payload.get("sensitiveFields")
+    if not sensitive or not isinstance(fields, list) or not fields:
+        return payload
+    redacted = dict(payload)
+    for field in fields:
+        if isinstance(field, str) and field in redacted:
+            redacted[field] = "<REDACTED:SENSITIVE>"
+    return redacted
+
+
+def _redact_sensitive_stdout(stdout: str) -> str:
+    # Support multi-JSON stdout (one JSON per line) used by some commands.
+    lines = (stdout or "").splitlines()
+    out_lines: list[str] = []
+    for line in lines:
+        trimmed = line.strip()
+        if not trimmed:
+            out_lines.append(line)
+            continue
+        try:
+            parsed = json.loads(trimmed)
+        except json.JSONDecodeError:
+            out_lines.append(line)
+            continue
+        if isinstance(parsed, dict):
+            parsed = _redact_sensitive_payload(parsed)
+            out_lines.append(json.dumps(parsed, separators=(",", ":")))
+        else:
+            out_lines.append(line)
+    return "\n".join(out_lines)
+
+
 def _extract_json_payload(stdout: str) -> Optional[dict]:
     trimmed = (stdout or "").strip()
     if not trimmed:
@@ -90,6 +129,8 @@ def _run_agent(args: Iterable[str]) -> int:
     if proc.returncode == 0:
         # Preserve native CLI JSON output when available.
         out = proc.stdout.strip()
+        if out and not _show_sensitive():
+            out = _redact_sensitive_stdout(out)
         if out:
             print(out)
         else:

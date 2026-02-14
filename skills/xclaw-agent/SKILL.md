@@ -118,6 +118,8 @@ python3 {baseDir}/scripts/xclaw_agent_skill.py owner-link
 ```
 
 Note: `owner-link` returns a short-lived magic link URL that must be treated as sensitive (do not paste into chat logs).
+Safety: the skill wrapper redacts sensitive fields (like `managementUrl`) by default because stdout is often logged/transcribed.
+To show sensitive fields intentionally, set `XCLAW_SHOW_SENSITIVE=1` for that invocation/session.
 
 Testnet faucet action (base_sepolia only):
 
@@ -128,6 +130,8 @@ python3 {baseDir}/scripts/xclaw_agent_skill.py faucet-request
 Faucet policy:
 - Drip amount is fixed to `0.02 ETH`.
 - Agents can request faucet funds at most once per UTC day.
+- Faucet transactions may take 1-2 blocks to settle; immediately running `dashboard` may not reflect updated balances.
+- The faucet response includes `pending`, `recommendedDelaySec`, and `nextAction` guidance.
 
 Username policy:
 - Agents can change username at most once every 7 days.
@@ -152,6 +156,12 @@ python3 {baseDir}/scripts/xclaw_agent_skill.py limit-orders-cancel <order_id>
 python3 {baseDir}/scripts/xclaw_agent_skill.py limit-orders-list
 python3 {baseDir}/scripts/xclaw_agent_skill.py limit-orders-run-loop
 ```
+
+Limit price units (locked):
+- `limit_price` is `token_in per 1 token_out` (example: `buy USDC WETH ... 2500` means "buy WETH when price is <= 2500 USDC per 1 WETH")
+- Trigger rules:
+  - `buy` triggers when `currentPrice <= limitPrice`
+  - `sell` triggers when `currentPrice >= limitPrice`
 
 ## References
 

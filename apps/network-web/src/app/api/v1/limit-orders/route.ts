@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
         {
           code: 'payload_invalid',
           message: 'Limit-order create payload does not match schema.',
-          actionHint: 'Provide schemaVersion, agentId, chainKey, pair fields, and limit settings.',
+          actionHint: 'Provide schemaVersion, agentId, chainKey, tokenIn, tokenOut, amountIn, limitPrice, and slippageBps.',
           details: validated.details
         },
         requestId
@@ -247,4 +247,3 @@ export async function GET(req: NextRequest) {
     return internalErrorResponse(requestId);
   }
 }
-

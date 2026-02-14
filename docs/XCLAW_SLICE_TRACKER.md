@@ -406,3 +406,26 @@ DoD:
 - [x] trade-spot gas cost display does not round non-zero costs to `"0"`.
 - [x] owner-link output is marked sensitive and warns not to share.
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
+
+---
+
+## Slice 25: Agent Skill UX Upgrade (Security + Reliability + Contract Fixes)
+Status: [x]
+Issue: #20 ("Slice 25: Agent Skill UX Upgrade (redaction + faucet pending + limit orders create fix)")
+
+Goal:
+- Prevent accidental leakage of sensitive owner-link magic URLs.
+- Make faucet UX explicitly pending-aware so post-faucet balance checks are not confusing.
+- Fix `limit-orders-create` schema mismatch caused by sending `expiresAt: null`.
+- Improve limit-order UX documentation (limit price units).
+
+DoD:
+- [x] skill wrapper redacts `sensitiveFields` (ex: owner-link `managementUrl`) by default; `XCLAW_SHOW_SENSITIVE=1` opt-in is documented.
+- [x] `faucet-request` response includes machine-readable pending guidance (`pending`, `recommendedDelaySec`, `nextAction`).
+- [x] `limit-orders-create` succeeds with standard args and does not send `expiresAt` unless provided.
+- [x] runtime tests include:
+  - [x] faucet success includes pending guidance fields
+  - [x] limit-orders-create omits `expiresAt` when missing
+  - [x] limit-orders-create failure surfaces server `details` for schema errors
+- [x] docs sync: source-of-truth + roadmap + skill docs updated in same change.
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.

@@ -1,7 +1,11 @@
 import argparse
+import io
+import json
 import unittest
 from unittest import mock
 from decimal import Decimal
+
+from contextlib import redirect_stdout
 
 import pathlib
 import sys
@@ -14,6 +18,15 @@ from xclaw_agent import cli  # noqa: E402
 
 
 class TradePathRuntimeTests(unittest.TestCase):
+    def _run_and_parse_stdout(self, fn) -> dict:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = fn()
+        self.assertIsInstance(code, int)
+        raw = buf.getvalue().strip()
+        self.assertTrue(raw, "expected JSON on stdout")
+        return json.loads(raw)
+
     def test_cast_send_retries_underpriced_then_succeeds(self) -> None:
         tx_obj = {
             "from": "0x1111111111111111111111111111111111111111",
@@ -235,8 +248,13 @@ class TradePathRuntimeTests(unittest.TestCase):
         ), mock.patch.object(
             cli, "_api_request", return_value=(200, {"amountWei": "50000000000000000", "txHash": "0x" + "ab" * 32})
         ):
-            code = cli.cmd_faucet_request(args)
-        self.assertEqual(code, 0)
+            payload = self._run_and_parse_stdout(lambda: cli.cmd_faucet_request(args))
+        self.assertTrue(payload.get("ok"))
+        self.assertEqual(payload.get("code"), "ok")
+        self.assertEqual(payload.get("chain"), "base_sepolia")
+        self.assertEqual(payload.get("pending"), True)
+        self.assertIsInstance(payload.get("recommendedDelaySec"), int)
+        self.assertIsInstance(payload.get("nextAction"), str)
 
     def test_trade_spot_builds_quote_and_swap_calls(self) -> None:
         args = argparse.Namespace(
@@ -322,6 +340,76 @@ class TradePathRuntimeTests(unittest.TestCase):
         ):
             code = cli.cmd_faucet_request(args)
         self.assertEqual(code, 1)
+
+    def test_limit_orders_create_omits_expires_at_when_missing(self) -> None:
+        args = argparse.Namespace(
+            chain="base_sepolia",
+            mode="mock",
+            side="buy",
+            token_in="USDC",
+            token_out="WETH",
+            amount_in="10",
+            limit_price="2500",
+            slippage_bps="300",
+            expires_at=None,
+            json=True,
+        )
+
+        captured: dict = {}
+
+        def fake_api_request(method: str, path: str, payload: dict | None = None, include_idempotency: bool = False):
+            captured["method"] = method
+            captured["path"] = path
+            captured["payload"] = payload
+            return 200, {"orderId": "lmt_1", "status": "open"}
+
+        with mock.patch.object(cli, "_resolve_token_address", side_effect=["0x" + "11" * 20, "0x" + "22" * 20]), mock.patch.object(
+            cli, "_resolve_api_key", return_value="xak1.ag_1.sig.payload"
+        ), mock.patch.object(cli, "_resolve_agent_id", return_value="ag_1"), mock.patch.object(cli, "_api_request", side_effect=fake_api_request):
+            payload = self._run_and_parse_stdout(lambda: cli.cmd_limit_orders_create(args))
+
+        self.assertTrue(payload.get("ok"))
+        sent = captured.get("payload") or {}
+        self.assertNotIn("expiresAt", sent)
+
+    def test_limit_orders_create_surfaces_api_details(self) -> None:
+        args = argparse.Namespace(
+            chain="base_sepolia",
+            mode="mock",
+            side="buy",
+            token_in="USDC",
+            token_out="WETH",
+            amount_in="10",
+            limit_price="2500",
+            slippage_bps="300",
+            expires_at="not-a-date",
+            json=True,
+        )
+
+        api_body = {
+            "code": "payload_invalid",
+            "message": "Limit-order create payload does not match schema.",
+            "actionHint": "Provide valid fields.",
+            "requestId": "req_123",
+            "details": {"issues": [{"path": "/expiresAt", "message": "must be date-time"}]},
+        }
+
+        def fake_api_request(method: str, path: str, payload: dict | None = None, include_idempotency: bool = False):
+            return 400, api_body
+
+        with mock.patch.object(cli, "_resolve_token_address", side_effect=["0x" + "11" * 20, "0x" + "22" * 20]), mock.patch.object(
+            cli, "_resolve_api_key", return_value="xak1.ag_1.sig.payload"
+        ), mock.patch.object(cli, "_resolve_agent_id", return_value="ag_1"), mock.patch.object(cli, "_api_request", side_effect=fake_api_request):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = cli.cmd_limit_orders_create(args)
+        self.assertEqual(code, 1)
+        out = json.loads(buf.getvalue().strip())
+        self.assertFalse(out.get("ok"))
+        self.assertEqual(out.get("code"), "payload_invalid")
+        details = out.get("details") or {}
+        self.assertEqual(details.get("requestId"), "req_123")
+        self.assertIn("apiDetails", details)
 
     def test_profile_set_name_success(self) -> None:
         args = argparse.Namespace(name="harvey-ops", chain="hardhat_local", json=True)

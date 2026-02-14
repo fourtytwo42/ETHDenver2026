@@ -694,3 +694,33 @@ Use this every work session:
 - [x] `npm run seed:load`
 - [x] `npm run seed:verify`
 - [x] `npm run build`
+
+---
+
+## 24) Slice 25: Agent Skill UX Upgrade (Security + Reliability + Contract Fixes)
+
+### 24.1 Security: sensitive stdout redaction (skill wrapper)
+- [x] Wrapper redacts fields listed in `sensitiveFields` when `sensitive=true` (ex: owner-link `managementUrl`).
+- [x] Opt-in override documented: `XCLAW_SHOW_SENSITIVE=1`.
+
+### 24.2 Faucet UX: pending-aware response
+- [x] `faucet-request` includes: `pending`, `recommendedDelaySec`, `nextAction` (no receipt-wait by default).
+- [x] `skills/xclaw-agent/SKILL.md` documents settlement timing expectations.
+
+### 24.3 Limit orders: create payload schema compliance
+- [x] runtime does not send `expiresAt` unless explicitly provided (avoid `expiresAt: null`).
+- [x] server-side schema error hints are surfaced via runtime `details.apiDetails` (plus `requestId` when present).
+- [x] `skills/xclaw-agent/SKILL.md` includes locked `limit_price` units and trigger semantics.
+
+### 24.4 Tests + Gates
+- [x] Runtime tests updated:
+  - [x] faucet success asserts pending guidance fields
+  - [x] limit-orders-create omits `expiresAt` when missing
+  - [x] limit-orders-create failure surfaces server `details`
+- [x] Run:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+  - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` (pytest unavailable: `No module named pytest`)

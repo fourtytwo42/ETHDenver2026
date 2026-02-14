@@ -31,3 +31,36 @@ This must work transparently with the Slice 22 fee-router proxy (router may be t
 - `npm run build`
 - `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
 
+---
+
+# Slice 25 Spec: Agent Skill UX Upgrade (Security + Reliability + Contract Fixes)
+
+## Goal
+Harden the Python-first X-Claw agent skill UX based on Worksheets A-H:
+- Redact sensitive owner-link magic URLs by default.
+- Make faucet responses explicitly pending-aware with next-step guidance.
+- Fix limit-order create schema mismatches caused by sending `expiresAt: null`.
+
+## Success Criteria
+1. `owner-link` output does not print raw `managementUrl` by default; opt-in via `XCLAW_SHOW_SENSITIVE=1`.
+2. `faucet-request` success JSON includes `pending`, `recommendedDelaySec`, and `nextAction`.
+3. `limit-orders-create` omits `expiresAt` when not provided and succeeds against a healthy server.
+4. Docs/artifacts remain synchronized: source-of-truth + tracker + roadmap + skill docs.
+5. Tests cover success + at least one failure-path assertion for surfaced API validation details.
+
+## Non-Goals
+1. Waiting for faucet tx receipts by default (we provide guidance instead).
+2. Redesigning the server-side limit-order schema (payload is already canonical; fix is client-side).
+3. Adding new dependencies.
+
+## Constraints / Safety
+1. Treat stdout as loggable/transcribed; redact sensitive fields by default.
+2. Preserve runtime separation: skill wrapper delegates to local `xclaw-agent`.
+
+## Acceptance Checks
+- `npm run db:parity`
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:verify`
+- `npm run build`
+- `python3 -m pytest apps/agent-runtime/tests` (fallback: `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`)

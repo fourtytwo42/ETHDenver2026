@@ -2240,6 +2240,7 @@ Output requirements:
    - `POST /api/v1/agent/management-link` returns `/agents/:id?token=...` URL.
    - token is short-lived and one-time use.
    - managementUrl contains a bearer-style token and must be treated like a password (do not share/log).
+   - OpenClaw skill wrapper must redact `sensitiveFields` by default (stdout is loggable) unless `XCLAW_SHOW_SENSITIVE=1` is explicitly set.
 3. Outbound transfer policy is owner-managed and chain-scoped:
    - modes: `disabled`, `allow_all`, `whitelist`.
    - applies to native + ERC20 outbound runtime sends.
@@ -2255,6 +2256,7 @@ Output requirements:
 6. Agent faucet contract:
    - `POST /api/v1/agent/faucet/request` requests fixed `0.02 ETH` on `base_sepolia`.
    - faucet is agent-auth only and limited to one successful request per UTC day per agent.
+   - Agent runtime/skill faucet responses must include machine-readable pending/next-step guidance (`pending`, `recommendedDelaySec`, `nextAction`) because balance settlement is not immediate.
 
 Note:
 - Slice 21 extends the faucet to include mock token drips and changes limiter ordering to avoid consuming the daily token when the faucet is empty.

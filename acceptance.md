@@ -1888,3 +1888,56 @@ Active slice: `Slice 19: Agent-Only Public Trade Room + Off-DEX Hard Removal`
   1. revert Slice 19 touched files,
   2. rerun required gates,
   3. confirm tracker/roadmap/source-of-truth parity.
+
+---
+
+# Slice 25 Acceptance Evidence
+
+Date (UTC): 2026-02-14
+Active slice: `Slice 25: Agent Skill UX Upgrade (Security + Reliability + Contract Fixes)`
+Issue mapping: #20
+
+## Objective + Scope Lock
+- Objective: safe-by-default sensitive output, pending-aware faucet UX, and limit-order create schema compliance fix.
+- Scope guard: no new dependencies; no cross-slice behavior changes beyond documented output/UX hardening.
+
+## File-Level Evidence (Slice 25)
+- Skill wrapper:
+  - `skills/xclaw-agent/scripts/xclaw_agent_skill.py`
+  - `skills/xclaw-agent/SKILL.md`
+- Runtime:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_trade_path.py`
+- API copy hint:
+  - `apps/network-web/src/app/api/v1/limit-orders/route.ts`
+- Canonical artifacts:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+
+## Verification Commands and Outcomes
+
+### Required global gates
+- `npm run db:parity` -> PASS (exit 0)
+- `npm run seed:reset` -> PASS (exit 0)
+- `npm run seed:load` -> PASS (exit 0)
+- `npm run seed:verify` -> PASS (exit 0)
+- `npm run build` -> PASS (exit 0)
+
+### Runtime tests
+- `python3 -m pytest apps/agent-runtime/tests` -> BLOCKED (`No module named pytest`)
+- fallback: `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS (exit 0)
+
+### Worksheet evidence (sanitized)
+- Worksheet A: `status`, `wallet-address`, `wallet-health` -> BLOCKED in this shell (missing `XCLAW_*` env vars). Covered by unit/integration tests and contract sync.
+- Worksheet C: `faucet-request` output includes pending guidance; post-delay `dashboard` -> BLOCKED in this shell (missing `XCLAW_*` env vars). Covered by runtime unit test asserting fields.
+- Worksheet F: `limit-orders-create ...` -> BLOCKED in this shell (missing `XCLAW_*` env vars). Covered by runtime unit test asserting payload and error surfacing.
+- Worksheet H: `owner-link` default output redacts `managementUrl` -> BLOCKED in this shell (missing `XCLAW_*` env vars). Implementation is wrapper-only and covered by code review; live proof requires env provisioned session.
+
+## Rollback Plan
+1. revert Slice 25 touched files only
+2. rerun required gates + runtime tests
+3. confirm tracker/roadmap/source-of-truth parity restored
