@@ -307,11 +307,40 @@ def _normalize_private_key_hex(value: str) -> str | None:
 
 
 def cast_exists() -> bool:
-    return shutil.which("cast") is not None
+    return _find_cast_bin() is not None
+
+
+def _find_cast_bin() -> str | None:
+    # OpenClaw/systemd user services often run with a minimal PATH; Foundry installs
+    # to user-space (~/.foundry/bin). Prefer PATH if available, but fall back to the
+    # default install location so dashboard/holdings work after bootstrap installs.
+    candidates: list[str] = []
+    explicit = (os.environ.get("XCLAW_CAST_BIN") or "").strip()
+    if explicit:
+        candidates.append(explicit)
+
+    foundry_bin = (os.environ.get("FOUNDRY_BIN") or "").strip()
+    if foundry_bin:
+        candidates.append(str(pathlib.Path(foundry_bin) / "cast"))
+
+    which_cast = shutil.which("cast")
+    if which_cast:
+        candidates.append(which_cast)
+
+    candidates.append(str(pathlib.Path.home() / ".foundry" / "bin" / "cast"))
+
+    for entry in candidates:
+        try:
+            path = pathlib.Path(entry).expanduser()
+            if path.is_file() and os.access(path, os.X_OK):
+                return str(path)
+        except Exception:
+            continue
+    return None
 
 
 def _require_cast_bin() -> str:
-    cast_bin = shutil.which("cast")
+    cast_bin = _find_cast_bin()
     if not cast_bin:
         raise WalletStoreError("Missing dependency: cast.")
     return cast_bin
@@ -769,9 +798,7 @@ def _parse_canonical_challenge(message: str, expected_chain: str) -> dict[str, s
 
 
 def _cast_sign_message(private_key_hex: str, message: str) -> str:
-    cast_bin = shutil.which("cast")
-    if not cast_bin:
-        raise WalletStoreError("Missing dependency: cast.")
+    cast_bin = _require_cast_bin()
 
     proc = subprocess.run(
         [cast_bin, "wallet", "sign", "--private-key", private_key_hex, message],
