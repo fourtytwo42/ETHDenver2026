@@ -129,5 +129,5 @@ Issue mapping: `#22`
   - [x] `npm run build`
 - [x] Record viewport verification matrix in `acceptance.md`.
 - [x] Mark Slice 27 tracker/roadmap DoD complete.
-- [ ] Commit + push Slice 27.
-- [ ] Post verification evidence + commit hash(es) to issue #22.
+- [x] Commit + push Slice 27.
+- [x] Post verification evidence + commit hash(es) to issue #22.
