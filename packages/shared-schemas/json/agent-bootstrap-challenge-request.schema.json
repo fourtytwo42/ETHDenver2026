@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/agent-bootstrap-challenge-request.schema.json",
+  "title": "AgentBootstrapChallengeRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "chainKey", "walletAddress"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "chainKey": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "walletAddress": {
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{40}$"
+    }
+  }
+}
+

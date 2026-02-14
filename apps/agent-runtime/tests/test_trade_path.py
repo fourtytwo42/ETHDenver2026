@@ -238,6 +238,70 @@ class TradePathRuntimeTests(unittest.TestCase):
             code = cli.cmd_faucet_request(args)
         self.assertEqual(code, 0)
 
+    def test_trade_spot_builds_quote_and_swap_calls(self) -> None:
+        args = argparse.Namespace(
+            chain="base_sepolia",
+            token_in="0x" + "11" * 20,
+            token_out="0x" + "22" * 20,
+            amount_in="500",
+            slippage_bps="50",
+            to=None,
+            deadline_sec=120,
+            json=True,
+        )
+
+        commands: list[list[str]] = []
+
+        def fake_run(cmd: list[str], text: bool = True, capture_output: bool = True):  # type: ignore[override]
+            commands.append(cmd)
+            # Quote call
+            if cmd[:3] == ["cast", "call", "--rpc-url"] and "getAmountsOut(uint256,address[])(uint256[])" in cmd:
+                # last uint is treated as amountOut by parser.
+                return mock.Mock(returncode=0, stdout="(uint256[]) [500000000000000000000,20000000000000000000]\n", stderr="")
+            # Approve receipt
+            if len(cmd) >= 2 and cmd[1] == "receipt":
+                return mock.Mock(returncode=0, stdout='{"status":"0x1"}', stderr="")
+            raise AssertionError(f"Unexpected command {cmd}")
+
+        def fake_send(rpc_url: str, tx_obj: dict, private_key_hex: str) -> str:
+            # First send = approve, second send = swap
+            return "0x" + ("ab" * 32)
+
+        with mock.patch.object(cli, "_execution_wallet", return_value=("0x" + "aa" * 20, "0x" + "33" * 32)), mock.patch.object(
+            cli, "_require_cast_bin", return_value="cast"
+        ), mock.patch.object(cli, "_chain_rpc_url", return_value="https://rpc.example"), mock.patch.object(
+            cli, "_require_chain_contract_address", return_value="0x" + "44" * 20
+        ), mock.patch.object(cli, "_fetch_erc20_metadata", side_effect=[{"decimals": 18, "symbol": "USDC"}, {"decimals": 18, "symbol": "WETH"}]), mock.patch.object(
+            cli, "_enforce_spend_preconditions", return_value=({}, "2026-02-14", 0, 10**30)
+        ), mock.patch.object(
+            cli, "_record_spend"
+        ), mock.patch.object(
+            cli, "_cast_calldata", return_value="0xdeadbeef"
+        ), mock.patch.object(
+            cli, "_cast_rpc_send_transaction", side_effect=fake_send
+        ), mock.patch.object(
+            cli.subprocess, "run", side_effect=fake_run
+        ):
+            code = cli.cmd_trade_spot(args)
+
+        self.assertEqual(code, 0)
+        # Ensure we quoted via getAmountsOut at least once.
+        self.assertTrue(any("getAmountsOut(uint256,address[])(uint256[])" in " ".join(cmd) for cmd in commands))
+
+    def test_trade_spot_rejects_bad_slippage(self) -> None:
+        args = argparse.Namespace(
+            chain="base_sepolia",
+            token_in="0x" + "11" * 20,
+            token_out="0x" + "22" * 20,
+            amount_in="500",
+            slippage_bps="9001",
+            to=None,
+            deadline_sec=120,
+            json=True,
+        )
+        code = cli.cmd_trade_spot(args)
+        self.assertEqual(code, 2)
+
     def test_faucet_request_daily_limited(self) -> None:
         args = argparse.Namespace(chain="base_sepolia", json=True)
         with mock.patch.object(cli, "_resolve_api_key", return_value="xak1.ag_1.sig.payload"), mock.patch.object(

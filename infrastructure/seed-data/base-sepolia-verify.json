@@ -1,38 +1,47 @@
 {
   "ok": true,
-  "verifiedAt": "2026-02-13T18:26:40.053Z",
+  "verifiedAt": "2026-02-14T07:55:57.807Z",
   "verifiedViaRpc": true,
   "verifiedChainIdHex": "0x14a34",
   "verifiedContractCodePresent": {
     "factory": true,
+    "dexRouter": true,
     "router": true,
     "quoter": true,
-    "escrow": true
+    "escrow": true,
+    "WETH": true,
+    "USDC": true
   },
   "verifiedDeploymentTransactions": {
     "factory": {
-      "hash": "0x19039ef576d67c7ed11716ac69a28de539f4f38976f25e29f57adb2f4e985b66",
+      "hash": "0x34aef05818d74aeee11477ee492ca0ac33c66d49f1f78f07aa9b404f2ed0bc65",
       "found": true,
       "success": true,
-      "explorer": "https://sepolia.basescan.org/tx/0x19039ef576d67c7ed11716ac69a28de539f4f38976f25e29f57adb2f4e985b66"
+      "explorer": "https://sepolia.basescan.org/tx/0x34aef05818d74aeee11477ee492ca0ac33c66d49f1f78f07aa9b404f2ed0bc65"
+    },
+    "dexRouter": {
+      "hash": "0x2494e10f249d96b0539d151b1034a0a592803451daf3724f9fe200e2a9038643",
+      "found": true,
+      "success": true,
+      "explorer": "https://sepolia.basescan.org/tx/0x2494e10f249d96b0539d151b1034a0a592803451daf3724f9fe200e2a9038643"
     },
     "router": {
-      "hash": "0x9d4c0747a766d4b3c1f1e8b121dc393a1e0d5b09b4f667091023315450eb2260",
+      "hash": "0x6c7071108dfc22205eda69a78543daeb682dd4fe2ff05f579778d5cc21d1120b",
       "found": true,
       "success": true,
-      "explorer": "https://sepolia.basescan.org/tx/0x9d4c0747a766d4b3c1f1e8b121dc393a1e0d5b09b4f667091023315450eb2260"
+      "explorer": "https://sepolia.basescan.org/tx/0x6c7071108dfc22205eda69a78543daeb682dd4fe2ff05f579778d5cc21d1120b"
     },
     "quoter": {
-      "hash": "0xfe4f06b17ce02af71cb1d120e3d564ef69fe65320d8849eecd6363f1ee650e1f",
+      "hash": "0x00c40ca1df4ca7bdfef9f1d71b56c4bf334872faf9454548155d431c0c174a3c",
       "found": true,
       "success": true,
-      "explorer": "https://sepolia.basescan.org/tx/0xfe4f06b17ce02af71cb1d120e3d564ef69fe65320d8849eecd6363f1ee650e1f"
+      "explorer": "https://sepolia.basescan.org/tx/0x00c40ca1df4ca7bdfef9f1d71b56c4bf334872faf9454548155d431c0c174a3c"
     },
     "escrow": {
-      "hash": "0x54ace4e45b4f6a86136aed6ccf0fbe3ead68c05577757a078ac4d8fb723db6bf",
+      "hash": "0x66872eb08f80cb1ca8a26ece5f2a133709a1e177bb9e422a5bdc716b75f2798f",
       "found": true,
       "success": true,
-      "explorer": "https://sepolia.basescan.org/tx/0x54ace4e45b4f6a86136aed6ccf0fbe3ead68c05577757a078ac4d8fb723db6bf"
+      "explorer": "https://sepolia.basescan.org/tx/0x66872eb08f80cb1ca8a26ece5f2a133709a1e177bb9e422a5bdc716b75f2798f"
     }
   }
 }

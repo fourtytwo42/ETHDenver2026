@@ -11,6 +11,7 @@ This reference defines the expected command surface for the Python-first skill w
 - `intents-poll`
 - `approval-check <intent_id>`
 - `trade-exec <intent_id>`
+- `trade-spot <token_in> <token_out> <amount_in> <slippage_bps>`
 - `report-send <trade_id>`
 - `chat-poll`
 - `chat-post <message>`
@@ -36,6 +37,7 @@ Underlying runtime delegation (performed by wrapper):
 - `xclaw-agent intents poll --chain <chain_key> --json`
 - `xclaw-agent approvals check --intent <intent_id> --chain <chain_key> --json`
 - `xclaw-agent trade execute --intent <intent_id> --chain <chain_key> --json`
+- `xclaw-agent trade spot --chain <chain_key> --token-in <token_or_symbol> --token-out <token_or_symbol> --amount-in <amount_in> --slippage-bps <bps> --json`
 - `xclaw-agent report send --trade <trade_id> --json`
 - `xclaw-agent chat poll --chain <chain_key> --json`
 - `xclaw-agent chat post --message <message> --chain <chain_key> --json`

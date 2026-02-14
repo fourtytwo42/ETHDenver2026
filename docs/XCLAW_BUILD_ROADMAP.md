@@ -579,7 +579,7 @@ Use this every work session:
 - [x] Runtime `report send` rejects real-mode trades with deterministic hint.
 - [x] Runtime adds owner-link and policy-gated `wallet send-token`.
 - [x] Runtime/skill expose limit-order `create`, `cancel`, `list`, and `run-loop`.
-- [x] Add agent faucet request path (`0.05 ETH`, base_sepolia) with one-request-per-UTC-day enforcement.
+- [x] Add agent faucet request path (`0.02 ETH`, base_sepolia) with one-request-per-UTC-day enforcement.
 - [x] Skill/docs updated to reflect owner-link, outbound policy gating, and command surface.
 
 ### 19.4 Web management UX
@@ -594,3 +594,71 @@ Use this every work session:
 - [x] `npm run seed:verify`
 - [x] `npm run build`
 - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+---
+
+## 20) Slice 21: Mock Testnet Tokens + Token Faucet Drips + Seeded Router Liquidity
+
+### 20.1 Contracts and deployment
+- [x] Base Sepolia deploy script deploys mock `WETH` + `USDC` (18 decimals) alongside factory/router/quoter/escrow.
+- [x] `MockRouter` supports `getAmountsOut` and stores `ethUsdPriceE18`.
+- [x] Deploy script sets `ethUsdPriceE18` using external ETH/USD API with fallback `2000`.
+- [x] Deploy script seeds router token balances to act as swap liquidity ($1,000,000 USDC and equivalent WETH).
+
+### 20.2 Faucet behavior
+- [x] Faucet drips fixed `0.02 ETH` plus mock token drips (10 WETH, 20k USDC) on `base_sepolia`.
+- [x] Daily limiter is only consumed when faucet has sufficient ETH and token balances.
+- [x] Faucet rejects demo agents and placeholder wallet addresses.
+
+### 20.3 Contract sync
+- [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` updated with Slice 21 locked contract.
+- [x] `docs/api/openapi.v1.yaml` updated with faucet response schema.
+- [x] Shared schema added: `agent-faucet-response.schema.json`.
+
+---
+
+## 21) Slice 22: Non-Upgradeable V2 Fee Router Proxy (0.5% Output Fee)
+
+### 21.1 Contract + tests (Hardhat local first)
+- [x] Add `infrastructure/contracts/XClawFeeRouterV2.sol` implementing V2-style `getAmountsOut` + `swapExactTokensForTokens`.
+- [x] Enforce fixed 50 bps fee on output token, immutable treasury, and net-after-fee semantics for quote + minOut.
+- [x] Add hardhat tests under `infrastructure/tests/` validating net quote, fee transfer, and net slippage revert.
+
+### 21.2 Local integration
+- [x] Update `infrastructure/scripts/hardhat/deploy-local.ts` to deploy the fee proxy router and write `dexRouter` + `router` to deploy artifact.
+- [x] Update `config/chains/hardhat_local.json` to set `coreContracts.router` to proxy and preserve `coreContracts.dexRouter`.
+- [x] Run:
+  - `npm run hardhat:deploy-local`
+  - `npm run hardhat:verify-local`
+  - `TS_NODE_PROJECT=tsconfig.hardhat.json npx hardhat test infrastructure/tests/fee-router.test.ts`
+
+### 21.3 Base Sepolia promotion
+- [ ] Update `infrastructure/scripts/hardhat/deploy-base-sepolia.ts` to deploy fee proxy router and emit artifact fields for both underlying + proxy router.
+- [ ] Update `infrastructure/scripts/hardhat/verify-base-sepolia.ts` to verify proxy router code presence and deployment tx receipts.
+- [ ] Update `config/chains/base_sepolia.json` to set `coreContracts.router` to proxy and preserve `coreContracts.dexRouter`.
+
+### 21.4 Docs sync
+- [x] Update `docs/XCLAW_SOURCE_OF_TRUTH.md` with Slice 22 locked contract semantics.
+- [x] Update `docs/XCLAW_SLICE_TRACKER.md` Slice 22 status and DoD.
+
+---
+
+## 22) Slice 23: Agent Spot Swap Command (Token->Token via Configured Router)
+
+### 22.1 Runtime + Skill
+- [x] Add `xclaw-agent trade spot` (token->token) that uses router `getAmountsOut` to compute net `amountOutMin` and then submits `swapExactTokensForTokens` to `coreContracts.router`.
+- [x] Skill wrapper exposes `trade-spot <token_in> <token_out> <amount_in> <slippage_bps>` delegating to runtime.
+
+### 22.2 Docs + References
+- [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` updated to list `trade-spot` and runtime `trade spot`.
+- [x] `skills/xclaw-agent/SKILL.md` and `skills/xclaw-agent/references/commands.md` updated.
+
+### 22.3 Tests + Gates
+- [x] Runtime tests cover spot swap success call-shape and invalid input.
+- [x] Run:
+  - `npm run db:parity`
+  - `npm run seed:reset`
+  - `npm run seed:load`
+  - `npm run seed:verify`
+  - `npm run build`
+  - `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`

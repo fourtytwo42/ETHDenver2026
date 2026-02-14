@@ -32,6 +32,34 @@ tmp_dir="$(mktemp -d)"
 cleanup() { rm -rf "$tmp_dir"; }
 trap cleanup EXIT
 
+ensure_cast() {
+  export PATH="$HOME/.foundry/bin:$PATH"
+  if command -v cast >/dev/null 2>&1; then
+    echo "[xclaw] cast already installed"
+    return 0
+  fi
+
+  echo "[xclaw] cast not found; installing Foundry (user-space, no sudo)"
+  if ! command -v foundryup >/dev/null 2>&1; then
+    curl -fsSL https://foundry.paradigm.xyz | bash
+    export PATH="$HOME/.foundry/bin:$PATH"
+  fi
+
+  if ! command -v foundryup >/dev/null 2>&1; then
+    echo "[xclaw] foundryup is unavailable after install attempt"
+    exit 1
+  fi
+
+  foundryup >/dev/null
+  export PATH="$HOME/.foundry/bin:$PATH"
+  if ! command -v cast >/dev/null 2>&1; then
+    echo "[xclaw] cast is still unavailable after foundryup"
+    echo "[xclaw] add ~/.foundry/bin to PATH and retry"
+    exit 1
+  fi
+  echo "[xclaw] cast installed: $(cast --version | head -n1)"
+}
+
 if [ -d "$XCLAW_WORKDIR/.git" ]; then
   echo "[xclaw] existing git workspace found: $XCLAW_WORKDIR"
   cd "$XCLAW_WORKDIR"
@@ -73,6 +101,7 @@ else
 fi
 
 cd "$XCLAW_WORKDIR"
+ensure_cast
 echo "[xclaw] running setup_agent_skill.py"
 python3 skills/xclaw-agent/scripts/setup_agent_skill.py
 
@@ -159,22 +188,70 @@ if [ -z "\${XCLAW_AGENT_API_KEY:-}" ] && [ -n "$wallet_address" ]; then
   if [ -n "\${XCLAW_AGENT_NAME:-}" ]; then
     agent_name_field="\"agentName\": \"$XCLAW_AGENT_NAME\","
   fi
+
+  echo "[xclaw] requesting signed bootstrap challenge"
+  challenge_payload="$(cat <<JSON
+{
+  "schemaVersion": 1,
+  "chainKey": "$XCLAW_DEFAULT_CHAIN",
+  "walletAddress": "$wallet_address"
+}
+JSON
+)"
+  challenge_response="$(curl -fsS "$XCLAW_API_BASE_URL/agent/bootstrap/challenge" \
+    -H "Content-Type: application/json" \
+    -d "$challenge_payload")"
+
+  challenge_id="$(printf "%s" "$challenge_response" | python3 -c 'import json,sys;
+try:
+ d=json.load(sys.stdin)
+ print(d.get("challengeId",""))
+except Exception:
+ print("")')"
+  challenge_message="$(printf "%s" "$challenge_response" | python3 -c 'import json,sys;
+try:
+ d=json.load(sys.stdin)
+ print(d.get("challengeMessage",""))
+except Exception:
+ print("")')"
+  if [ -z "$challenge_id" ] || [ -z "$challenge_message" ]; then
+    echo "[xclaw] bootstrap challenge failed; unable to continue"
+    exit 1
+  fi
+
+  echo "[xclaw] signing bootstrap challenge with local wallet"
+  sig_json="$(python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py wallet-sign-challenge "$challenge_message" \
+    | python3 -c 'import sys; print(sys.stdin.read().strip())' || true)"
+  signature="$(printf "%s" "$sig_json" | python3 -c 'import json,sys;
+try:
+ d=json.load(sys.stdin)
+ print((d.get("signature") or "").strip())
+except Exception:
+ print("")' || true)"
+  if [ -z "$signature" ]; then
+    echo "[xclaw] unable to sign bootstrap challenge (missing signature). Ensure XCLAW_WALLET_PASSPHRASE is configured and cast is installed."
+    exit 1
+  fi
+
   bootstrap_payload="$(cat <<JSON
 {
+  "schemaVersion": 2,
   $agent_name_field
   "walletAddress": "$wallet_address",
   "runtimePlatform": "$runtime_platform",
   "chainKey": "$XCLAW_DEFAULT_CHAIN",
+  "challengeId": "$challenge_id",
+  "signature": "$signature",
   "mode": "mock",
   "approvalMode": "per_trade",
   "publicStatus": "active"
 }
 JSON
 )"
+
   bootstrap_response="$(curl -fsS "$XCLAW_API_BASE_URL/agent/bootstrap" \
     -H "Content-Type: application/json" \
     -d "$bootstrap_payload")"
-  printf "%s\n" "$bootstrap_response"
   if [ -n "$bootstrap_response" ]; then
     boot_agent_id="$(printf "%s" "$bootstrap_response" | python3 -c 'import json,sys;
 try:
@@ -205,7 +282,7 @@ except Exception:
       openclaw config set skills.entries.xclaw-agent.env.XCLAW_AGENT_API_KEY "$XCLAW_AGENT_API_KEY" || true
       openclaw config set skills.entries.xclaw-agent.env.XCLAW_AGENT_ID "$XCLAW_AGENT_ID" || true
       openclaw config set skills.entries.xclaw-agent.env.XCLAW_AGENT_NAME "$XCLAW_AGENT_NAME" || true
-      echo "[xclaw] bootstrap issued agent credentials and wrote OpenClaw config"
+      echo "[xclaw] bootstrap issued agent credentials and wrote OpenClaw config (agentId=$XCLAW_AGENT_ID, agentName=$XCLAW_AGENT_NAME)"
     else
       echo "[xclaw] bootstrap endpoint did not return agent credentials; falling back to manual/inferred mode"
     fi

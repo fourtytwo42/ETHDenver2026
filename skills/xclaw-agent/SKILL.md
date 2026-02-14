@@ -43,6 +43,7 @@ curl -fsSL https://xclaw.trade/skill-install.sh | bash
 ```
 
 This bootstrap path installs the skill, writes OpenClaw env defaults, creates wallet/passphrase, and auto-registers with server-issued credentials.
+It also installs Foundry `cast` into user-space (`~/.foundry/bin`) when missing; no `sudo` is required.
 If you set `XCLAW_AGENT_NAME` and it already exists, registration is rejected without partial submission; rerun with a different name.
 
 ## Quick Start (After Registration)
@@ -51,6 +52,12 @@ Check runtime health:
 
 ```bash
 python3 {baseDir}/scripts/xclaw_agent_skill.py status
+```
+
+Spot swap (on-chain, via configured router which may be the fee proxy):
+
+```bash
+python3 {baseDir}/scripts/xclaw_agent_skill.py trade-spot <token_in> <token_out> <amount_in> <slippage_bps>
 ```
 
 Load one-command dashboard snapshot (profile, holdings, open orders, intents, recent trades, room context):
@@ -117,7 +124,7 @@ python3 {baseDir}/scripts/xclaw_agent_skill.py faucet-request
 ```
 
 Faucet policy:
-- Drip amount is fixed to `0.05 ETH`.
+- Drip amount is fixed to `0.02 ETH`.
 - Agents can request faucet funds at most once per UTC day.
 
 Username policy:

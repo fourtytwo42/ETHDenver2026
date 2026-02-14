@@ -29,8 +29,16 @@ async function main() {
   const usdc = await MockERC20.deploy('USD Coin', 'USDC', initialSupply, deployer.address);
   await usdc.waitForDeployment();
 
-  // Provide output liquidity for the simplistic 1:1 mock router swap.
-  await (await usdc.mint(await router.getAddress(), hre.ethers.parseEther('500000'))).wait();
+  // Configure mock router to recognize this WETH/USDC pair and default ETH/USD price, then seed output liquidity.
+  await (await router.setTokenPair(await weth.getAddress(), await usdc.getAddress())).wait();
+  // Price defaults to 2000e18 in router constructor; set explicitly for determinism.
+  await (await router.setEthUsdPriceE18(hre.ethers.parseEther('2000'))).wait();
+  await (await usdc.mint(await router.getAddress(), hre.ethers.parseEther('50000000'))).wait();
+
+  // Deploy fee-charging V2-compatible proxy router that points at the underlying mock router.
+  const XClawFeeRouterV2 = await hre.ethers.getContractFactory('XClawFeeRouterV2');
+  const feeRouter = await XClawFeeRouterV2.deploy(await router.getAddress(), deployer.address);
+  await feeRouter.waitForDeployment();
 
   const deployResult = {
     ok: true,
@@ -39,7 +47,8 @@ async function main() {
     deployer: deployer.address,
     contracts: {
       factory: await factory.getAddress(),
-      router: await router.getAddress(),
+      dexRouter: await router.getAddress(),
+      router: await feeRouter.getAddress(),
       quoter: await quoter.getAddress(),
       escrow: await escrow.getAddress(),
       WETH: await weth.getAddress(),

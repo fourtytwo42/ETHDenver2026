@@ -8,8 +8,8 @@ const EXPLORER_BASE_URL = 'https://sepolia.basescan.org';
 
 type DeployArtifact = {
   chainId: number;
-  contracts: Record<'factory' | 'router' | 'quoter' | 'escrow', string>;
-  deploymentTxHashes: Record<'factory' | 'router' | 'quoter' | 'escrow', string>;
+  contracts: Record<string, string>;
+  deploymentTxHashes: Record<string, string>;
 };
 
 function requireEnv(name: string): string {

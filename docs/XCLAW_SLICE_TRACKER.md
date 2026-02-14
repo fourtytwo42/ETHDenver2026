@@ -325,5 +325,56 @@ DoD:
 - [x] `/agents/:id` management rail includes Owner Link + Outbound Transfers panels.
 - [x] runtime `trade execute` only auto-reports mock trades; real trades skip `/events`.
 - [x] runtime/skill exposes `wallet-send-token` and limit-order `create/cancel/list/run-loop` command surface.
-- [x] runtime/skill exposes `faucet-request` command for fixed `0.05 ETH` on base_sepolia with once-per-UTC-day limit.
+- [x] runtime/skill exposes `faucet-request` command for fixed `0.02 ETH` on base_sepolia with once-per-UTC-day limit.
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
+
+---
+
+## Slice 21: Mock Testnet Tokens + Token Faucet Drips + Seeded Router Liquidity
+Status: [x]
+
+Goal:
+- Make Base Sepolia trading practical without requiring agents to wrap scarce testnet ETH by deploying mock WETH/USDC, seeding router balances, and extending faucet drips to include mock tokens.
+
+DoD:
+- [x] Base Sepolia deployment script deploys mock `WETH` + `USDC`, seeds router balances, and sets router `ethUsdPriceE18` using external API with fallback `2000`.
+- [x] `MockRouter` implements `getAmountsOut` and price-based WETH/USDC quoting.
+- [x] `POST /api/v1/agent/faucet/request` dispenses fixed `0.02 ETH` plus token drips (10 WETH, 20k USDC) when configured and funded.
+- [x] Faucet daily limiter is only consumed when faucet has sufficient ETH and token balances (no "burned" rate limit on empty faucet).
+- [x] Faucet rejects demo agents and placeholder recipient addresses.
+- [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` and `docs/api/openapi.v1.yaml` are synced to new faucet behavior and mock token strategy.
+
+---
+
+## Slice 22: Non-Upgradeable V2 Fee Router Proxy (0.5% Output Fee)
+Status: [x]
+
+Goal:
+- Deploy a non-upgradeable V2-compatible router proxy that takes a fixed 50 bps fee on output token atomically and preserves net semantics for quotes/minOut.
+
+DoD:
+- [x] `infrastructure/contracts/XClawFeeRouterV2.sol` implemented with fee-on-output and net semantics.
+- [x] Hardhat tests cover `getAmountsOut` net quote, fee transfer, and net slippage revert.
+- [x] Hardhat local deploy script outputs `dexRouter` (underlying) and `router` (fee proxy) and artifacts are verified.
+- [x] `config/chains/hardhat_local.json` uses proxy router address and preserves underlying router address.
+- [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` updated with Slice 22 locked contract semantics.
+- [x] `docs/XCLAW_BUILD_ROADMAP.md` updated with Slice 22 checklist.
+- [x] Base Sepolia deploy script updated to deploy proxy router and write both underlying + proxy addresses to artifact.
+- [x] Base Sepolia verify script updated to verify proxy router code presence and deployment tx receipts.
+- [x] Base Sepolia deploy executed and verified (evidence artifacts written under `infrastructure/seed-data/`).
+- [x] `config/chains/base_sepolia.json` updated to use proxy router address (and preserve underlying router).
+
+---
+
+## Slice 23: Agent Spot Swap Command (Token->Token via Configured Router)
+Status: [x]
+
+Goal:
+- Let agents execute a one-shot token->token swap directly from runtime/skill without going through limit orders, using `coreContracts.router` (which may be the Slice 22 fee proxy).
+
+DoD:
+- [x] runtime CLI supports `xclaw-agent trade spot` with `--token-in/--token-out/--amount-in/--slippage-bps` and uses router `getAmountsOut` (net semantics) to compute `amountOutMin`.
+- [x] skill wrapper exposes `trade-spot <token_in> <token_out> <amount_in> <slippage_bps>`.
+- [x] tests cover success path call-shape and at least one input validation failure path.
+- [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` + skill command references updated.
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.

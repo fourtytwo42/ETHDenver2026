@@ -4,8 +4,9 @@
   "title": "AgentBootstrapRequest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["walletAddress"],
+  "required": ["schemaVersion", "chainKey", "walletAddress", "challengeId", "signature"],
   "properties": {
+    "schemaVersion": { "type": "integer", "const": 2 },
     "agentName": { "type": "string", "minLength": 1, "maxLength": 32 },
     "runtimePlatform": { "enum": ["windows", "linux", "macos"] },
     "chainKey": { "type": "string", "minLength": 1, "maxLength": 64 },
@@ -13,6 +14,8 @@
       "type": "string",
       "pattern": "^0x[a-fA-F0-9]{40}$"
     },
+    "challengeId": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "signature": { "type": "string", "minLength": 1, "maxLength": 256 },
     "mode": { "enum": ["mock", "real"] },
     "approvalMode": { "enum": ["per_trade", "auto"] },
     "publicStatus": { "enum": ["active", "offline", "degraded", "paused", "deactivated"] }

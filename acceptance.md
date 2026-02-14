@@ -1470,7 +1470,61 @@ Active slice: `Slice 15: Base Sepolia Promotion`
 - Added regression coverage in:
   - `apps/agent-runtime/tests/test_trade_path.py`
 - Regression command:
-  - `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS
+
+---
+
+## Slice 22 Acceptance Evidence
+
+Date (UTC): 2026-02-14
+Active slice: `Slice 22: Non-Upgradeable V2 Fee Router Proxy (0.5% Output Fee)`
+
+### Objective + scope lock
+- Objective: introduce an on-chain V2-compatible fee router proxy with fixed 50 bps output fee and net-after-fee semantics, validated on Hardhat local before Base Sepolia promotion.
+- Scope guard: no runtime trade call-surface changes beyond chain config router address change.
+
+### File-level evidence (Slice 22)
+- Contract:
+  - `infrastructure/contracts/XClawFeeRouterV2.sol`
+- Hardhat tests:
+  - `infrastructure/tests/fee-router.test.ts`
+- Deploy/verify scripts:
+  - `infrastructure/scripts/hardhat/deploy-local.ts`
+  - `infrastructure/scripts/hardhat/deploy-base-sepolia.ts`
+  - `infrastructure/scripts/hardhat/verify-local.ts`
+  - `infrastructure/scripts/hardhat/verify-base-sepolia.ts`
+- Chain constants:
+  - `config/chains/hardhat_local.json`
+
+### Required global gates
+- `npm run db:parity` -> PASS
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+- `npm run build` -> PASS
+
+### Hardhat local validation
+- `npm run hardhat:deploy-local` -> PASS (artifact written to `infrastructure/seed-data/hardhat-local-deploy.json`)
+- `npm run hardhat:verify-local` -> PASS (artifact written to `infrastructure/seed-data/hardhat-local-verify.json`)
+- `TS_NODE_PROJECT=tsconfig.hardhat.json npx hardhat test infrastructure/tests/fee-router.test.ts` -> PASS
+
+### Base Sepolia promotion (blocked)
+- Blocker: deploy environment variables were not available in this session:
+  - `BASE_SEPOLIA_RPC_URL`
+  - `BASE_SEPOLIA_DEPLOYER_PRIVATE_KEY`
+- Once available, run:
+  - `npm run hardhat:deploy-base-sepolia`
+  - `npm run hardhat:verify-base-sepolia`
+  - update `config/chains/base_sepolia.json` `coreContracts.router` to proxy and preserve `coreContracts.dexRouter`.
+
+### Base Sepolia promotion (evidence)
+- `npm run hardhat:deploy-base-sepolia` -> PASS (artifact written to `infrastructure/seed-data/base-sepolia-deploy.json`)
+- `npm run hardhat:verify-base-sepolia` -> PASS (artifact written to `infrastructure/seed-data/base-sepolia-verify.json`)
+- Net semantics spot-check:
+  - proxy `getAmountsOut(1e18,[WETH,USDC])` returns less than underlying by 50 bps (post-fee net quote).
+- `config/chains/base_sepolia.json` updated:
+  - `coreContracts.router` set to proxy router address
+  - `coreContracts.dexRouter` set to underlying router address
   - new checks: underpriced retry success, non-retryable fail-fast, retry budget exhaustion.
 
 ### Required global gates re-run
@@ -1509,6 +1563,39 @@ Active slice: `Slice 15: Base Sepolia Promotion`
 - Runtime env used:
   - `XCLAW_AGENT_HOME=/tmp/xclaw-s15-agent2/.xclaw-agent`
   - `XCLAW_API_BASE_URL=http://127.0.0.1:3001/api/v1`
+
+---
+
+## Slice 23 Acceptance Evidence
+
+Date (UTC): 2026-02-14
+Active slice: `Slice 23: Agent Spot Swap Command (Token->Token via Configured Router)`
+
+### Objective + scope lock
+- Objective: add a runtime/skill command to execute a one-shot token->token swap on-chain via `coreContracts.router` (fee-proxy compatible).
+- Scope guard: no API/schema/DB changes in this slice.
+
+### File-level evidence (Slice 23)
+- Runtime:
+  - `apps/agent-runtime/xclaw_agent/cli.py` (adds `xclaw-agent trade spot`)
+- Tests:
+  - `apps/agent-runtime/tests/test_trade_path.py` (spot swap success + invalid slippage)
+- Skill wrapper/docs:
+  - `skills/xclaw-agent/scripts/xclaw_agent_skill.py` (adds `trade-spot`)
+  - `skills/xclaw-agent/SKILL.md`
+  - `skills/xclaw-agent/references/commands.md`
+- Canonical docs:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+
+### Required gates (Slice 23)
+- `npm run db:parity` -> PASS
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+- `npm run build` -> PASS
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS
   - `XCLAW_AGENT_API_KEY=slice7_token_abc12345`
   - `XCLAW_WALLET_PASSPHRASE=passphrase-123`
 - Real trade execute:

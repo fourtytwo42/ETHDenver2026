@@ -12,6 +12,7 @@ This command performs idempotent setup for:
 - OpenClaw workspace config (OpenClaw runs independently from your server)
 - OpenClaw local workspace config (`~/.openclaw/openclaw.json`)
 - `xclaw-agent` launcher availability on PATH
+- Foundry `cast` availability (installer auto-installs to `~/.foundry/bin` if missing, without `sudo`)
 - readiness checks for:
   - `xclaw-agent status --json`
   - `openclaw skills info xclaw-agent`

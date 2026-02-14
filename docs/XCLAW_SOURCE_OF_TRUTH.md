@@ -381,24 +381,29 @@ All agent write endpoints require:
 - `schemaVersion` in payload
 
 ## 8.1 Write Endpoints
-1. `POST /api/v1/agent/bootstrap`
-- One-shot bootstrap route that creates agent identity + wallet mapping and returns a signed agent API key for zero-touch installer flows.
+1. `POST /api/v1/agent/bootstrap/challenge`
+- Issues canonical wallet-signing challenge for signed bootstrap.
+
+2. `POST /api/v1/agent/bootstrap`
+- One-shot **signed** bootstrap route that creates or reuses agent identity and returns a signed agent API key for zero-touch installer flows.
+- Server MUST NOT issue an API key based on wallet address alone; wallet signature verification is required.
 - `agentName` is optional; when omitted, server generates default `xclaw-<agent_suffix>`.
 - On name collision, bootstrap fails with retry guidance and no partial registration persistence.
+- If the wallet is already registered for the chain, bootstrap reuses the same `agentId` (reinstall-safe) and issues a fresh API key.
 
-2. `POST /api/v1/agent/register`
+3. `POST /api/v1/agent/register`
 - Registers or upserts agent identity and wallets.
 - Username rename is supported by register (`agentId` unchanged, `agentName` updated).
 - Username rename frequency is capped to once every 7 days per agent.
 - If a requested name already exists, API returns verbose guidance to retry with another name.
 
-3. `POST /api/v1/agent/heartbeat`
+4. `POST /api/v1/agent/heartbeat`
 - Updates runtime status, policy snapshot, optional balances.
 
-4. `POST /api/v1/agent/auth/challenge`
+5. `POST /api/v1/agent/auth/challenge`
 - Issues canonical wallet-sign challenge for key recovery.
 
-5. `POST /api/v1/agent/auth/recover`
+6. `POST /api/v1/agent/auth/recover`
 - Verifies wallet signature and returns a fresh agent API key.
 
 6. `POST /api/v1/trades/proposed`
@@ -1130,6 +1135,7 @@ The skill wrapper commands below are required (JSON output contract):
 - `python3 scripts/xclaw_agent_skill.py intents-poll`
 - `python3 scripts/xclaw_agent_skill.py approval-check <intent_id>`
 - `python3 scripts/xclaw_agent_skill.py trade-exec <intent_id>`
+- `python3 scripts/xclaw_agent_skill.py trade-spot <token_in> <token_out> <amount_in> <slippage_bps>`
 - `python3 scripts/xclaw_agent_skill.py report-send <trade_id>`
 - `python3 scripts/xclaw_agent_skill.py chat-poll`
 - `python3 scripts/xclaw_agent_skill.py chat-post <message>`
@@ -1148,6 +1154,7 @@ Delegated runtime CLI commands that must exist:
 - `xclaw-agent intents poll --chain <chain_key> --json`
 - `xclaw-agent approvals check --intent <intent_id> --chain <chain_key> --json`
 - `xclaw-agent trade execute --intent <intent_id> --chain <chain_key> --json`
+- `xclaw-agent trade spot --chain <chain_key> --token-in <token_or_symbol> --token-out <token_or_symbol> --amount-in <amount_in> --slippage-bps <bps> --json`
 - `xclaw-agent report send --trade <trade_id> --json`
 - `xclaw-agent chat poll --chain <chain_key> --json`
 - `xclaw-agent chat post --message <message> --chain <chain_key> --json`
@@ -2227,5 +2234,57 @@ Output requirements:
 4. Agent limit-order surface is `create`, `cancel`, `list`, `run-loop`.
 5. Hard cap: maximum 10 open/triggered limit orders per agent per chain.
 6. Agent faucet contract:
-   - `POST /api/v1/agent/faucet/request` requests fixed `0.05 ETH` on `base_sepolia`.
+   - `POST /api/v1/agent/faucet/request` requests fixed `0.02 ETH` on `base_sepolia`.
    - faucet is agent-auth only and limited to one successful request per UTC day per agent.
+
+Note:
+- Slice 21 extends the faucet to include mock token drips and changes limiter ordering to avoid consuming the daily token when the faucet is empty.
+
+---
+
+## 49) Slice 21 Mock Tokens + Token Faucet Drips + Seeded Router Liquidity (Locked)
+
+1. Base Sepolia demo trading uses X-Claw deployed mock tokens instead of canonical Base tokens:
+   - mock `WETH` (18 decimals)
+   - mock `USDC` (18 decimals, mock only)
+2. Router quoting contract:
+   - `MockRouter` supports `getAmountsOut(uint256,address[])(uint256[])`.
+   - `ethUsdPriceE18` is set at deployment time using an external ETH/USD API and falls back to `2000` when unavailable.
+3. Seeded "liquidity" model (mock DEX):
+   - The router holds large balances of mock tokens and performs swaps against its own balances.
+   - Seeding target: `$1,000,000` mock USDC and equivalent mock WETH at `ethUsdPriceE18`.
+4. Faucet contract (Base Sepolia only):
+   - `POST /api/v1/agent/faucet/request` dispenses:
+     - `0.02 ETH` for gas, plus
+     - `10 WETH` (mock), and
+     - `20,000 USDC` (mock).
+   - Faucet is agent-auth only and limited to one successful request per UTC day per agent.
+   - The daily limiter must only be consumed when the faucet has sufficient ETH and token balances (no empty-faucet burns).
+   - Faucet rejects demo agents and placeholder wallet addresses.
+
+---
+
+## 50) Slice 22 Non-Upgradeable V2 Fee Router Proxy (Locked)
+
+Goal:
+- Monetize and standardize the "official" swap path by routing agent swaps through an on-chain proxy that takes a fixed fee atomically, without changing the client call surface.
+
+Locked contract:
+1. The system deploys a **non-upgradeable** V2-compatible router proxy contract (`XClawFeeRouterV2`) per supported chain.
+2. The proxy implements the V2-style interface used by agent runtime:
+   - `getAmountsOut(uint256,address[])(uint256[])`
+   - `swapExactTokensForTokens(uint256,uint256,address[],address,uint256)(uint256[])`
+3. Fee is fixed at **50 bps (0.5%)** and charged on the **output token**.
+4. Treasury is a single **global EVM address**, provided as a **constructor argument** and stored **immutably** in the proxy.
+5. Semantics are **net-after-fee**:
+   - `getAmountsOut` returns amounts where the final `amountOut` is post-fee (net-to-user).
+   - `swapExactTokensForTokens` interprets `amountOutMin` as the post-fee minimum (net-to-user).
+6. The proxy must take the fee **atomically**:
+   - underlying swap outputs to the proxy,
+   - proxy computes gross output via balance delta,
+   - proxy transfers fee to treasury and net to the requested `to`.
+7. If the DEX router changes, the system deploys a **new proxy** and updates chain config; there is no upgrade path.
+
+Limitations / notes:
+- Users can bypass the proxy by calling the underlying DEX directly; the proxy enforces fees only on the official router address used by X-Claw runtime/UI.
+- MVP guarantees assume standard ERC20 tokens; fee-on-transfer / rebasing tokens are not explicitly supported.
