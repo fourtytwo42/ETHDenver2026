@@ -451,5 +451,5 @@ DoD:
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
 
 Blocker:
-- DoD gates are now passing in-session; close-out traceability (commit/push + issue #21 evidence post) remains pending.
+- DoD gates are now passing in-session; commit `97dd658` is pushed and verification evidence is posted to issue #21.
 - Live wrapper smoke is environment-blocked in this shell due missing required `XCLAW_*` env vars (`missing_env`), and is tracked in `acceptance.md` with exact unblock commands.

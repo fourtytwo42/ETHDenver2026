@@ -73,4 +73,4 @@ Active slice: `Slice 26: Agent Skill Robustness Hardening (Timeouts + Identity +
 - [x] Run all required gates (`db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`) and record evidence.
 - [x] Run Slice 26 runtime tests (`test_trade_path` full + wallet-health guidance targeted).
 - [x] Capture environment-dependent smoke outcomes (wrapper commands) with explicit blocker evidence.
-- [ ] Commit/push Slice 26 close-out and post verification evidence + commit hash to issue #21.
+- [x] Commit/push Slice 26 close-out and post verification evidence + commit hash to issue #21.
