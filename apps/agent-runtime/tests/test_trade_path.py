@@ -440,8 +440,11 @@ class TradePathRuntimeTests(unittest.TestCase):
             cli.main(["offdex"])
 
     def test_wallet_create_command_is_not_available(self) -> None:
-        with self.assertRaises(SystemExit):
-            cli.main(["wallet", "create", "--chain", "hardhat_local", "--json"])
+        # Wallet create exists for installer/bootstrap, but should fail in non-interactive
+        # mode when passphrase is not provided.
+        args = argparse.Namespace(chain="hardhat_local", json=True)
+        code = cli.cmd_wallet_create(args)
+        self.assertNotEqual(code, 0)
 
     def test_wallet_import_command_is_not_available(self) -> None:
         with self.assertRaises(SystemExit):

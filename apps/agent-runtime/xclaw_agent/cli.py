@@ -3533,6 +3533,14 @@ def build_parser() -> argparse.ArgumentParser:
     w_tbal.add_argument("--json", action="store_true")
     w_tbal.set_defaults(func=cmd_wallet_token_balance)
 
+    # Wallet lifecycle commands are intentionally not exposed via the OpenClaw skill wrapper,
+    # but the installer/bootstrap flow relies on the runtime being able to create a wallet
+    # non-interactively when missing.
+    w_create = wallet_sub.add_parser("create")
+    w_create.add_argument("--chain", required=True)
+    w_create.add_argument("--json", action="store_true")
+    w_create.set_defaults(func=cmd_wallet_create)
+
     return p
 
 

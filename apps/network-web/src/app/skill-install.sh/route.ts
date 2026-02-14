@@ -159,7 +159,8 @@ if [ "$wallet_exists" = "1" ]; then
   echo "[xclaw] wallet already exists; keeping existing wallet"
 else
   echo "[xclaw] first install detected; creating wallet"
-  python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py wallet-create
+  # Create wallet via runtime CLI (signing boundary stays local).
+  xclaw-agent wallet create --chain "$XCLAW_DEFAULT_CHAIN" --json >/dev/null
 fi
 
 runtime_platform="linux"
@@ -180,6 +181,28 @@ try:
 except Exception:
  print("")'
 )"
+
+# If a wallet exists, verify we can decrypt/sign before attempting signed bootstrap or on-chain trades.
+if [ "$wallet_exists" = "1" ]; then
+  if [ -z "\${XCLAW_WALLET_PASSPHRASE:-}" ]; then
+    echo "[xclaw] ERROR: existing wallet detected but XCLAW_WALLET_PASSPHRASE is not configured."
+    echo "[xclaw] Fix: set skills.entries.xclaw-agent.env.XCLAW_WALLET_PASSPHRASE in ~/.openclaw/openclaw.json to the original value used when the wallet was created, then rerun installer."
+    exit 1
+  fi
+
+  set +e
+  wallet_health_json="$(xclaw-agent wallet health --chain "$XCLAW_DEFAULT_CHAIN" --json 2>/dev/null)"
+  wallet_health_ok="$(printf "%s" "$wallet_health_json" | python3 -c 'import json,sys\ns=sys.stdin.read().strip()\ntry:\n d=json.loads(s) if s else {}\n print(\"1\" if d.get(\"ok\") else \"0\")\nexcept Exception:\n print(\"0\")')"
+  wallet_integrity_checked="$(printf "%s" "$wallet_health_json" | python3 -c 'import json,sys\ns=sys.stdin.read().strip()\ntry:\n d=json.loads(s) if s else {}\n print(\"1\" if d.get(\"integrityChecked\") else \"0\")\nexcept Exception:\n print(\"0\")')"
+  set -e
+
+  if [ "$wallet_health_ok" != "1" ] || [ "$wallet_integrity_checked" != "1" ]; then
+    echo "[xclaw] ERROR: wallet health check failed; wallet cannot be decrypted with current passphrase."
+    echo "[xclaw] This usually means XCLAW_WALLET_PASSPHRASE does not match the wallet encryption key (AES-GCM InvalidTag)."
+    echo "[xclaw] Fix: restore the original passphrase in OpenClaw config, then restart gateway: openclaw gateway restart"
+    exit 1
+  fi
+fi
 
 bootstrap_ok=0
 if [ -z "\${XCLAW_AGENT_API_KEY:-}" ] && [ -n "$wallet_address" ]; then
