@@ -155,8 +155,13 @@ except Exception:
 bootstrap_ok=0
 if [ -z "\${XCLAW_AGENT_API_KEY:-}" ] && [ -n "$wallet_address" ]; then
   echo "[xclaw] no API key provided; requesting auto-bootstrap credentials from server"
+  agent_name_field=""
+  if [ -n "\${XCLAW_AGENT_NAME:-}" ]; then
+    agent_name_field="\"agentName\": \"$XCLAW_AGENT_NAME\","
+  fi
   bootstrap_payload="$(cat <<JSON
 {
+  $agent_name_field
   "walletAddress": "$wallet_address",
   "runtimePlatform": "$runtime_platform",
   "chainKey": "$XCLAW_DEFAULT_CHAIN",
@@ -168,7 +173,7 @@ JSON
 )"
   bootstrap_response="$(curl -fsS "$XCLAW_API_BASE_URL/agent/bootstrap" \
     -H "Content-Type: application/json" \
-    -d "$bootstrap_payload" || true)"
+    -d "$bootstrap_payload")"
   printf "%s\n" "$bootstrap_response"
   if [ -n "$bootstrap_response" ]; then
     boot_agent_id="$(printf "%s" "$bootstrap_response" | python3 -c 'import json,sys;
@@ -183,10 +188,18 @@ try:
  print(d.get("agentApiKey",""))
 except Exception:
  print("")')"
+    boot_agent_name="$(printf "%s" "$bootstrap_response" | python3 -c 'import json,sys;
+try:
+ d=json.load(sys.stdin)
+ print(d.get("agentName",""))
+except Exception:
+ print("")')"
     if [ -n "$boot_agent_id" ] && [ -n "$boot_api_key" ]; then
       export XCLAW_AGENT_ID="$boot_agent_id"
       export XCLAW_AGENT_API_KEY="$boot_api_key"
-      export XCLAW_AGENT_NAME="\${XCLAW_AGENT_NAME:-xclaw-\${XCLAW_AGENT_ID#ag_}}"
+      if [ -n "$boot_agent_name" ]; then
+        export XCLAW_AGENT_NAME="$boot_agent_name"
+      fi
       bootstrap_ok=1
       openclaw config set skills.entries.xclaw-agent.apiKey "$XCLAW_AGENT_API_KEY" || true
       openclaw config set skills.entries.xclaw-agent.env.XCLAW_AGENT_API_KEY "$XCLAW_AGENT_API_KEY" || true
@@ -213,10 +226,6 @@ except Exception:
     export XCLAW_AGENT_ID="$inferred_agent_id"
     echo "[xclaw] inferred agent id: $XCLAW_AGENT_ID"
   fi
-fi
-
-if [ -z "\${XCLAW_AGENT_NAME:-}" ] && [ -n "\${XCLAW_AGENT_ID:-}" ]; then
-  export XCLAW_AGENT_NAME="xclaw-\${XCLAW_AGENT_ID#ag_}"
 fi
 
 if [ "$bootstrap_ok" = "1" ]; then
@@ -250,13 +259,13 @@ JSON
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $XCLAW_AGENT_API_KEY" \
     -H "Idempotency-Key: $register_key" \
-    -d "$register_payload" || true
+    -d "$register_payload"
 
   curl -fsS "$XCLAW_API_BASE_URL/agent/heartbeat" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $XCLAW_AGENT_API_KEY" \
     -H "Idempotency-Key: $heartbeat_key" \
-    -d "$heartbeat_payload" || true
+    -d "$heartbeat_payload"
   echo "[xclaw] register + heartbeat attempted"
 else
   echo "[xclaw] skipped auto-register. Provide XCLAW_AGENT_API_KEY and XCLAW_AGENT_ID, or ensure /api/v1/agent/bootstrap is enabled."

@@ -1653,7 +1653,7 @@ Active slice: `Slice 18: Hosted Agent Bootstrap Skill Contract`
 - `npm run build` -> PASS (route list includes `/skill.md`)
 - `curl -sSf http://127.0.0.1:3000/skill.md` -> PASS (plain-text bootstrap instructions returned with setup + wallet + register + heartbeat sections)
 - `curl -sSf http://127.0.0.1:3000/skill-install.sh` -> PASS (hosted installer script returned)
-- `curl -sSf -X POST http://127.0.0.1:3000/api/v1/agent/bootstrap -H 'content-type: application/json' -d '{"walletAddress":"0x0000000000000000000000000000000000000001"}'` -> PASS (returns `agentId` + `agentApiKey`)
+- `curl -sSf -X POST http://127.0.0.1:3000/api/v1/agent/bootstrap -H 'content-type: application/json' -d '{"agentName":"slice18-bootstrap-example","walletAddress":"0x0000000000000000000000000000000000000001"}'` -> PASS (returns `agentId` + `agentApiKey`)
 - `python3 skills/xclaw-agent/scripts/setup_agent_skill.py` -> PASS (`managedSkillPath: ~/.openclaw/skills/xclaw-agent`)
 - `openclaw skills info xclaw-agent` -> PASS (`Ready`, OpenClaw discovers skill for tool-call usage)
 

@@ -117,6 +117,8 @@ paths:
           description: Bootstrap succeeded with issued credentials.
         '400':
           $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '503':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/agent/auth/challenge:
@@ -804,7 +806,7 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/public/activity:
     get:
-      summary: Read public activity feed.
+      summary: Read public trading activity feed (trade lifecycle events only).
       parameters:
         - name: limit
           in: query

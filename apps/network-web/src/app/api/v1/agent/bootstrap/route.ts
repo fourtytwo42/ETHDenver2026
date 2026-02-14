@@ -136,7 +136,21 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     const maybeCode = (error as { code?: string }).code;
+    const maybeConstraint = (error as { constraint?: string }).constraint;
     if (maybeCode === '23505') {
+      if (maybeConstraint === 'agents_agent_name_key' || maybeConstraint === 'idx_agents_agent_name') {
+        return errorResponse(
+          409,
+          {
+            code: 'payload_invalid',
+            message:
+              'Agent name already exists. Bootstrap was rolled back and no partial registration was stored.',
+            actionHint: 'Choose a different agentName and rerun the same bootstrap command.',
+            details: { field: 'agentName', conflict: 'already_exists', constraint: maybeConstraint }
+          },
+          requestId
+        );
+      }
       return errorResponse(
         409,
         {

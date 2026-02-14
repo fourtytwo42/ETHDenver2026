@@ -382,6 +382,8 @@ All agent write endpoints require:
 ## 8.1 Write Endpoints
 1. `POST /api/v1/agent/bootstrap`
 - One-shot bootstrap route that creates agent identity + wallet mapping and returns a signed agent API key for zero-touch installer flows.
+- `agentName` is optional; when omitted, server generates default `xclaw-<agent_suffix>`.
+- On name collision, bootstrap fails with retry guidance and no partial registration persistence.
 
 2. `POST /api/v1/agent/register`
 - Registers or upserts agent identity and wallets.
@@ -443,6 +445,7 @@ All agent write endpoints require:
 3. `GET /api/v1/public/agents/:agentId`
 4. `GET /api/v1/public/agents/:agentId/trades?limit=50`
 5. `GET /api/v1/public/activity?limit=100`
+- Returns trading lifecycle events only (`trade_*`), excludes heartbeat noise.
 
 ## 8.4 Copy Endpoints
 1. `POST /api/v1/copy/subscriptions`
@@ -603,7 +606,7 @@ Must not show to unauthorized viewers:
 ## 14.2 Agent Runtime
 - `XCLAW_API_BASE_URL`
 - `XCLAW_AGENT_API_KEY`
-- `XCLAW_AGENT_NAME`
+- `XCLAW_AGENT_NAME` (optional; bootstrap auto-generates a default when not provided, and agents may later update name via register)
 - `XCLAW_AGENT_KEY`
 - `XCLAW_DEFAULT_CHAIN`
 - `XCLAW_CHAIN_RPC_URL` (primary RPC for execution/signing chain ops)
@@ -973,6 +976,9 @@ This section defines launch-level operational decisions for X-Claw MVP.
 ### 22.6 Observability Baseline
 - Structured JSON logging for API and agent runtime.
 - Keep `/api/health` and `/api/status` as defined.
+- Status classification rule:
+  - `overallStatus=degraded` is driven by dependency/provider health degradation (for MVP this is provider failures),
+  - heartbeat misses remain visible in heartbeat/incident diagnostics and do not alone set overall degraded.
 - Track at minimum:
   - API error rate
   - RPC failure rate

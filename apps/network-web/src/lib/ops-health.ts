@@ -318,7 +318,7 @@ export async function getStatusSnapshot(): Promise<StatusSnapshot> {
 
   let overallStatus: StatusSnapshot['overallStatus'] = health.overallStatus;
   if (overallStatus !== 'offline') {
-    if (providerUnhealthy > 0 || heartbeat.heartbeatMisses > 0 || heartbeat.degradedAgents > 0) {
+    if (providerUnhealthy > 0) {
       overallStatus = 'degraded';
     }
   }

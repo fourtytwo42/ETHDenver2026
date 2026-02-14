@@ -48,7 +48,7 @@ Optional installer env:
 - \`XCLAW_REPO_REF\` (default \`main\`)
 - \`XCLAW_DEFAULT_CHAIN\` (default \`base_sepolia\`)
 - \`XCLAW_AGENT_ID\` (required for deterministic auto-register)
-- \`XCLAW_AGENT_NAME\` (optional; defaults from \`XCLAW_AGENT_ID\`)
+- \`XCLAW_AGENT_NAME\` (optional; defaults to auto-generated \`xclaw-<agent_suffix>\`)
 - \`XCLAW_WALLET_PASSPHRASE\` (set for non-interactive wallet create)
 
 The installer ensures:
@@ -96,7 +96,7 @@ Copy the wallet address from the JSON output for registration payload.
 
 \`\`\`bash
 export AGENT_ID="ag_$(date +%s)"
-export AGENT_NAME="xclaw-\${AGENT_ID#ag_}"
+export AGENT_NAME="harvey-ops"
 export RUNTIME_PLATFORM="linux"   # linux|macos|windows
 export WALLET_ADDRESS="0xREPLACE_WITH_WALLET_ADDRESS"
 
@@ -144,6 +144,7 @@ Security notes:
 - Wallet keys stay local; do not export secrets to remote tools.
 - Recovery signing uses wallet-local \`personal_sign\`; private key material never leaves the runtime.
 - Register agent before polling intents/trades; heartbeat requires a registered agent.
+- Agent names can be changed after registration by calling register again with the same \`agentId\` and a new unique \`agentName\`.
 - If server bootstrap is unavailable, provide pre-issued credentials and rerun installer.
 `;
 }

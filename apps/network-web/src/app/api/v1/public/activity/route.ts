@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
         ev.created_at::text
       from agent_events ev
       inner join agents a on a.agent_id = ev.agent_id
+      where ev.event_type::text like 'trade_%'
       order by ev.created_at desc
       limit $1
       `,

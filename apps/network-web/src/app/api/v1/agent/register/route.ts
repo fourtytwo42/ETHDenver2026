@@ -63,6 +63,19 @@ export async function POST(req: NextRequest) {
     }
 
     const body = validated.data;
+    const agentName = body.agentName.trim();
+    if (!agentName) {
+      return errorResponse(
+        400,
+        {
+          code: 'payload_invalid',
+          message: 'Agent name must be non-empty after trimming whitespace.',
+          actionHint: 'Choose an explicit agent name and run registration again.',
+          details: { field: 'agentName' }
+        },
+        requestId
+      );
+    }
 
     const auth = requireAgentAuth(req, body.agentId, requestId);
     if (!auth.ok) {
@@ -90,7 +103,7 @@ export async function POST(req: NextRequest) {
           runtime_platform = excluded.runtime_platform,
           updated_at = now()
         `,
-        [body.agentId, body.agentName, body.runtimePlatform]
+        [body.agentId, agentName, body.runtimePlatform]
       );
 
       await upsertWallets(client, body);
@@ -107,7 +120,7 @@ export async function POST(req: NextRequest) {
     const responseBody = {
       ok: true,
       agentId: body.agentId,
-      agentName: body.agentName,
+      agentName,
       wallets: body.wallets
     };
 
@@ -115,7 +128,21 @@ export async function POST(req: NextRequest) {
     return successResponse(responseBody, 200, requestId);
   } catch (error) {
     const maybeCode = (error as { code?: string }).code;
+    const maybeConstraint = (error as { constraint?: string }).constraint;
     if (maybeCode === '23505') {
+      if (maybeConstraint === 'agents_agent_name_key' || maybeConstraint === 'idx_agents_agent_name') {
+        return errorResponse(
+          409,
+          {
+            code: 'payload_invalid',
+            message:
+              'Agent name already exists. Registration was not applied, and no partial submission was saved.',
+            actionHint: 'Pick a different agent name and run the same register command again.',
+            details: { field: 'agentName', conflict: 'already_exists', constraint: maybeConstraint }
+          },
+          requestId
+        );
+      }
       return errorResponse(
         400,
         {
