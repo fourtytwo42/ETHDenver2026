@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 
-import { Wallet, JsonRpcProvider, Contract } from 'ethers';
+import { Wallet, JsonRpcProvider, Contract, isAddress } from 'ethers';
 
 import { requireAgentAuth } from '@/lib/agent-auth';
 import { chainRpcUrl, getChainConfig } from '@/lib/chains';
@@ -16,6 +16,9 @@ export const runtime = 'nodejs';
 const DRIP_WEI = '20000000000000000'; // 0.02 ETH
 const DRIP_WETH_WEI = '10000000000000000000'; // 10.0 WETH (mock 18 decimals)
 const DRIP_USDC_WEI = '20000000000000000000000'; // 20000.0 USDC (mock 18 decimals)
+// Rough buffer to ensure we don't attempt drips when the faucet can't cover gas (EIP-1559 spikes, 3 txs).
+// This is not a guarantee, but prevents the common "insufficient funds for gas + value" failure mode.
+const GAS_BUFFER_MULTIPLIER_BPS = 12000; // 1.2x
 
 const ERC20_ABI = [
   'function balanceOf(address owner) view returns (uint256)',
@@ -120,6 +123,17 @@ export async function POST(req: NextRequest) {
 
     const recipient = walletResult.rows[0].address;
     const trimmedRecipient = recipient.trim();
+    if (!isAddress(trimmedRecipient)) {
+      return errorResponse(
+        400,
+        {
+          code: 'payload_invalid',
+          message: 'Agent wallet address is not a valid EVM address.',
+          actionHint: 'Re-register the agent wallet address and retry.'
+        },
+        requestId
+      );
+    }
     const lower = trimmedRecipient.toLowerCase();
     if (
       lower === '0x0000000000000000000000000000000000000000' ||
@@ -151,19 +165,7 @@ export async function POST(req: NextRequest) {
 
     const provider = new JsonRpcProvider(rpcUrl);
     const signer = new Wallet(faucetPrivateKey, provider);
-    const faucetBalance = await provider.getBalance(signer.address);
     const dripAmount = BigInt(DRIP_WEI);
-    if (faucetBalance < dripAmount) {
-      return errorResponse(
-        503,
-        {
-          code: 'internal_error',
-          message: 'Faucet wallet has insufficient funds.',
-          actionHint: 'Top up faucet wallet on base_sepolia, then retry.'
-        },
-        requestId
-      );
-    }
 
     // Token drips use chain config canonical token addresses. In Slice 21 this is expected to be
     // the X-Claw deployed mock WETH/USDC, not the canonical Base token addresses.
@@ -200,6 +202,38 @@ export async function POST(req: NextRequest) {
           details: {
             wethAddress: wethAddr,
             usdcAddress: usdcAddr
+          }
+        },
+        requestId
+      );
+    }
+
+    // Ensure faucet has enough ETH to cover value transfer + gas for all 3 txs (2 ERC20 + 1 ETH).
+    const faucetBalance = await provider.getBalance(signer.address);
+    const feeData = await provider.getFeeData();
+    const maxFeePerGas = feeData.maxFeePerGas ?? feeData.gasPrice ?? BigInt('1000000000'); // 1 gwei fallback
+
+    // Estimate gas for transfers; this is best-effort and may differ slightly at execution time.
+    const [gasWeth, gasUsdc, gasEth] = await Promise.all([
+      signer.estimateGas(await weth.transfer.populateTransaction(trimmedRecipient, dripWeth)),
+      signer.estimateGas(await usdc.transfer.populateTransaction(trimmedRecipient, dripUsdc)),
+      signer.estimateGas({ to: trimmedRecipient, value: dripAmount })
+    ]);
+
+    const gasSum = gasWeth + gasUsdc + gasEth;
+    const gasCost = (gasSum * maxFeePerGas * BigInt(GAS_BUFFER_MULTIPLIER_BPS)) / BigInt(10000);
+    const requiredEth = dripAmount + gasCost;
+    if (faucetBalance < requiredEth) {
+      return errorResponse(
+        503,
+        {
+          code: 'internal_error',
+          message: 'Faucet wallet has insufficient ETH to cover drip plus gas.',
+          actionHint: 'Top up faucet wallet on base_sepolia, then retry.',
+          details: {
+            faucetAddress: signer.address,
+            requiredWei: requiredEth.toString(),
+            balanceWei: faucetBalance.toString()
           }
         },
         requestId

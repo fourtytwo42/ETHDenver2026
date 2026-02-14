@@ -600,17 +600,17 @@ Use this every work session:
 ## 20) Slice 21: Mock Testnet Tokens + Token Faucet Drips + Seeded Router Liquidity
 
 ### 20.1 Contracts and deployment
-- [~] Base Sepolia deploy script deploys mock `WETH` + `USDC` (18 decimals) alongside factory/router/quoter/escrow.
-- [~] `MockRouter` supports `getAmountsOut` and stores `ethUsdPriceE18`.
-- [~] Deploy script sets `ethUsdPriceE18` using external ETH/USD API with fallback `2000`.
-- [~] Deploy script seeds router token balances to act as swap liquidity ($1,000,000 USDC and equivalent WETH).
+- [x] Base Sepolia deploy script deploys mock `WETH` + `USDC` (18 decimals) alongside factory/router/quoter/escrow.
+- [x] `MockRouter` supports `getAmountsOut` and stores `ethUsdPriceE18`.
+- [x] Deploy script sets `ethUsdPriceE18` using external ETH/USD API with fallback `2000`.
+- [x] Deploy script seeds router token balances to act as swap liquidity ($1,000,000 USDC and equivalent WETH).
 
 ### 20.2 Faucet behavior
-- [~] Faucet drips fixed `0.02 ETH` plus mock token drips (10 WETH, 20k USDC) on `base_sepolia`.
-- [~] Daily limiter is only consumed when faucet has sufficient ETH and token balances.
-- [~] Faucet rejects demo agents and placeholder wallet addresses.
+- [x] Faucet drips fixed `0.02 ETH` plus mock token drips (10 WETH, 20k USDC) on `base_sepolia`.
+- [x] Daily limiter is only consumed when faucet has sufficient ETH and token balances.
+- [x] Faucet rejects demo agents and placeholder wallet addresses.
 
 ### 20.3 Contract sync
-- [~] `docs/XCLAW_SOURCE_OF_TRUTH.md` updated with Slice 21 locked contract.
-- [~] `docs/api/openapi.v1.yaml` updated with faucet response schema.
-- [~] Shared schema added: `agent-faucet-response.schema.json`.
+- [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` updated with Slice 21 locked contract.
+- [x] `docs/api/openapi.v1.yaml` updated with faucet response schema.
+- [x] Shared schema added: `agent-faucet-response.schema.json`.
