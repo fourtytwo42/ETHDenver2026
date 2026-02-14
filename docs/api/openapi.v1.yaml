@@ -141,7 +141,7 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/agent/faucet/request:
     post:
-      summary: Request one fixed testnet ETH faucet drip for authenticated agent wallet.
+      summary: Request one fixed testnet faucet drip (ETH + mock WETH/USDC) for authenticated agent wallet.
       security:
         - agentBearer: []
       requestBody:
@@ -153,6 +153,10 @@ paths:
       responses:
         '200':
           description: Faucet transfer submitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentFaucetResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -163,7 +167,7 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/agent/bootstrap:
     post:
-      summary: One-shot agent bootstrap that creates agent identity and returns signed API token.
+      summary: One-shot signed bootstrap that creates or reuses agent identity and returns signed API token.
       security: []
       requestBody:
         required: true
@@ -177,6 +181,27 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/agent/bootstrap/challenge:
+    post:
+      summary: Issue a canonical wallet-signing challenge for signed bootstrap.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentBootstrapChallengeRequest'
+      responses:
+        '200':
+          description: Challenge issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentBootstrapChallengeResponse'
+        '400':
           $ref: '#/components/responses/ErrorResponse'
         '503':
           $ref: '#/components/responses/ErrorResponse'
@@ -1287,8 +1312,11 @@ components:
                 pattern: '^0x[a-fA-F0-9]{40}$'
     AgentBootstrapRequest:
       type: object
-      required: [walletAddress]
+      required: [schemaVersion, chainKey, walletAddress, challengeId, signature]
       properties:
+        schemaVersion:
+          type: integer
+          enum: [2]
         agentName:
           type: string
           minLength: 1
@@ -1301,6 +1329,10 @@ components:
         walletAddress:
           type: string
           pattern: '^0x[a-fA-F0-9]{40}$'
+        challengeId:
+          type: string
+        signature:
+          type: string
         mode:
           type: string
           enum: [mock, real]
@@ -1310,6 +1342,35 @@ components:
         publicStatus:
           type: string
           enum: [active, offline, degraded, paused, deactivated]
+    AgentBootstrapChallengeRequest:
+      type: object
+      required: [schemaVersion, chainKey, walletAddress]
+      properties:
+        schemaVersion:
+          type: integer
+          enum: [1]
+        chainKey:
+          type: string
+        walletAddress:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+    AgentBootstrapChallengeResponse:
+      type: object
+      required: [ok, challengeId, challengeMessage, expiresAt, scheme]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+        challengeId:
+          type: string
+        challengeMessage:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        scheme:
+          type: string
+          enum: [eip191_personal_sign]
     AgentHeartbeatRequest:
       type: object
       required: [schemaVersion, agentId, publicStatus, mode, approvalMode]
@@ -1624,6 +1685,38 @@ components:
           type: string
         chainKey:
           type: string
+    AgentFaucetResponse:
+      type: object
+      required: [ok, agentId, chainKey, to, amountWei, txHash, tokenDrips]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+        agentId:
+          type: string
+        chainKey:
+          type: string
+        to:
+          type: string
+        amountWei:
+          type: string
+        txHash:
+          type: string
+        tokenDrips:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            required: [token, tokenAddress, amountWei, txHash]
+            properties:
+              token:
+                type: string
+              tokenAddress:
+                type: string
+              amountWei:
+                type: string
+              txHash:
+                type: string
     AgentLimitOrderCreateRequest:
       type: object
       required: [schemaVersion, agentId, chainKey, mode, side, tokenIn, tokenOut, amountIn, limitPrice, slippageBps]

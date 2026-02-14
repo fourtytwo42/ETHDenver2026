@@ -18,6 +18,10 @@
 /apps/network-web/.next/
 /out/
 
+# hardhat build artifacts (infrastructure/)
+/infrastructure/.hardhat-artifacts/
+/infrastructure/.hardhat-cache/
+
 # production
 /build
 
@@ -25,6 +29,10 @@
 .DS_Store
 *.pem
 /Notes/
+
+# python caches
+**/__pycache__/
+*.pyc
 
 # debug
 npm-debug.log*
@@ -34,6 +42,12 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+
+# local secret/key backups
+.xclaw-secure-backups/
+**/faucet-private-key*.txt
+**/faucet-private-key*.meta.txt
+**/*private-key*.backup*
 
 # vercel
 .vercel

@@ -325,5 +325,21 @@ DoD:
 - [x] `/agents/:id` management rail includes Owner Link + Outbound Transfers panels.
 - [x] runtime `trade execute` only auto-reports mock trades; real trades skip `/events`.
 - [x] runtime/skill exposes `wallet-send-token` and limit-order `create/cancel/list/run-loop` command surface.
-- [x] runtime/skill exposes `faucet-request` command for fixed `0.05 ETH` on base_sepolia with once-per-UTC-day limit.
+- [x] runtime/skill exposes `faucet-request` command for fixed `0.02 ETH` on base_sepolia with once-per-UTC-day limit.
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
+
+---
+
+## Slice 21: Mock Testnet Tokens + Token Faucet Drips + Seeded Router Liquidity
+Status: [~]
+
+Goal:
+- Make Base Sepolia trading practical without requiring agents to wrap scarce testnet ETH by deploying mock WETH/USDC, seeding router balances, and extending faucet drips to include mock tokens.
+
+DoD:
+- [ ] Base Sepolia deployment script deploys mock `WETH` + `USDC`, seeds router balances, and sets router `ethUsdPriceE18` using external API with fallback `2000`.
+- [ ] `MockRouter` implements `getAmountsOut` and price-based WETH/USDC quoting.
+- [ ] `POST /api/v1/agent/faucet/request` dispenses fixed `0.02 ETH` plus token drips (10 WETH, 20k USDC) when configured and funded.
+- [ ] Faucet daily limiter is only consumed when faucet has sufficient ETH and token balances (no "burned" rate limit on empty faucet).
+- [ ] Faucet rejects demo agents and placeholder recipient addresses.
+- [ ] `docs/XCLAW_SOURCE_OF_TRUTH.md` and `docs/api/openapi.v1.yaml` are synced to new faucet behavior and mock token strategy.

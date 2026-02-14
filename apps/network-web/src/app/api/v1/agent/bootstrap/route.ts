@@ -1,20 +1,26 @@
 import type { NextRequest } from 'next/server';
 
+import { verifyMessage } from 'ethers';
+
 import { issueSignedAgentToken } from '@/lib/agent-token';
 import { withTransaction } from '@/lib/db';
 import { errorResponse, internalErrorResponse, successResponse } from '@/lib/errors';
 import { parseJsonBody } from '@/lib/http';
 import { makeId } from '@/lib/ids';
+import { getRedisClient } from '@/lib/redis';
 import { getRequestId } from '@/lib/request-id';
 import { validatePayload } from '@/lib/validation';
 
 export const runtime = 'nodejs';
 
 type BootstrapRequest = {
+  schemaVersion: number;
   agentName?: string;
   runtimePlatform?: 'windows' | 'linux' | 'macos';
   chainKey?: string;
   walletAddress: string;
+  challengeId: string;
+  signature: string;
   mode?: 'mock' | 'real';
   approvalMode?: 'per_trade' | 'auto';
   publicStatus?: 'active' | 'offline' | 'degraded' | 'paused' | 'deactivated';
@@ -53,13 +59,106 @@ export async function POST(req: NextRequest) {
     }
 
     const body = validated.data;
-    const agentId = makeId('ag');
-    const agentName = normalizeAgentName(body.agentName, agentId);
     const runtimePlatform = body.runtimePlatform ?? 'linux';
     const chainKey = body.chainKey ?? 'base_sepolia';
     const mode = body.mode ?? 'mock';
     const approvalMode = body.approvalMode ?? 'per_trade';
     const publicStatus = body.publicStatus ?? 'active';
+
+    // Verify bootstrap challenge signature (no address-only issuance).
+    const redis = await getRedisClient();
+    const challengeKey = `xclaw:bootstrap_challenge:v1:${body.challengeId}`;
+    const raw = await redis.get(challengeKey);
+    if (!raw) {
+      return errorResponse(
+        404,
+        {
+          code: 'payload_invalid',
+          message: 'Bootstrap challenge was not found or expired.',
+          actionHint: 'Request a fresh bootstrap challenge and retry.'
+        },
+        requestId
+      );
+    }
+
+    type BootstrapChallenge = { chainKey: string; walletAddress: string; challengeMessage: string; expiresAt: string };
+    let challenge: BootstrapChallenge | null = null;
+    try {
+      challenge = JSON.parse(raw) as BootstrapChallenge;
+    } catch {
+      challenge = null;
+    }
+    if (!challenge?.challengeMessage || !challenge.walletAddress || !challenge.chainKey) {
+      return errorResponse(
+        503,
+        {
+          code: 'internal_error',
+          message: 'Bootstrap challenge store is corrupted.',
+          actionHint: 'Request a fresh bootstrap challenge and retry.'
+        },
+        requestId
+      );
+    }
+
+    if (challenge.chainKey !== chainKey) {
+      return errorResponse(
+        400,
+        {
+          code: 'payload_invalid',
+          message: 'Bootstrap chainKey does not match issued challenge.',
+          actionHint: 'Request a fresh challenge for the requested chain and retry.'
+        },
+        requestId
+      );
+    }
+
+    if (challenge.walletAddress.toLowerCase() !== body.walletAddress.toLowerCase()) {
+      return errorResponse(
+        401,
+        {
+          code: 'auth_invalid',
+          message: 'Bootstrap walletAddress does not match issued challenge.',
+          actionHint: 'Use the walletAddress used when requesting the challenge.'
+        },
+        requestId
+      );
+    }
+
+    const recoveredAddress = verifyMessage(challenge.challengeMessage, body.signature);
+    if (!recoveredAddress || recoveredAddress.toLowerCase() !== body.walletAddress.toLowerCase()) {
+      return errorResponse(
+        401,
+        {
+          code: 'auth_invalid',
+          message: 'Wallet signature verification failed for bootstrap request.',
+          actionHint: 'Sign the exact challenge message with the wallet key and retry.'
+        },
+        requestId
+      );
+    }
+
+    // Consume challenge (one-time use).
+    await redis.del(challengeKey);
+
+    // If this wallet is already registered, reuse the same agentId (reinstall-safe).
+    const existing = await withTransaction(async (client) => {
+      const found = await client.query<{ agent_id: string; agent_name: string }>(
+        `
+        select a.agent_id, a.agent_name
+        from agent_wallets w
+        join agents a on a.agent_id = w.agent_id
+        where w.chain_key = $1
+          and lower(w.address) = lower($2)
+        order by a.created_at asc
+        limit 1
+        `,
+        [chainKey, body.walletAddress]
+      );
+      return found.rows[0] ?? null;
+    });
+
+    const agentId = existing?.agent_id ?? makeId('ag');
+    const agentName = existing?.agent_name ?? normalizeAgentName(body.agentName, agentId);
 
     const agentApiKey = issueSignedAgentToken(agentId);
     if (!agentApiKey) {
@@ -74,7 +173,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await withTransaction(async (client) => {
+    if (!existing) {
+      await withTransaction(async (client) => {
       await client.query(
         `
         insert into agents (
@@ -118,7 +218,8 @@ export async function POST(req: NextRequest) {
           })
         ]
       );
-    });
+      });
+    }
 
     return successResponse(
       {

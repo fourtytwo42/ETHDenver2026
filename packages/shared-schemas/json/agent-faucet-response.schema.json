@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "agentId", "chainKey", "to", "amountWei", "txHash", "tokenDrips"],
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "agentId": { "type": "string", "minLength": 1 },
+    "chainKey": { "type": "string", "minLength": 1 },
+    "to": { "type": "string", "minLength": 1 },
+    "amountWei": { "type": "string", "minLength": 1 },
+    "txHash": { "type": "string", "minLength": 1 },
+    "tokenDrips": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["token", "tokenAddress", "amountWei", "txHash"],
+        "properties": {
+          "token": { "type": "string", "minLength": 1 },
+          "tokenAddress": { "type": "string", "minLength": 1 },
+          "amountWei": { "type": "string", "minLength": 1 },
+          "txHash": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}
+

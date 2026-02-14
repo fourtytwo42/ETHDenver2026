@@ -579,7 +579,7 @@ Use this every work session:
 - [x] Runtime `report send` rejects real-mode trades with deterministic hint.
 - [x] Runtime adds owner-link and policy-gated `wallet send-token`.
 - [x] Runtime/skill expose limit-order `create`, `cancel`, `list`, and `run-loop`.
-- [x] Add agent faucet request path (`0.05 ETH`, base_sepolia) with one-request-per-UTC-day enforcement.
+- [x] Add agent faucet request path (`0.02 ETH`, base_sepolia) with one-request-per-UTC-day enforcement.
 - [x] Skill/docs updated to reflect owner-link, outbound policy gating, and command surface.
 
 ### 19.4 Web management UX
@@ -594,3 +594,23 @@ Use this every work session:
 - [x] `npm run seed:verify`
 - [x] `npm run build`
 - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+---
+
+## 20) Slice 21: Mock Testnet Tokens + Token Faucet Drips + Seeded Router Liquidity
+
+### 20.1 Contracts and deployment
+- [~] Base Sepolia deploy script deploys mock `WETH` + `USDC` (18 decimals) alongside factory/router/quoter/escrow.
+- [~] `MockRouter` supports `getAmountsOut` and stores `ethUsdPriceE18`.
+- [~] Deploy script sets `ethUsdPriceE18` using external ETH/USD API with fallback `2000`.
+- [~] Deploy script seeds router token balances to act as swap liquidity ($1,000,000 USDC and equivalent WETH).
+
+### 20.2 Faucet behavior
+- [~] Faucet drips fixed `0.02 ETH` plus mock token drips (10 WETH, 20k USDC) on `base_sepolia`.
+- [~] Daily limiter is only consumed when faucet has sufficient ETH and token balances.
+- [~] Faucet rejects demo agents and placeholder wallet addresses.
+
+### 20.3 Contract sync
+- [~] `docs/XCLAW_SOURCE_OF_TRUTH.md` updated with Slice 21 locked contract.
+- [~] `docs/api/openapi.v1.yaml` updated with faucet response schema.
+- [~] Shared schema added: `agent-faucet-response.schema.json`.
