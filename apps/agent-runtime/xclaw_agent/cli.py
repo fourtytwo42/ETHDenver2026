@@ -351,6 +351,14 @@ def _parse_uint_text(value: str) -> int:
         return int(raw)
     if re.fullmatch(r"0x[a-fA-F0-9]+", raw):
         return int(raw, 16)
+    # cast outputs sometimes include a scientific-notation hint in brackets, e.g.
+    # "20000000000000000000000 [2e22]". Accept the leading integer/hex portion.
+    prefix = re.match(r"^(0x[a-fA-F0-9]+|[0-9]+)", raw)
+    if prefix:
+        token = prefix.group(1)
+        if token.startswith("0x") or token.startswith("0X"):
+            return int(token, 16)
+        return int(token)
     raise WalletStoreError(f"Unable to parse uint value: '{value}'.")
 
 
@@ -1063,10 +1071,77 @@ def _post_trade_status(trade_id: str, from_status: str, to_status: str, extra: d
 
 
 def _parse_uint_from_cast_output(raw: str) -> int:
-    values = re.findall(r"[0-9]+", raw or "")
-    if not values:
+    text = (raw or "").strip()
+    if not text:
         raise WalletStoreError("Unable to parse uint value from cast output.")
-    return int(values[-1])
+
+    # Prefer values before the scientific notation hint brackets: "<uint> [<sci>]".
+    bracketed = re.findall(r"([0-9]+)\s*\[", text)
+    if bracketed:
+        return int(bracketed[-1])
+
+    # Fallback: plain uint output, or hex.
+    if re.fullmatch(r"0x[a-fA-F0-9]+", text):
+        return int(text, 16)
+    plain = re.findall(r"\b[0-9]+\b", text)
+    if plain:
+        return int(plain[-1])
+
+    raise WalletStoreError("Unable to parse uint value from cast output.")
+
+
+def _format_units(amount_wei: int, decimals: int) -> str:
+    if decimals <= 0:
+        return str(amount_wei)
+    if amount_wei == 0:
+        return "0"
+    s = str(amount_wei)
+    if len(s) <= decimals:
+        s = s.rjust(decimals + 1, "0")
+    whole = s[:-decimals]
+    frac = s[-decimals:].rstrip("0")
+    if not frac:
+        return whole
+    return f"{whole}.{frac}"
+
+
+def _fetch_erc20_metadata(chain: str, token_address: str) -> dict[str, Any]:
+    cast_bin = _require_cast_bin()
+    rpc_url = _chain_rpc_url(chain)
+
+    decimals: int | None = None
+    symbol: str | None = None
+
+    dec_proc = subprocess.run(
+        [cast_bin, "call", token_address, "decimals()(uint8)", "--rpc-url", rpc_url],
+        text=True,
+        capture_output=True,
+    )
+    if dec_proc.returncode == 0:
+        out = (dec_proc.stdout or "").strip().splitlines()
+        try:
+            decimals = int(_parse_uint_text(out[-1] if out else ""))
+        except Exception:
+            decimals = None
+
+    sym_proc = subprocess.run(
+        [cast_bin, "call", token_address, "symbol()(string)", "--rpc-url", rpc_url],
+        text=True,
+        capture_output=True,
+    )
+    if sym_proc.returncode == 0:
+        out = (sym_proc.stdout or "").strip()
+        # cast may return quoted strings, or raw tokens depending on version.
+        trimmed = out.strip().strip('"').strip("'")
+        if trimmed:
+            symbol = trimmed
+
+    payload: dict[str, Any] = {}
+    if decimals is not None:
+        payload["decimals"] = decimals
+    if symbol is not None:
+        payload["symbol"] = symbol
+    return payload
 
 
 def _quote_router_price(chain: str, token_in: str, token_out: str) -> Decimal:
@@ -1946,18 +2021,29 @@ def _fetch_wallet_holdings(chain: str) -> dict[str, Any]:
     _validate_wallet_entry_shape(wallet)
     address = str(wallet.get("address"))
     native_balance_wei = _fetch_native_balance_wei(chain, address)
+    native_balance_eth = _format_units(int(native_balance_wei), 18)
     token_map = _canonical_token_map(chain)
-    token_balances: list[dict[str, str]] = []
-    token_errors: list[dict[str, str]] = []
+    token_balances: list[dict[str, Any]] = []
+    token_errors: list[dict[str, Any]] = []
     for symbol, token_address in token_map.items():
         try:
             balance_wei = _fetch_token_balance_wei(chain, address, token_address)
-            token_balances.append({"symbol": symbol, "token": token_address, "balanceWei": balance_wei})
+            meta = _fetch_erc20_metadata(chain, token_address)
+            decimals = int(meta.get("decimals", 18))
+            token_balances.append(
+                {
+                    "symbol": str(meta.get("symbol") or symbol),
+                    "token": token_address,
+                    "balanceWei": balance_wei,
+                    "balance": _format_units(int(balance_wei), decimals),
+                    "decimals": decimals,
+                }
+            )
         except Exception as exc:
             token_errors.append({"symbol": symbol, "token": token_address, "message": str(exc)})
     return {
         "address": address,
-        "native": {"symbol": "ETH", "balanceWei": native_balance_wei},
+        "native": {"symbol": "ETH", "balanceWei": native_balance_wei, "balance": native_balance_eth, "decimals": 18},
         "tokens": token_balances,
         "tokenErrors": token_errors,
     }
@@ -2934,7 +3020,15 @@ def cmd_wallet_balance(args: argparse.Namespace) -> int:
             raise WalletStoreError(stderr or stdout or "cast balance failed.")
         output = (proc.stdout or "").strip().splitlines()
         parsed = _parse_uint_text(output[-1] if output else "")
-        return ok("Wallet balance fetched.", chain=chain, address=address, balanceWei=str(parsed))
+        return ok(
+            "Wallet balance fetched.",
+            chain=chain,
+            address=address,
+            balanceWei=str(parsed),
+            balanceEth=_format_units(int(parsed), 18),
+            decimals=18,
+            symbol="ETH",
+        )
     except WalletSecurityError as exc:
         return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": chain}, exit_code=1)
     except WalletStoreError as exc:
@@ -2987,7 +3081,19 @@ def cmd_wallet_token_balance(args: argparse.Namespace) -> int:
             raise WalletStoreError(stderr or stdout or "cast call balanceOf failed.")
         output = (proc.stdout or "").strip().splitlines()
         parsed = _parse_uint_text(output[-1] if output else "")
-        return ok("Wallet token balance fetched.", chain=chain, address=address, token=args.token, balanceWei=str(parsed))
+        meta = _fetch_erc20_metadata(chain, args.token)
+        decimals = int(meta.get("decimals", 18))
+        symbol = str(meta.get("symbol") or "")
+        return ok(
+            "Wallet token balance fetched.",
+            chain=chain,
+            address=address,
+            token=args.token,
+            balanceWei=str(parsed),
+            balance=_format_units(int(parsed), decimals),
+            decimals=decimals,
+            symbol=symbol or None,
+        )
     except WalletSecurityError as exc:
         return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": chain}, exit_code=1)
     except WalletStoreError as exc:
