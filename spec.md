@@ -108,3 +108,13 @@ Harden the agent runtime/skill command surface to prevent hangs, improve identit
   - `acceptance.md`
   - `docs/XCLAW_SLICE_TRACKER.md`
   - `docs/XCLAW_BUILD_ROADMAP.md`
+
+## Management Incident Follow-up (2026-02-14)
+- Objective: fix management page incident class where HTML loads but management styling is missing due to static chunk mismatch, and clarify host-scoped management bootstrap behavior.
+- In scope:
+  - stronger bootstrap/unauthorized UX guidance on `/agents/:id`,
+  - static-asset verification script for deploy/cache integrity,
+  - runbook + canonical contract wording updates.
+- Non-goals:
+  - no changes to one-time owner-link semantics,
+  - no relaxation of host-scoped cookie/session security model.

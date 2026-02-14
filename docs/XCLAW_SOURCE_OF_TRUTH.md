@@ -2252,7 +2252,9 @@ Output requirements:
    - `POST /api/v1/agent/management-link` returns `/agents/:id?token=...` URL.
    - token is short-lived and one-time use.
    - managementUrl contains a bearer-style token and must be treated like a password (do not share/log).
+   - managementUrl must resolve to the public X-Claw host (`https://xclaw.trade`) for owner-facing links; loopback/internal hosts must not be emitted to agents.
    - OpenClaw skill wrapper must redact `sensitiveFields` by default (stdout is loggable) unless `XCLAW_SHOW_SENSITIVE=1` is explicitly set.
+   - management bootstrap sessions are host-scoped via cookies; reusing the same one-time owner link across hosts is expected to fail and must return actionable guidance.
 3. Outbound transfer policy is owner-managed and chain-scoped:
    - modes: `disabled`, `allow_all`, `whitelist`.
    - applies to native + ERC20 outbound runtime sends.

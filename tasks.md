@@ -74,3 +74,13 @@ Active slice: `Slice 26: Agent Skill Robustness Hardening (Timeouts + Identity +
 - [x] Run Slice 26 runtime tests (`test_trade_path` full + wallet-health guidance targeted).
 - [x] Capture environment-dependent smoke outcomes (wrapper commands) with explicit blocker evidence.
 - [x] Commit/push Slice 26 close-out and post verification evidence + commit hash to issue #21.
+
+## Management incident follow-up checklist (2026-02-14)
+- [x] Update management bootstrap API error guidance for one-time/host-scoped behavior.
+- [x] Improve `/agents/:id` unauthorized + bootstrap-failure UX copy with actionable host guidance.
+- [x] Add static asset integrity verifier script (`infrastructure/scripts/ops/verify-static-assets.sh`).
+- [x] Update ops runbook with purge/warm + verifier sequence.
+- [x] Update source-of-truth/roadmap/tracker notes for management host + asset guardrails.
+- [x] Run mandatory gates (`db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`).
+- [x] Run targeted runtime test for management-link host normalization.
+- [x] Run static verifier against production and capture blocker output.

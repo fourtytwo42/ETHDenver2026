@@ -487,6 +487,27 @@ class TradePathRuntimeTests(unittest.TestCase):
             code = cli.cmd_profile_set_name(args)
         self.assertEqual(code, 1)
 
+    def test_management_link_normalizes_loopback_host_to_public_domain(self) -> None:
+        args = argparse.Namespace(ttl_seconds=600, json=True)
+        with mock.patch.object(cli, "_resolve_api_key", return_value="xak1.ag_1.sig.payload"), mock.patch.object(
+            cli, "_resolve_agent_id", return_value="ag_1"
+        ), mock.patch.object(
+            cli,
+            "_api_request",
+            return_value=(
+                200,
+                {
+                    "agentId": "ag_1",
+                    "managementUrl": "https://127.0.0.1:3000/agents/ag_1?token=ol1.test.token",
+                    "issuedAt": "2026-02-14T22:00:00.000Z",
+                    "expiresAt": "2026-02-14T22:10:00.000Z",
+                },
+            ),
+        ):
+            payload = self._run_and_parse_stdout(lambda: cli.cmd_management_link(args))
+        self.assertEqual(payload.get("ok"), True)
+        self.assertEqual(payload.get("managementUrl"), "https://xclaw.trade/agents/ag_1?token=ol1.test.token")
+
     def test_dashboard_success(self) -> None:
         args = argparse.Namespace(chain="hardhat_local", json=True)
 

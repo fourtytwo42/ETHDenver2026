@@ -971,6 +971,26 @@ def _api_error_details(status: int, body: dict[str, Any], path: str, chain: str 
     return details
 
 
+def _normalize_management_url(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    try:
+        parsed = urllib.parse.urlsplit(raw)
+    except Exception:
+        return raw
+    host = (parsed.hostname or "").strip().lower()
+    if host in {"0.0.0.0", "::", "::1", "127.0.0.1", "localhost"}:
+        base = (os.environ.get("XCLAW_PUBLIC_BASE_URL") or "").strip().rstrip("/")
+        if not base:
+            base = "https://xclaw.trade"
+        replacement = urllib.parse.urlsplit(base)
+        parsed = parsed._replace(scheme=replacement.scheme or "https", netloc=replacement.netloc)
+    return urllib.parse.urlunsplit(parsed)
+
+
 def _wallet_address_for_chain(chain: str) -> str:
     store = load_wallet_store()
     _, wallet = _chain_wallet(store, chain)
@@ -2512,10 +2532,11 @@ def cmd_management_link(args: argparse.Namespace) -> int:
                 {"status": status_code},
                 exit_code=1,
             )
+        management_url = _normalize_management_url(body.get("managementUrl"))
         return ok(
             "SENSITIVE: Owner management link generated (do not share).",
             agentId=body.get("agentId", agent_id),
-            managementUrl=body.get("managementUrl"),
+            managementUrl=management_url,
             issuedAt=body.get("issuedAt"),
             expiresAt=body.get("expiresAt"),
             sensitive=True,

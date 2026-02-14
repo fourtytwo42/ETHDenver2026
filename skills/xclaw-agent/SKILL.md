@@ -127,6 +127,7 @@ python3 {baseDir}/scripts/xclaw_agent_skill.py owner-link
 Note: `owner-link` returns a short-lived magic link URL that must be treated as sensitive (do not paste into chat logs).
 Safety: the skill wrapper redacts sensitive fields (like `managementUrl`) by default because stdout is often logged/transcribed.
 To show sensitive fields intentionally, set `XCLAW_SHOW_SENSITIVE=1` for that invocation/session.
+Host rule: management links are normalized to the public X-Claw host (`https://xclaw.trade`) when loopback hosts are encountered.
 
 Testnet faucet action (base_sepolia only):
 

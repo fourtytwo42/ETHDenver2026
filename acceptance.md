@@ -2034,3 +2034,38 @@ Issue mapping: `#21`
   1. revert Slice 26 touched files only,
   2. rerun parity/seed/test/build gates,
   3. confirm tracker/roadmap/source-of-truth sync back to pre-Slice-26 state.
+
+## Management Page Styling + Host Consistency Follow-up (2026-02-14)
+
+### Objective
+- Resolve production incident class where management route HTML references missing CSS chunk.
+- Improve management bootstrap/unauthorized UX clarity for one-time, host-scoped sessions.
+- Add deterministic static-asset verification guardrail for deploy validation.
+
+### File-level evidence
+- `apps/network-web/src/app/agents/[agentId]/page.tsx`
+- `apps/network-web/src/app/api/v1/management/session/bootstrap/route.ts`
+- `infrastructure/scripts/ops/verify-static-assets.sh`
+- `docs/OPS_BACKUP_RESTORE_RUNBOOK.md`
+- `docs/XCLAW_SOURCE_OF_TRUTH.md`
+- `docs/XCLAW_BUILD_ROADMAP.md`
+- `docs/XCLAW_SLICE_TRACKER.md`
+- `spec.md`
+- `tasks.md`
+- `acceptance.md`
+
+### Verification commands and outcomes
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -k management_link_normalizes_loopback_host_to_public_domain -v` -> PASS
+- `npm run db:parity` -> PASS
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+- `npm run build` -> PASS
+- `XCLAW_VERIFY_BASE_URL='https://xclaw.trade' XCLAW_VERIFY_AGENT_ID='ag_a123e3bc428c12675f93' infrastructure/scripts/ops/verify-static-assets.sh` -> FAIL (expected for live incident reproduction)
+  - Missing CSS chunk: `/_next/static/chunks/8139bd99fc2af9e0.css` -> HTTP 404
+  - One JS chunk also surfaced server error during check: `/_next/static/chunks/a6dad97d9634a72d.js` -> HTTP 500
+
+### External blocker / required ops action
+1. Execute atomic web artifact deploy (HTML + `_next/static` from same build).
+2. Purge/warm CDN cache per runbook.
+3. Re-run `verify-static-assets.sh` and require PASS before incident closure.

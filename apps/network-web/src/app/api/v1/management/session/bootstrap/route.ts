@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 
 import { errorResponse, internalErrorResponse, successResponse } from '@/lib/errors';
+import type { ApiErrorCode } from '@/lib/errors';
 import { parseJsonBody } from '@/lib/http';
 import { getRequestId } from '@/lib/request-id';
 import { validatePayload } from '@/lib/validation';
@@ -13,6 +14,17 @@ type ManagementBootstrapRequest = {
   agentId: string;
   token: string;
 };
+
+function augmentBootstrapAuthError(input: { code: ApiErrorCode; message: string; actionHint?: string }) {
+  if (input.code !== 'auth_invalid') {
+    return input;
+  }
+  return {
+    ...input,
+    actionHint:
+      'Owner links are one-time and host-scoped. Generate a fresh link and open it directly on https://xclaw.trade.'
+  };
+}
 
 export async function POST(req: NextRequest) {
   const requestId = getRequestId(req);
@@ -44,7 +56,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!result.ok) {
-      return errorResponse(result.error.status, result.error, requestId);
+      return errorResponse(result.error.status, augmentBootstrapAuthError(result.error), requestId);
     }
 
     const responseBody = {

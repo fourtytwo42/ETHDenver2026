@@ -11,7 +11,7 @@ import { isPublicStatus } from '@/lib/public-types';
 
 type BootstrapState =
   | { phase: 'bootstrapping' }
-  | { phase: 'error'; message: string }
+  | { phase: 'error'; message: string; code?: string; actionHint?: string }
   | { phase: 'ready' };
 
 type AgentProfilePayload = {
@@ -190,7 +190,10 @@ type LimitOrderItem = {
   updatedAt: string;
 };
 
-async function bootstrapSession(agentId: string, token: string): Promise<{ ok: true } | { ok: false; message: string }> {
+async function bootstrapSession(
+  agentId: string,
+  token: string
+): Promise<{ ok: true } | { ok: false; message: string; code?: string; actionHint?: string }> {
   const response = await fetch('/api/v1/management/session/bootstrap', {
     method: 'POST',
     headers: {
@@ -202,15 +205,23 @@ async function bootstrapSession(agentId: string, token: string): Promise<{ ok: t
 
   if (!response.ok) {
     let message = 'Bootstrap failed. Verify token and retry.';
+    let code: string | undefined;
+    let actionHint: string | undefined;
     try {
-      const payload = (await response.json()) as { message?: string };
+      const payload = (await response.json()) as { message?: string; code?: string; actionHint?: string };
       if (payload?.message) {
         message = payload.message;
+      }
+      if (typeof payload?.code === 'string' && payload.code.trim()) {
+        code = payload.code.trim();
+      }
+      if (typeof payload?.actionHint === 'string' && payload.actionHint.trim()) {
+        actionHint = payload.actionHint.trim();
       }
     } catch {
       // fallback
     }
-    return { ok: false, message };
+    return { ok: false, message, code, actionHint };
   }
 
   return { ok: true };
@@ -319,7 +330,12 @@ export default function AgentPublicProfilePage() {
     setBootstrapState({ phase: 'bootstrapping' });
     void bootstrapSession(agentId, token).then((result) => {
       if (!result.ok) {
-        setBootstrapState({ phase: 'error', message: result.message });
+        setBootstrapState({
+          phase: 'error',
+          message: result.message,
+          code: result.code,
+          actionHint: result.actionHint
+        });
         return;
       }
 
@@ -503,6 +519,8 @@ export default function AgentPublicProfilePage() {
       <main className="panel">
         <h1 className="section-title">Management bootstrap failed</h1>
         <p>{bootstrapState.message}</p>
+        {bootstrapState.code ? <p className="muted">Code: {bootstrapState.code}</p> : null}
+        {bootstrapState.actionHint ? <p className="muted">{bootstrapState.actionHint}</p> : null}
       </main>
     );
   }
@@ -630,13 +648,25 @@ export default function AgentPublicProfilePage() {
       <aside className="management-rail" id="management">
         <section className="panel">
           <h2 className="section-title">Management</h2>
+          <p className="muted">
+            Session:{' '}
+            {management.phase === 'ready'
+              ? 'Management session active for this host.'
+              : management.phase === 'unauthorized'
+                ? 'No active management session for this host.'
+                : 'Checking management session...'}
+          </p>
 
           {managementNotice ? <p className="success-banner">{managementNotice}</p> : null}
           {managementError ? <p className="warning-banner">{managementError}</p> : null}
 
           {management.phase === 'loading' ? <p className="muted">Loading management state...</p> : null}
           {management.phase === 'unauthorized' ? (
-            <p className="muted">Unauthorized: management controls require bootstrap token session.</p>
+            <div className="muted">
+              <p>Unauthorized: management controls require a bootstrap token session on this host.</p>
+              <p>Owner links are one-time use. If one was already used elsewhere, generate a fresh link.</p>
+              <p>Open the fresh link directly on https://xclaw.trade.</p>
+            </div>
           ) : null}
           {management.phase === 'error' ? <p className="warning-banner">{management.message}</p> : null}
 

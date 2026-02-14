@@ -61,3 +61,32 @@ Expected:
 - Restore is destructive to target DB state.
 - Never run restore against production DB without explicit change window approval.
 - Keep backup artifacts outside public web paths.
+
+## Static Asset Integrity (Web Deploy Guardrail)
+Symptom this section addresses:
+- HTML renders but appears unstyled because a referenced `/_next/static/chunks/*.css` asset returns `404`.
+
+### Post-deploy static asset verification (required)
+Run after every production web deploy:
+```bash
+XCLAW_VERIFY_BASE_URL="https://xclaw.trade" \
+XCLAW_VERIFY_AGENT_ID="ag_a123e3bc428c12675f93" \
+infrastructure/scripts/ops/verify-static-assets.sh
+```
+
+The check:
+- fetches `/`, `/agents`, `/status`, and `/agents/$XCLAW_VERIFY_AGENT_ID`,
+- extracts referenced `/_next/static/*` assets,
+- verifies each returns `200` with expected content-type (`text/css` or javascript mime).
+
+### Cache purge/warm sequence (when mismatch is detected)
+1. Purge CDN cache for:
+- `https://xclaw.trade/agents*`
+- `https://xclaw.trade/status`
+- `https://xclaw.trade/_next/static/*`
+2. Warm:
+- `/`
+- `/agents`
+- `/agents/<known-agent-id>`
+- `/status`
+3. Re-run `verify-static-assets.sh` and require PASS before declaring deploy healthy.

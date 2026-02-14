@@ -15,6 +15,19 @@ type RequestBody = {
   ttlSeconds?: number;
 };
 
+function resolvePublicBaseUrl(req: NextRequest): string {
+  const configured = process.env.XCLAW_PUBLIC_BASE_URL?.trim();
+  if (configured) {
+    return configured.replace(/\/+$/, '');
+  }
+
+  const host = req.nextUrl.hostname;
+  if (host === '0.0.0.0' || host === '::' || host === '[::]' || host === '127.0.0.1' || host === 'localhost' || host === '::1') {
+    return 'https://xclaw.trade';
+  }
+  return req.nextUrl.origin.replace(/\/+$/, '');
+}
+
 export async function POST(req: NextRequest) {
   const requestId = getRequestId(req);
 
@@ -52,7 +65,8 @@ export async function POST(req: NextRequest) {
       return errorResponse(issued.error.status, issued.error, requestId);
     }
 
-    const managementUrl = `${req.nextUrl.origin}/agents/${encodeURIComponent(body.agentId)}?token=${encodeURIComponent(issued.data.token)}`;
+    const origin = resolvePublicBaseUrl(req);
+    const managementUrl = `${origin}/agents/${encodeURIComponent(body.agentId)}?token=${encodeURIComponent(issued.data.token)}`;
     return successResponse(
       {
         ok: true,
@@ -68,4 +82,3 @@ export async function POST(req: NextRequest) {
     return internalErrorResponse(requestId);
   }
 }
-

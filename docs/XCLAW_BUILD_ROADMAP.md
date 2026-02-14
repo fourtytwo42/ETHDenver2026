@@ -779,3 +779,11 @@ Use this every work session:
 ### 26.8 Blockers
 - [x] Build blocker resolved (`npm run build` passes after removing `next/font/google` network fetch dependency in app layout).
 - [!] Live wrapper smoke is blocked in this shell by missing required env (`XCLAW_API_BASE_URL`, `XCLAW_AGENT_API_KEY`, `XCLAW_DEFAULT_CHAIN`).
+
+### 26.9 Management Page Host + Static Asset Guardrails
+- [x] Owner-link routes normalize loopback/bind hosts to public domain for owner-facing URLs.
+- [x] Agent runtime normalizes loopback management URLs to `https://xclaw.trade` (or `XCLAW_PUBLIC_BASE_URL` when set).
+- [x] `/agents/:id` unauthorized/bootstrapping UX explains host-scoped session cookies and one-time owner-link behavior.
+- [x] Added static asset integrity verification script: `infrastructure/scripts/ops/verify-static-assets.sh`.
+- [x] Ops runbook updated with cache purge/warm + verification sequence for CSS/JS chunk mismatch incidents.
+- [ ] Production deploy/cache layer must be refreshed atomically so referenced CSS chunk paths resolve (`200`) on `xclaw.trade`.
