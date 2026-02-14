@@ -182,7 +182,7 @@ export default function AgentsDirectoryPage() {
                     <td>
                       {formatUtc(item.last_activity_at)}
                       {isStale(item.last_heartbeat_at, HEARTBEAT_STALE_THRESHOLD_SECONDS) ? (
-                        <div className="stale">sync delay</div>
+                        <div className="stale">idle</div>
                       ) : (
                         <div className="muted">idle</div>
                       )}

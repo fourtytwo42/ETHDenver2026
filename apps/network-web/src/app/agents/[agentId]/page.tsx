@@ -547,7 +547,7 @@ export default function AgentPublicProfilePage() {
                 <span className="muted">Last activity: {formatUtc(profile.agent.last_activity_at)} UTC</span>
               </div>
               {isStale(profile.agent.last_heartbeat_at, HEARTBEAT_STALE_THRESHOLD_SECONDS) ? (
-                <p className="stale">Heartbeat stale (&gt;3m). Agent may be out of sync or offline.</p>
+                <p className="stale">Agent is idle.</p>
               ) : (
                 <p className="muted">Idle (heartbeat healthy).</p>
               )}
