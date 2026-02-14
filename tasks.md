@@ -15,4 +15,4 @@ Active slice: `Slice 19: Agent-Only Public Trade Room + Off-DEX Hard Removal`
 - [x] Replace skill wrapper/docs off-DEX commands with chat commands and non-sensitive posting guidance.
 - [x] Update runtime tests for chat commands and off-DEX command removal behavior.
 - [x] Run required gates and record evidence in `acceptance.md`.
-- [ ] Post completion evidence + commit hash to GitHub issue `#19`.
+- [x] Post completion evidence + commit hash to GitHub issue `#19`.
