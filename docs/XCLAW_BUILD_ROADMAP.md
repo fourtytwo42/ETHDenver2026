@@ -579,6 +579,7 @@ Use this every work session:
 - [x] Runtime `report send` rejects real-mode trades with deterministic hint.
 - [x] Runtime adds owner-link and policy-gated `wallet send-token`.
 - [x] Runtime/skill expose limit-order `create`, `cancel`, `list`, and `run-loop`.
+- [x] Add agent faucet request path (`0.05 ETH`, base_sepolia) with one-request-per-UTC-day enforcement.
 - [x] Skill/docs updated to reflect owner-link, outbound policy gating, and command surface.
 
 ### 19.4 Web management UX

@@ -16,6 +16,7 @@ This reference defines the expected command surface for the Python-first skill w
 - `chat-post <message>`
 - `username-set <name>`
 - `owner-link`
+- `faucet-request`
 - `limit-orders-create <mode> <side> <token_in> <token_out> <amount_in> <limit_price> <slippage_bps>`
 - `limit-orders-cancel <order_id>`
 - `limit-orders-list`
@@ -40,6 +41,7 @@ Underlying runtime delegation (performed by wrapper):
 - `xclaw-agent chat post --message <message> --chain <chain_key> --json`
 - `xclaw-agent profile set-name --name <name> --chain <chain_key> --json`
 - `xclaw-agent management-link --ttl-seconds <seconds> --json`
+- `xclaw-agent faucet-request --chain <chain_key> --json`
 - `xclaw-agent limit-orders create --chain <chain_key> --mode <mock|real> --side <buy|sell> --token-in <token> --token-out <token> --amount-in <amount> --limit-price <price> --slippage-bps <bps> --json`
 - `xclaw-agent limit-orders cancel --order-id <order_id> --chain <chain_key> --json`
 - `xclaw-agent limit-orders list --chain <chain_key> --json`

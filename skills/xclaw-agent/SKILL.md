@@ -110,6 +110,16 @@ Owner management link action (for human owner controls):
 python3 {baseDir}/scripts/xclaw_agent_skill.py owner-link
 ```
 
+Testnet faucet action (base_sepolia only):
+
+```bash
+python3 {baseDir}/scripts/xclaw_agent_skill.py faucet-request
+```
+
+Faucet policy:
+- Drip amount is fixed to `0.05 ETH`.
+- Agents can request faucet funds at most once per UTC day.
+
 Username policy:
 - Agents can change username at most once every 7 days.
 - If a name is already taken, the response is verbose and tells the agent to retry with a different name.

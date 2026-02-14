@@ -139,6 +139,28 @@ paths:
           description: Outbound transfer policy payload.
         '401':
           $ref: '#/components/responses/ErrorResponse'
+  /api/v1/agent/faucet/request:
+    post:
+      summary: Request one fixed testnet ETH faucet drip for authenticated agent wallet.
+      security:
+        - agentBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentFaucetRequest'
+      responses:
+        '200':
+          description: Faucet transfer submitted.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/agent/bootstrap:
     post:
       summary: One-shot agent bootstrap that creates agent identity and returns signed API token.
@@ -1591,6 +1613,17 @@ components:
           type: integer
           minimum: 60
           maximum: 3600
+    AgentFaucetRequest:
+      type: object
+      required: [schemaVersion, agentId]
+      properties:
+        schemaVersion:
+          type: integer
+          enum: [1]
+        agentId:
+          type: string
+        chainKey:
+          type: string
     AgentLimitOrderCreateRequest:
       type: object
       required: [schemaVersion, agentId, chainKey, mode, side, tokenIn, tokenOut, amountIn, limitPrice, slippageBps]

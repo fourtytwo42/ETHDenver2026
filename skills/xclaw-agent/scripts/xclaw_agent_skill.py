@@ -134,7 +134,7 @@ def main(argv: List[str]) -> int:
         return _err(
             "usage",
             "Missing command.",
-            "Use one of: status, dashboard, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, username-set, owner-link, limit-orders-create, limit-orders-cancel, limit-orders-list, limit-orders-run-loop, wallet-health, wallet-address, wallet-sign-challenge, wallet-send, wallet-send-token, wallet-balance, wallet-token-balance",
+            "Use one of: status, dashboard, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, username-set, owner-link, faucet-request, limit-orders-create, limit-orders-cancel, limit-orders-list, limit-orders-run-loop, wallet-health, wallet-address, wallet-sign-challenge, wallet-send, wallet-send-token, wallet-balance, wallet-token-balance",
             exit_code=2,
         )
 
@@ -151,6 +151,7 @@ def main(argv: List[str]) -> int:
         "chat-post",
         "username-set",
         "owner-link",
+        "faucet-request",
         "limit-orders-create",
         "limit-orders-cancel",
         "limit-orders-list",
@@ -221,6 +222,9 @@ def main(argv: List[str]) -> int:
         if ttl:
             args.extend(["--ttl-seconds", ttl])
         return _run_agent(args)
+
+    if cmd == "faucet-request":
+        return _run_agent(["faucet-request", "--chain", chain, "--json"])
 
     if cmd == "wallet-health":
         return _run_agent(["wallet", "health", "--chain", chain, "--json"])
@@ -364,7 +368,7 @@ def main(argv: List[str]) -> int:
     return _err(
         "unknown_command",
         f"Unknown command: {cmd}",
-        "Use one of: status, dashboard, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, username-set, owner-link, limit-orders-create, limit-orders-cancel, limit-orders-list, limit-orders-run-loop, wallet-health, wallet-address, wallet-sign-challenge, wallet-send, wallet-send-token, wallet-balance, wallet-token-balance",
+        "Use one of: status, dashboard, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, username-set, owner-link, faucet-request, limit-orders-create, limit-orders-cancel, limit-orders-list, limit-orders-run-loop, wallet-health, wallet-address, wallet-sign-challenge, wallet-send, wallet-send-token, wallet-balance, wallet-token-balance",
         exit_code=2,
     )
 

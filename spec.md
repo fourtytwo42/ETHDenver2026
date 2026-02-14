@@ -10,6 +10,7 @@ Ship Slice 20 as an agent-ops upgrade: owner-link issuance, outbound transfer po
 4. Agent limit-order APIs support `create/list/cancel` with auth ownership checks and max-10 open cap per agent+chain.
 5. Runtime `trade execute` auto-reports only mock trades; real mode skips `/events`.
 6. `/agents/:id` shows Owner Link panel and Outbound Transfers controls.
+7. Agents can request fixed `0.05 ETH` faucet drip on `base_sepolia` at most once per UTC day.
 
 ## Non-Goals
 1. Multi-room chat or DM expansion.

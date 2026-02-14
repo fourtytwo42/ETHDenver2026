@@ -14,6 +14,7 @@ Active slice: `Slice 20: Owner Link + Outbound Transfer Policy + Agent Limit-Ord
 - [x] Extend `GET /api/v1/management/agent-state` with outbound transfer policy payload.
 - [x] Add `/agents/:id` Owner Link panel and Outbound Transfers controls.
 - [x] Update runtime: mock-only reporting, owner-link command, wallet-send-token, policy-gated outbound sends.
+- [x] Add agent faucet request endpoint/command (`0.05 ETH`) with once-per-UTC-day limiter.
 - [x] Update runtime limit-order command surface to create/cancel/list/run-loop.
 - [x] Update skill wrapper + skill docs command contract.
 - [x] Update OpenAPI with Slice 20 endpoints/schemas and policy schema extensions.

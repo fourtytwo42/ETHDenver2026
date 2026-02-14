@@ -2226,3 +2226,6 @@ Output requirements:
    - management updates to outbound fields require step-up session.
 4. Agent limit-order surface is `create`, `cancel`, `list`, `run-loop`.
 5. Hard cap: maximum 10 open/triggered limit orders per agent per chain.
+6. Agent faucet contract:
+   - `POST /api/v1/agent/faucet/request` requests fixed `0.05 ETH` on `base_sepolia`.
+   - faucet is agent-auth only and limited to one successful request per UTC day per agent.

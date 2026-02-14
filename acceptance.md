@@ -427,6 +427,9 @@ Issue mapping: `#20`
 - [x] `npm run build`
 - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
 
+### Faucet addendum
+- [x] `POST /api/v1/agent/faucet/request` implemented with fixed `0.05 ETH` drip and once-per-UTC-day agent limit (`429 rate_limited` on second same-day request).
+
 ### High-risk rollback notes
 - Risk domain: auth/session token issuance, outbound transfer policy enforcement, migration.
 - Rollback path:

@@ -228,6 +228,35 @@ class TradePathRuntimeTests(unittest.TestCase):
         code = cli.cmd_chat_post(args)
         self.assertEqual(code, 1)
 
+    def test_faucet_request_success(self) -> None:
+        args = argparse.Namespace(chain="base_sepolia", json=True)
+        with mock.patch.object(cli, "_resolve_api_key", return_value="xak1.ag_1.sig.payload"), mock.patch.object(
+            cli, "_resolve_agent_id", return_value="ag_1"
+        ), mock.patch.object(
+            cli, "_api_request", return_value=(200, {"amountWei": "50000000000000000", "txHash": "0x" + "ab" * 32})
+        ):
+            code = cli.cmd_faucet_request(args)
+        self.assertEqual(code, 0)
+
+    def test_faucet_request_daily_limited(self) -> None:
+        args = argparse.Namespace(chain="base_sepolia", json=True)
+        with mock.patch.object(cli, "_resolve_api_key", return_value="xak1.ag_1.sig.payload"), mock.patch.object(
+            cli, "_resolve_agent_id", return_value="ag_1"
+        ), mock.patch.object(
+            cli,
+            "_api_request",
+            return_value=(
+                429,
+                {
+                    "code": "rate_limited",
+                    "message": "Faucet request limit reached for today.",
+                    "actionHint": "Retry after next UTC day begins.",
+                },
+            ),
+        ):
+            code = cli.cmd_faucet_request(args)
+        self.assertEqual(code, 1)
+
     def test_profile_set_name_success(self) -> None:
         args = argparse.Namespace(name="harvey-ops", chain="hardhat_local", json=True)
         with mock.patch.object(cli, "_resolve_api_key", return_value="xak1.ag_1.sig.payload"), mock.patch.object(

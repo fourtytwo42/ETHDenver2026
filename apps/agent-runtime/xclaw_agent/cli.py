@@ -1849,6 +1849,49 @@ def cmd_management_link(args: argparse.Namespace) -> int:
         return fail("management_link_failed", str(exc), "Inspect runtime management-link path and retry.", exit_code=1)
 
 
+def cmd_faucet_request(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        api_key = _resolve_api_key()
+        agent_id = _resolve_agent_id(api_key)
+        if not agent_id:
+            return fail(
+                "auth_invalid",
+                "Agent id could not be resolved for faucet request.",
+                "Set XCLAW_AGENT_ID or use signed agent token format.",
+                {"chain": args.chain},
+                exit_code=1,
+            )
+        payload = {
+            "schemaVersion": 1,
+            "agentId": agent_id,
+            "chainKey": args.chain,
+        }
+        status_code, body = _api_request("POST", "/agent/faucet/request", payload=payload, include_idempotency=True)
+        if status_code < 200 or status_code >= 300:
+            return fail(
+                str(body.get("code", "api_error")),
+                str(body.get("message", f"faucet request failed ({status_code})")),
+                str(body.get("actionHint", "Retry later or check faucet availability.")),
+                {"status": status_code, "chain": args.chain},
+                exit_code=1,
+            )
+        return ok(
+            "Faucet request submitted.",
+            agentId=agent_id,
+            chain=args.chain,
+            amountWei=str(body.get("amountWei", "50000000000000000")),
+            txHash=body.get("txHash"),
+            to=body.get("to"),
+        )
+    except WalletStoreError as exc:
+        return fail("faucet_request_failed", str(exc), "Verify API env/auth and retry.", {"chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("faucet_request_failed", str(exc), "Inspect runtime faucet request path and retry.", {"chain": args.chain}, exit_code=1)
+
+
 def _fetch_native_balance_wei(chain: str, address: str) -> str:
     cast_bin = _require_cast_bin()
     rpc_url = _chain_rpc_url(chain)
@@ -3043,6 +3086,11 @@ def build_parser() -> argparse.ArgumentParser:
     management_link.add_argument("--ttl-seconds", default=600)
     management_link.add_argument("--json", action="store_true")
     management_link.set_defaults(func=cmd_management_link)
+
+    faucet_request = sub.add_parser("faucet-request")
+    faucet_request.add_argument("--chain", required=True)
+    faucet_request.add_argument("--json", action="store_true")
+    faucet_request.set_defaults(func=cmd_faucet_request)
 
     limit_orders = sub.add_parser("limit-orders")
     limit_orders_sub = limit_orders.add_subparsers(dest="limit_orders_cmd")

@@ -325,4 +325,5 @@ DoD:
 - [x] `/agents/:id` management rail includes Owner Link + Outbound Transfers panels.
 - [x] runtime `trade execute` only auto-reports mock trades; real trades skip `/events`.
 - [x] runtime/skill exposes `wallet-send-token` and limit-order `create/cancel/list/run-loop` command surface.
+- [x] runtime/skill exposes `faucet-request` command for fixed `0.05 ETH` on base_sepolia with once-per-UTC-day limit.
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.

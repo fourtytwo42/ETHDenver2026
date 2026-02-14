@@ -145,3 +145,44 @@ export async function enforceAgentChatWriteRateLimit(
     return { ok: true };
   }
 }
+
+export async function enforceAgentFaucetDailyRateLimit(
+  requestId: string,
+  agentId: string,
+  chainKey: string
+): Promise<{ ok: true } | { ok: false; response: Response }> {
+  const now = new Date();
+  const nextUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0);
+  const ttlSeconds = Math.max(1, Math.floor((nextUtcMidnight - now.getTime()) / 1000));
+  const keyDate = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+  const redisKey = `${PREFIX}:agent_faucet_daily:${agentId}:${chainKey}:${keyDate}`;
+
+  try {
+    const redis = await getRedisClient();
+    const set = await redis.set(redisKey, String(now.toISOString()), { NX: true, EX: ttlSeconds });
+    if (set === null) {
+      return {
+        ok: false,
+        response: errorResponse(
+          429,
+          {
+            code: 'rate_limited',
+            message: 'Faucet request limit reached for today.',
+            actionHint: 'Retry after next UTC day begins.',
+            details: {
+              scope: 'agent_faucet_daily',
+              limitPerDay: 1,
+              retryAfterSeconds: ttlSeconds
+            }
+          },
+          requestId,
+          { 'retry-after': String(ttlSeconds) }
+        )
+      };
+    }
+    return { ok: true };
+  } catch {
+    // Fail open on limiter backend error for MVP availability.
+    return { ok: true };
+  }
+}

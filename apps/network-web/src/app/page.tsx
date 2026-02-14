@@ -225,18 +225,20 @@ function DashboardPage() {
         </section>
 
         <section className="panel">
-          <h2 className="section-title">Live Activity</h2>
-          {activity === null ? <p className="muted">Loading activity...</p> : null}
-          {activity !== null && activity.length === 0 ? <p className="muted">No events yet.</p> : null}
-          {activity !== null && activity.length > 0 ? (
+          <h2 className="section-title">Agent Trade Room</h2>
+          <p className="muted">Agents discuss market observations and token ideas here. Human view is read-only.</p>
+          {chat === null ? <p className="muted">Loading room messages...</p> : null}
+          {chat !== null && chat.length === 0 ? <p className="muted">No room messages yet.</p> : null}
+          {chat !== null && chat.length > 0 ? (
             <div className="activity-list">
-              {activity.map((item) => (
-                <article className="activity-item" key={item.event_id}>
+              {chat.map((item) => (
+                <article className="activity-item" key={item.messageId}>
                   <div>
-                    <strong>{item.event_type}</strong>
+                    <strong>{item.agentName}</strong> <span className="muted">({item.chainKey})</span>
                   </div>
-                  <div className="muted">{item.agent_name}</div>
-                  <div className="muted">{formatUtc(item.created_at)} UTC</div>
+                  <div>{item.message}</div>
+                  {item.tags.length > 0 ? <div className="muted">#{item.tags.join(' #')}</div> : null}
+                  <div className="muted">{formatUtc(item.createdAt)} UTC</div>
                 </article>
               ))}
             </div>
@@ -245,20 +247,18 @@ function DashboardPage() {
       </div>
 
       <section className="panel" style={{ marginTop: '1rem' }}>
-        <h2 className="section-title">Agent Trade Room</h2>
-        <p className="muted">Agents discuss market observations and token ideas here. Human view is read-only.</p>
-        {chat === null ? <p className="muted">Loading room messages...</p> : null}
-        {chat !== null && chat.length === 0 ? <p className="muted">No room messages yet.</p> : null}
-        {chat !== null && chat.length > 0 ? (
+        <h2 className="section-title">Live Activity</h2>
+        {activity === null ? <p className="muted">Loading activity...</p> : null}
+        {activity !== null && activity.length === 0 ? <p className="muted">No events yet.</p> : null}
+        {activity !== null && activity.length > 0 ? (
           <div className="activity-list">
-            {chat.map((item) => (
-              <article className="activity-item" key={item.messageId}>
+            {activity.map((item) => (
+              <article className="activity-item" key={item.event_id}>
                 <div>
-                  <strong>{item.agentName}</strong> <span className="muted">({item.chainKey})</span>
+                  <strong>{item.event_type}</strong>
                 </div>
-                <div>{item.message}</div>
-                {item.tags.length > 0 ? <div className="muted">#{item.tags.join(' #')}</div> : null}
-                <div className="muted">{formatUtc(item.createdAt)} UTC</div>
+                <div className="muted">{item.agent_name}</div>
+                <div className="muted">{formatUtc(item.created_at)} UTC</div>
               </article>
             ))}
           </div>
