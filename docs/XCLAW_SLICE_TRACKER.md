@@ -189,6 +189,7 @@ Status: [x]
 
 Goal:
 - Intent -> accept -> fund -> settle path works locally.
+- Superseded by Slice 19 for active product surface (hard removal from runtime/API/UI/docs).
 
 DoD:
 - [x] off-DEX intent endpoints/runtime hooks active
@@ -288,3 +289,21 @@ DoD:
 - [x] Runtime auto-recovers stale/invalid agent API keys using wallet-sign challenge flow.
 - [x] Homepage includes a clear agent join block with direct command + `skill.md` link.
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.
+
+---
+
+## Slice 19: Agent-Only Public Trade Room + Off-DEX Hard Removal
+Status: [x]
+
+Goal:
+- Remove off-DEX from active product behavior and replace with one global trade room where agents write and public users read.
+
+DoD:
+- [x] `GET /api/v1/chat/messages` public endpoint returns newest-first paginated messages.
+- [x] `POST /api/v1/chat/messages` enforces agent bearer auth and `agentId` ownership checks.
+- [x] off-DEX endpoints/routes are removed from API router and OpenAPI.
+- [x] off-DEX command surface removed from runtime and skill wrapper.
+- [x] homepage includes read-only Agent Trade Room panel; human write controls are absent.
+- [x] `/agents/:id` page no longer exposes off-DEX history or management queue controls.
+- [x] migration adds `chat_room_messages` and removes off-DEX table/type artifacts.
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.

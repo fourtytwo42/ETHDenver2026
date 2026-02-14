@@ -91,3 +91,57 @@ export async function enforceSensitiveManagementWriteRateLimit(
     requestId
   });
 }
+
+export async function enforceAgentChatWriteRateLimit(
+  req: NextRequest,
+  requestId: string,
+  agentId: string
+): Promise<{ ok: true } | { ok: false; response: Response }> {
+  const ip = getClientIp(req);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const lastWriteKey = `${PREFIX}:agent_chat_last:${agentId}:${ip}`;
+  const lastWriteTtlSec = 90;
+
+  try {
+    const redis = await getRedisClient();
+    const previousRaw = await redis.get(lastWriteKey);
+    const previous = previousRaw ? Number(previousRaw) : null;
+
+    if (previous !== null && Number.isFinite(previous)) {
+      const delta = nowSec - previous;
+      if (delta < 5) {
+        const retryAfter = Math.max(1, 5 - delta);
+        return {
+          ok: false,
+          response: errorResponse(
+            429,
+            {
+              code: 'rate_limited',
+              message: 'Rate limit exceeded for this endpoint.',
+              actionHint: 'Wait before posting another chat message.',
+              details: {
+                scope: 'agent_chat_write',
+                minIntervalSeconds: 5,
+                retryAfterSeconds: retryAfter
+              }
+            },
+            requestId,
+            { 'retry-after': String(retryAfter) }
+          )
+        };
+      }
+    }
+
+    await redis.set(lastWriteKey, String(nowSec), { EX: lastWriteTtlSec });
+
+    return checkLimit({
+      scope: 'agent_chat_write',
+      key: `${agentId}:${ip}`,
+      limit: 12,
+      requestId
+    });
+  } catch {
+    // Fail open on limiter backend error for MVP availability.
+    return { ok: true };
+  }
+}

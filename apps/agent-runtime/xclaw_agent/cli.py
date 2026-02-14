@@ -1580,157 +1580,79 @@ def cmd_report_send(args: argparse.Namespace) -> int:
         return fail("report_send_failed", str(exc), "Inspect runtime report-send path and retry.", {"tradeId": args.trade}, exit_code=1)
 
 
-def _offdex_intents_query(chain: str, status: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
-    query = f"/offdex/intents?chain={urllib.parse.quote(chain)}&limit={limit}"
-    if status:
-        query += f"&status={urllib.parse.quote(status)}"
+def _chat_messages_query(limit: int = 25) -> list[dict[str, Any]]:
+    query = f"/chat/messages?limit={limit}"
     status_code, body = _api_request("GET", query)
     if status_code < 200 or status_code >= 300:
         code = str(body.get("code", "api_error"))
-        message = str(body.get("message", f"offdex intents read failed ({status_code})"))
+        message = str(body.get("message", f"chat messages read failed ({status_code})"))
         raise WalletStoreError(f"{code}: {message}")
     items = body.get("items", [])
     if not isinstance(items, list):
-        raise WalletStoreError("Off-DEX intents response missing items list.")
+        raise WalletStoreError("Chat messages response missing items list.")
     return [item for item in items if isinstance(item, dict)]
 
 
-def _offdex_post_status(intent_id: str, status: str, extra: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
-    payload: dict[str, Any] = {
-        "status": status,
-        "at": datetime.now(timezone.utc).isoformat(),
-    }
-    if extra:
-        payload.update(extra)
-    return _api_request("POST", f"/offdex/intents/{intent_id}/status", payload=payload, include_idempotency=True)
-
-
-def cmd_offdex_intents_poll(args: argparse.Namespace) -> int:
+def cmd_chat_poll(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
         return chk
     try:
-        items = _offdex_intents_query(args.chain, limit=25)
-        actionable = [
-            item
-            for item in items
-            if str(item.get("status")) in {"proposed", "accepted", "maker_funded", "taker_funded", "ready_to_settle"}
-        ]
-        return ok("Off-DEX intents polled.", chain=args.chain, count=len(actionable), intents=actionable)
+        items = _chat_messages_query(limit=25)
+        return ok("Trade room messages polled.", chain=args.chain, count=len(items), messages=items)
     except WalletStoreError as exc:
-        return fail("offdex_poll_failed", str(exc), "Verify API env/auth and off-DEX endpoint availability.", {"chain": args.chain}, exit_code=1)
+        return fail("chat_poll_failed", str(exc), "Verify API env/auth and chat endpoint availability.", {"chain": args.chain}, exit_code=1)
     except Exception as exc:
-        return fail("offdex_poll_failed", str(exc), "Inspect runtime off-DEX poll path and retry.", {"chain": args.chain}, exit_code=1)
+        return fail("chat_poll_failed", str(exc), "Inspect runtime chat poll path and retry.", {"chain": args.chain}, exit_code=1)
 
 
-def cmd_offdex_accept(args: argparse.Namespace) -> int:
+def cmd_chat_post(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
         return chk
     try:
-        status_code, body = _api_request("POST", f"/offdex/intents/{args.intent}/accept", payload={}, include_idempotency=True)
+        message = str(args.message).strip()
+        if not message:
+            return fail("payload_invalid", "Chat message cannot be empty.", "Provide a non-empty message.", {"chain": args.chain}, exit_code=1)
+        if len(message) > 500:
+            return fail("payload_invalid", "Chat message exceeds 500 characters.", "Shorten message and retry.", {"chain": args.chain}, exit_code=1)
+
+        tags: list[str] = []
+        if args.tags:
+            parsed_tags = [tag.strip().lower() for tag in str(args.tags).split(",") if tag.strip()]
+            if len(parsed_tags) > 8:
+                return fail("payload_invalid", "Chat tags exceed 8 values.", "Limit tags to 8 and retry.", {"chain": args.chain}, exit_code=1)
+            tags = list(dict.fromkeys(parsed_tags))
+
+        api_key = _resolve_api_key()
+        agent_id = _resolve_agent_id(api_key)
+        if not agent_id:
+            return fail("auth_invalid", "Agent id could not be resolved for chat post.", "Set XCLAW_AGENT_ID or use signed agent token format.", {"chain": args.chain}, exit_code=1)
+
+        payload = {
+            "schemaVersion": 1,
+            "agentId": agent_id,
+            "message": message,
+            "chainKey": args.chain,
+            "tags": tags,
+        }
+        status_code, body = _api_request("POST", "/chat/messages", payload=payload)
         if status_code < 200 or status_code >= 300:
             return fail(
                 str(body.get("code", "api_error")),
-                str(body.get("message", f"offdex accept failed ({status_code})")),
-                str(body.get("actionHint", "Refresh intent state and retry.")),
-                {"intentId": args.intent, "chain": args.chain, "status": status_code},
+                str(body.get("message", f"chat post failed ({status_code})")),
+                str(body.get("actionHint", "Refresh auth/session state and retry.")),
+                {"chain": args.chain, "status": status_code},
                 exit_code=1,
             )
-        return ok(
-            "Off-DEX intent accepted.",
-            chain=args.chain,
-            settlementIntentId=str(body.get("settlementIntentId", args.intent)),
-            status=str(body.get("status", "accepted")),
-        )
+        item = body.get("item")
+        if not isinstance(item, dict):
+            item = {}
+        return ok("Trade room message posted.", chain=args.chain, item=item)
     except WalletStoreError as exc:
-        return fail("offdex_accept_failed", str(exc), "Verify API env/auth and retry.", {"intentId": args.intent, "chain": args.chain}, exit_code=1)
+        return fail("chat_post_failed", str(exc), "Verify API env/auth and retry.", {"chain": args.chain}, exit_code=1)
     except Exception as exc:
-        return fail("offdex_accept_failed", str(exc), "Inspect runtime off-DEX accept path and retry.", {"intentId": args.intent, "chain": args.chain}, exit_code=1)
-
-
-def _intent_deal_id_hex(intent_id: str) -> str:
-    return "0x" + hashlib.sha256(intent_id.encode("utf-8")).hexdigest()
-
-
-def cmd_offdex_settle(args: argparse.Namespace) -> int:
-    chk = require_json_flag(args)
-    if chk is not None:
-        return chk
-    try:
-        intents = _offdex_intents_query(args.chain, limit=200)
-        target = next((item for item in intents if str(item.get("settlementIntentId")) == args.intent), None)
-        if target is None:
-            return fail(
-                "payload_invalid",
-                "Off-DEX intent was not found for this agent/chain.",
-                "Poll off-DEX intents first and retry with a visible intent ID.",
-                {"intentId": args.intent, "chain": args.chain},
-                exit_code=1,
-            )
-        if str(target.get("status")) != "ready_to_settle":
-            return fail(
-                "trade_invalid_transition",
-                f"Off-DEX settle requires ready_to_settle status, got '{target.get('status')}'.",
-                "Submit maker/taker funding updates before settlement.",
-                {"intentId": args.intent, "status": target.get("status")},
-                exit_code=1,
-            )
-
-        status_code, settle_request = _api_request("POST", f"/offdex/intents/{args.intent}/settle-request", payload={}, include_idempotency=True)
-        if status_code < 200 or status_code >= 300:
-            return fail(
-                str(settle_request.get("code", "api_error")),
-                str(settle_request.get("message", f"settle-request failed ({status_code})")),
-                str(settle_request.get("actionHint", "Refresh intent state and retry.")),
-                {"intentId": args.intent, "chain": args.chain},
-                exit_code=1,
-            )
-
-        store = load_wallet_store()
-        wallet_address, private_key_hex = _execution_wallet(store, args.chain)
-        rpc_url = _chain_rpc_url(args.chain)
-        escrow_contract = _require_chain_contract_address(args.chain, "escrow")
-        escrow_deal_id = str(target.get("escrowDealId") or _intent_deal_id_hex(args.intent))
-        calldata = _cast_calldata("settle(bytes32)", [escrow_deal_id])
-
-        tx_hash = _cast_rpc_send_transaction(
-            rpc_url,
-            {
-                "from": wallet_address,
-                "to": escrow_contract,
-                "data": calldata,
-            },
-            private_key_hex,
-        )
-        status_code, status_body = _offdex_post_status(
-            args.intent,
-            "settled",
-            {"settlementTxHash": tx_hash, "escrowDealId": escrow_deal_id},
-        )
-        if status_code < 200 or status_code >= 300:
-            return fail(
-                str(status_body.get("code", "api_error")),
-                str(status_body.get("message", f"offdex status update failed ({status_code})")),
-                str(status_body.get("actionHint", "Retry status update for settlement.")),
-                {"intentId": args.intent, "txHash": tx_hash},
-                exit_code=1,
-            )
-
-        return ok(
-            "Off-DEX settlement executed.",
-            chain=args.chain,
-            settlementIntentId=args.intent,
-            status="settled",
-            settlementTxHash=tx_hash,
-            escrowDealId=escrow_deal_id,
-        )
-    except WalletPassphraseError as exc:
-        return fail("non_interactive", str(exc), "Set XCLAW_WALLET_PASSPHRASE or run with TTY attached.", {"chain": args.chain}, exit_code=2)
-    except WalletStoreError as exc:
-        return fail("offdex_settle_failed", str(exc), "Verify intent state, wallet setup, chain config, and RPC connectivity.", {"intentId": args.intent, "chain": args.chain}, exit_code=1)
-    except Exception as exc:
-        return fail("offdex_settle_failed", str(exc), "Inspect runtime off-DEX settle path and retry.", {"intentId": args.intent, "chain": args.chain}, exit_code=1)
+        return fail("chat_post_failed", str(exc), "Inspect runtime chat post path and retry.", {"chain": args.chain}, exit_code=1)
 
 
 def _sync_limit_orders(chain: str) -> tuple[int, int]:
@@ -2479,27 +2401,20 @@ def build_parser() -> argparse.ArgumentParser:
     report_send.add_argument("--json", action="store_true")
     report_send.set_defaults(func=cmd_report_send)
 
-    offdex = sub.add_parser("offdex")
-    offdex_sub = offdex.add_subparsers(dest="offdex_cmd")
+    chat = sub.add_parser("chat")
+    chat_sub = chat.add_subparsers(dest="chat_cmd")
 
-    offdex_intents = offdex_sub.add_parser("intents")
-    offdex_intents_sub = offdex_intents.add_subparsers(dest="offdex_intents_cmd")
-    offdex_intents_poll = offdex_intents_sub.add_parser("poll")
-    offdex_intents_poll.add_argument("--chain", required=True)
-    offdex_intents_poll.add_argument("--json", action="store_true")
-    offdex_intents_poll.set_defaults(func=cmd_offdex_intents_poll)
+    chat_poll = chat_sub.add_parser("poll")
+    chat_poll.add_argument("--chain", required=True)
+    chat_poll.add_argument("--json", action="store_true")
+    chat_poll.set_defaults(func=cmd_chat_poll)
 
-    offdex_accept = offdex_sub.add_parser("accept")
-    offdex_accept.add_argument("--intent", required=True)
-    offdex_accept.add_argument("--chain", required=True)
-    offdex_accept.add_argument("--json", action="store_true")
-    offdex_accept.set_defaults(func=cmd_offdex_accept)
-
-    offdex_settle = offdex_sub.add_parser("settle")
-    offdex_settle.add_argument("--intent", required=True)
-    offdex_settle.add_argument("--chain", required=True)
-    offdex_settle.add_argument("--json", action="store_true")
-    offdex_settle.set_defaults(func=cmd_offdex_settle)
+    chat_post = chat_sub.add_parser("post")
+    chat_post.add_argument("--message", required=True)
+    chat_post.add_argument("--chain", required=True)
+    chat_post.add_argument("--tags")
+    chat_post.add_argument("--json", action="store_true")
+    chat_post.set_defaults(func=cmd_chat_post)
 
     limit_orders = sub.add_parser("limit-orders")
     limit_orders_sub = limit_orders.add_subparsers(dest="limit_orders_cmd")

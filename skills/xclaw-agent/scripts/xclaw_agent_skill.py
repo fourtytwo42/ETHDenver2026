@@ -134,7 +134,7 @@ def main(argv: List[str]) -> int:
         return _err(
             "usage",
             "Missing command.",
-            "Use one of: status, intents-poll, approval-check, trade-exec, report-send, offdex-intents-poll, offdex-accept, offdex-settle, wallet-health, wallet-create, wallet-import, wallet-address, wallet-sign-challenge, wallet-send, wallet-balance, wallet-token-balance, wallet-remove",
+            "Use one of: status, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, wallet-health, wallet-create, wallet-import, wallet-address, wallet-sign-challenge, wallet-send, wallet-balance, wallet-token-balance, wallet-remove",
             exit_code=2,
         )
 
@@ -146,9 +146,8 @@ def main(argv: List[str]) -> int:
         "approval-check",
         "trade-exec",
         "report-send",
-        "offdex-intents-poll",
-        "offdex-accept",
-        "offdex-settle",
+        "chat-poll",
+        "chat-post",
         "limit-orders-sync",
         "limit-orders-status",
         "limit-orders-run-once",
@@ -199,18 +198,13 @@ def main(argv: List[str]) -> int:
             return _err("usage", "report-send requires <trade_id>", "usage: report-send <trade_id>", exit_code=2)
         return _run_agent(["report", "send", "--trade", argv[2], "--json"])
 
-    if cmd == "offdex-intents-poll":
-        return _run_agent(["offdex", "intents", "poll", "--chain", chain, "--json"])
+    if cmd == "chat-poll":
+        return _run_agent(["chat", "poll", "--chain", chain, "--json"])
 
-    if cmd == "offdex-accept":
+    if cmd == "chat-post":
         if len(argv) < 3:
-            return _err("usage", "offdex-accept requires <intent_id>", "usage: offdex-accept <intent_id>", exit_code=2)
-        return _run_agent(["offdex", "accept", "--intent", argv[2], "--chain", chain, "--json"])
-
-    if cmd == "offdex-settle":
-        if len(argv) < 3:
-            return _err("usage", "offdex-settle requires <intent_id>", "usage: offdex-settle <intent_id>", exit_code=2)
-        return _run_agent(["offdex", "settle", "--intent", argv[2], "--chain", chain, "--json"])
+            return _err("usage", "chat-post requires <message>", "usage: chat-post <message>", exit_code=2)
+        return _run_agent(["chat", "post", "--message", argv[2], "--chain", chain, "--json"])
 
     if cmd == "wallet-create":
         return _run_agent(["wallet", "create", "--chain", chain, "--json"])
@@ -289,7 +283,7 @@ def main(argv: List[str]) -> int:
     return _err(
         "unknown_command",
         f"Unknown command: {cmd}",
-        "Use one of: status, intents-poll, approval-check, trade-exec, report-send, offdex-intents-poll, offdex-accept, offdex-settle, limit-orders-sync, limit-orders-status, limit-orders-run-once, limit-orders-run-loop, wallet-health, wallet-create, wallet-import, wallet-address, wallet-sign-challenge, wallet-send, wallet-balance, wallet-token-balance, wallet-remove",
+        "Use one of: status, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, limit-orders-sync, limit-orders-status, limit-orders-run-once, limit-orders-run-loop, wallet-health, wallet-create, wallet-import, wallet-address, wallet-sign-challenge, wallet-send, wallet-balance, wallet-token-balance, wallet-remove",
         exit_code=2,
     )
 

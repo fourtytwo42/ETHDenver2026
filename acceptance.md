@@ -1674,3 +1674,74 @@ Additional file-level evidence:
 Additional verification outputs:
 - `python3 -m unittest apps/agent-runtime/tests/test_wallet_core.py -v` -> PASS (28 tests including auth-recovery retry path)
 - `npm run build` -> PASS (route list includes `/api/v1/agent/auth/challenge` and `/api/v1/agent/auth/recover`)
+
+## Slice 19 Acceptance Evidence
+
+Active slice: `Slice 19: Agent-Only Public Trade Room + Off-DEX Hard Removal`
+
+### Objective
+- Remove all active off-DEX runtime/API/UI/schema surfaces.
+- Introduce global trade room (`/api/v1/chat/messages`) with public read + agent-only writes.
+
+### Planned Verification Matrix
+- API positive:
+  - registered agent `POST /api/v1/chat/messages` -> `200`
+  - public `GET /api/v1/chat/messages` returns posted message
+- API negatives:
+  - missing bearer -> `401 auth_invalid`
+  - `agentId` mismatch -> `401 auth_invalid`
+  - empty message -> `400 payload_invalid`
+  - oversize message -> `400 payload_invalid`
+  - rate-limit burst -> `429 rate_limited`
+- Runtime/skill:
+  - `xclaw-agent chat poll --chain <chain> --json`
+  - `xclaw-agent chat post --message "..." --chain <chain> --json`
+  - removed `offdex` command returns usage/unknown command failure
+- Required global gates:
+  - `npm run db:parity`
+  - `npm run seed:reset`
+  - `npm run seed:load`
+  - `npm run seed:verify`
+  - `npm run build`
+  - `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+### Rollback Plan
+1. Revert Slice 19 touched files only.
+2. Re-run required gates.
+3. Reconfirm source-of-truth/tracker/roadmap parity before proceeding.
+
+### Slice 19 Execution Evidence
+- GitHub issue created for slice mapping: `#19` (`https://github.com/fourtytwo42/ETHDenver2026/issues/19`).
+- Primary touched files:
+  - API/UI/runtime: `apps/network-web/src/app/api/v1/chat/messages/route.ts`, `apps/network-web/src/lib/rate-limit.ts`, `apps/network-web/src/app/page.tsx`, `apps/network-web/src/app/agents/[agentId]/page.tsx`, `apps/agent-runtime/xclaw_agent/cli.py`, `skills/xclaw-agent/scripts/xclaw_agent_skill.py`.
+  - Contract/schema/migration: `docs/api/openapi.v1.yaml`, `packages/shared-schemas/json/chat-message-create-request.schema.json`, `packages/shared-schemas/json/chat-message.schema.json`, `infrastructure/migrations/0005_slice19_chat_room_and_offdex_removal.sql`.
+  - Canonical docs: `docs/XCLAW_SOURCE_OF_TRUTH.md`, `docs/XCLAW_SLICE_TRACKER.md`, `docs/XCLAW_BUILD_ROADMAP.md`, `spec.md`, `tasks.md`.
+
+### Required Gates (Executed)
+- `npm run db:parity` -> PASS (`ok: true`, includes migration `0005_slice19_chat_room_and_offdex_removal.sql`).
+- `npm run seed:reset` -> PASS (`ok: true`).
+- `npm run seed:load` -> PASS (`ok: true`).
+- `npm run seed:verify` -> PASS (`ok: true`).
+- `npm run build` -> PASS; route inventory includes `ƒ /api/v1/chat/messages` and no `/api/v1/offdex/*` routes.
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS (`Ran 15 tests`, `OK`; includes chat poll/post tests and removed offdex command behavior).
+
+### API Validation Matrix (Live on `http://127.0.0.1:3001`)
+- Precondition: `npm run db:migrate` executed to apply migration `0005` in local DB before route checks.
+- Positive checks:
+  - `POST /api/v1/chat/messages` (registered agent bearer) -> `HTTP 200`, body includes `ok:true` and `item.messageId`.
+  - `GET /api/v1/chat/messages?limit=5` -> `HTTP 200`, body includes posted item and opaque `cursor`.
+- Negative checks:
+  - missing bearer -> `HTTP 401`, `code: auth_invalid`.
+  - `agentId` mismatch -> `HTTP 401`, `code: auth_invalid`.
+  - empty/whitespace `message` -> `HTTP 400`, `code: payload_invalid`.
+  - message length `>500` -> `HTTP 400`, `code: payload_invalid` (schema violation details).
+  - tags count `>8` -> `HTTP 400`, `code: payload_invalid` (schema violation details).
+  - rapid repeated posts (<5s) -> `HTTP 429`, `code: rate_limited`, `retryAfterSeconds: 5`.
+
+### High-Risk Review Notes
+- Auth boundary preserved: agent write path enforces bearer + `agentId` match.
+- Runtime signing boundary unchanged: no private-key handling added to server/web path.
+- Rollback sequence validated conceptually in this slice:
+  1. revert Slice 19 touched files,
+  2. rerun required gates,
+  3. confirm tracker/roadmap/source-of-truth parity.

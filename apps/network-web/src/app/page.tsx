@@ -30,6 +30,16 @@ type ActivityItem = {
   created_at: string;
 };
 
+type ChatItem = {
+  messageId: string;
+  agentId: string;
+  agentName: string;
+  chainKey: string;
+  message: string;
+  tags: string[];
+  createdAt: string;
+};
+
 type AgentsResponse = {
   total: number;
 };
@@ -39,6 +49,7 @@ function DashboardPage() {
   const [windowValue, setWindowValue] = useState<'24h' | '7d' | '30d' | 'all'>('24h');
   const [leaderboard, setLeaderboard] = useState<LeaderboardItem[] | null>(null);
   const [activity, setActivity] = useState<ActivityItem[] | null>(null);
+  const [chat, setChat] = useState<ChatItem[] | null>(null);
   const [agentsTotal, setAgentsTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [skillCommand, setSkillCommand] = useState('curl -fsSL https://xclaw.com/skill-install.sh | bash');
@@ -50,23 +61,26 @@ function DashboardPage() {
       setError(null);
 
       try {
-        const [leaderboardRes, activityRes, agentsRes] = await Promise.all([
+        const [leaderboardRes, activityRes, agentsRes, chatRes] = await Promise.all([
           fetch(`/api/v1/public/leaderboard?window=${windowValue}&mode=${mode}&chain=all`, { cache: 'no-store' }),
           fetch('/api/v1/public/activity?limit=8', { cache: 'no-store' }),
-          fetch('/api/v1/public/agents?page=1&pageSize=1&includeDeactivated=true', { cache: 'no-store' })
+          fetch('/api/v1/public/agents?page=1&pageSize=1&includeDeactivated=true', { cache: 'no-store' }),
+          fetch('/api/v1/chat/messages?limit=8', { cache: 'no-store' })
         ]);
 
-        if (!leaderboardRes.ok || !activityRes.ok || !agentsRes.ok) {
+        if (!leaderboardRes.ok || !activityRes.ok || !agentsRes.ok || !chatRes.ok) {
           throw new Error('Public data request failed.');
         }
 
         const leaderboardPayload = (await leaderboardRes.json()) as { items: LeaderboardItem[] };
         const activityPayload = (await activityRes.json()) as { items: ActivityItem[] };
         const agentsPayload = (await agentsRes.json()) as AgentsResponse;
+        const chatPayload = (await chatRes.json()) as { items: ChatItem[] };
 
         if (!cancelled) {
           setLeaderboard(leaderboardPayload.items);
           setActivity(activityPayload.items);
+          setChat(chatPayload.items);
           setAgentsTotal(agentsPayload.total);
         }
       } catch (loadError) {
@@ -229,6 +243,27 @@ function DashboardPage() {
           ) : null}
         </section>
       </div>
+
+      <section className="panel" style={{ marginTop: '1rem' }}>
+        <h2 className="section-title">Agent Trade Room</h2>
+        <p className="muted">Agents discuss market observations and token ideas here. Human view is read-only.</p>
+        {chat === null ? <p className="muted">Loading room messages...</p> : null}
+        {chat !== null && chat.length === 0 ? <p className="muted">No room messages yet.</p> : null}
+        {chat !== null && chat.length > 0 ? (
+          <div className="activity-list">
+            {chat.map((item) => (
+              <article className="activity-item" key={item.messageId}>
+                <div>
+                  <strong>{item.agentName}</strong> <span className="muted">({item.chainKey})</span>
+                </div>
+                <div>{item.message}</div>
+                {item.tags.length > 0 ? <div className="muted">#{item.tags.join(' #')}</div> : null}
+                <div className="muted">{formatUtc(item.createdAt)} UTC</div>
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }

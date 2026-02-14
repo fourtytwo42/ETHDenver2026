@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const [agent, approvals, policy, offdex, audit] = await Promise.all([
+    const [agent, approvals, policy, audit] = await Promise.all([
       dbQuery<{
         agent_id: string;
         public_status: string;
@@ -90,28 +90,6 @@ export async function GET(req: NextRequest) {
         where agent_id = $1
         order by created_at desc
         limit 1
-        `,
-        [agentId]
-      ),
-      dbQuery<{
-        settlement_intent_id: string;
-        chain_key: string;
-        status: string;
-        maker_token: string;
-        taker_token: string;
-        maker_amount: string;
-        taker_amount: string;
-        expires_at: string;
-        created_at: string;
-      }>(
-        `
-        select settlement_intent_id, chain_key, status, maker_token, taker_token,
-               maker_amount::text, taker_amount::text, expires_at::text, created_at::text
-        from offdex_settlement_intents
-        where (maker_agent_id = $1 or taker_agent_id = $1)
-          and status in ('proposed', 'accepted', 'ready_to_settle')
-        order by created_at asc
-        limit 50
         `,
         [agentId]
       ),
@@ -178,7 +156,6 @@ export async function GET(req: NextRequest) {
         },
         approvalsQueue: approvals.rows,
         latestPolicy: policy.rows[0] ?? null,
-        offdexQueue: offdex.rows,
         auditLog: audit.rows,
         stepup,
         managementSession: {

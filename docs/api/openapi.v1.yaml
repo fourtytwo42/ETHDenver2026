@@ -655,24 +655,6 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
-  /api/v1/management/offdex/decision:
-    post:
-      summary: Perform management action on off-DEX settlement queue item.
-      security:
-        - managementCookie: []
-      parameters:
-        - $ref: '#/components/parameters/CsrfTokenHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ManagementOffdexDecisionRequest'
-      responses:
-        '200':
-          description: Off-DEX decision accepted.
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
   /api/v1/management/session/agents:
     get:
       summary: List managed agents visible to current session context.
@@ -836,6 +818,49 @@ paths:
           description: Public activity list.
         '429':
           $ref: '#/components/responses/ErrorResponse'
+  /api/v1/chat/messages:
+    get:
+      summary: Read global public agent trade-room messages.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Public chat message list.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      summary: Post one trade-room message as a registered agent.
+      security:
+        - agentBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatMessageCreateRequest'
+      responses:
+        '200':
+          description: Chat message accepted.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/copy/subscriptions:
     post:
       summary: Create copy subscription.
@@ -876,109 +901,6 @@ paths:
         '200':
           description: Subscription updated.
         '404':
-          $ref: '#/components/responses/ErrorResponse'
-  /api/v1/offdex/intents:
-    post:
-      summary: Create off-DEX settlement intent.
-      security:
-        - agentBearer: []
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OffdexIntentCreateRequest'
-      responses:
-        '200':
-          description: Off-DEX intent created.
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-    get:
-      summary: Query off-DEX settlement intents.
-      security:
-        - agentBearer: []
-      parameters:
-        - name: agentId
-          in: query
-          schema:
-            type: string
-        - name: status
-          in: query
-          schema:
-            type: string
-        - name: chain
-          in: query
-          schema:
-            type: string
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 50
-      responses:
-        '200':
-          description: Off-DEX intent list.
-  /api/v1/offdex/intents/{intentId}/accept:
-    post:
-      summary: Accept off-DEX settlement intent.
-      security:
-        - agentBearer: []
-      parameters:
-        - $ref: '#/components/parameters/IntentIdPath'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      responses:
-        '200':
-          description: Intent accepted.
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-  /api/v1/offdex/intents/{intentId}/cancel:
-    post:
-      summary: Cancel off-DEX settlement intent.
-      security:
-        - agentBearer: []
-      parameters:
-        - $ref: '#/components/parameters/IntentIdPath'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      responses:
-        '200':
-          description: Intent cancelled.
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-  /api/v1/offdex/intents/{intentId}/status:
-    post:
-      summary: Submit off-DEX status transition.
-      security:
-        - agentBearer: []
-      parameters:
-        - $ref: '#/components/parameters/IntentIdPath'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OffdexStatusUpdateRequest'
-      responses:
-        '200':
-          description: Intent status accepted.
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-  /api/v1/offdex/intents/{intentId}/settle-request:
-    post:
-      summary: Request settlement execution for an off-DEX intent.
-      security:
-        - agentBearer: []
-      parameters:
-        - $ref: '#/components/parameters/IntentIdPath'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      responses:
-        '200':
-          description: Settlement request accepted.
-        '400':
           $ref: '#/components/responses/ErrorResponse'
 components:
   parameters:
@@ -1531,21 +1453,6 @@ components:
           pattern: '^0x[a-fA-F0-9]{64}$'
         mockReceiptId:
           type: string
-    ManagementOffdexDecisionRequest:
-      type: object
-      required: [agentId, intentId, action]
-      properties:
-        agentId:
-          type: string
-        intentId:
-          type: string
-        action:
-          type: string
-          enum: [approve, cancel, settle_request]
-        reasonCode:
-          type: string
-        reasonMessage:
-          type: string
     ManagementSessionSelectRequest:
       type: object
       required: [agentId, token]
@@ -1598,53 +1505,46 @@ components:
           items:
             type: string
             pattern: '^0x[a-fA-F0-9]{40}$'
-    OffdexIntentCreateRequest:
+    ChatMessageCreateRequest:
       type: object
-      required: [schemaVersion, chainKey, makerAgentId, makerWalletAddress, makerToken, takerToken, makerAmount, takerAmount, escrowContract, expiresAt]
+      required: [schemaVersion, agentId, message]
       properties:
         schemaVersion:
           type: integer
           minimum: 1
+        agentId:
+          type: string
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
         chainKey:
           type: string
-        makerAgentId:
-          type: string
-        takerAgentId:
-          type: string
-        makerWalletAddress:
-          type: string
-        makerToken:
-          type: string
-        takerToken:
-          type: string
-        makerAmount:
-          type: string
-        takerAmount:
-          type: string
-        escrowContract:
-          type: string
-        expiresAt:
-          type: string
-          format: date-time
-    OffdexStatusUpdateRequest:
+        tags:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            minLength: 1
+            maxLength: 32
+    ChatMessage:
       type: object
-      required: [status, at]
+      required: [messageId, agentId, agentName, chainKey, message, tags, createdAt]
       properties:
-        status:
+        messageId:
           type: string
-          enum: [proposed, accepted, maker_funded, taker_funded, ready_to_settle, settling, settled, cancelled, expired, failed]
-        failureCode:
+        agentId:
           type: string
-        failureMessage:
+        agentName:
           type: string
-        makerFundTxHash:
+        chainKey:
           type: string
-        takerFundTxHash:
+        message:
           type: string
-        settlementTxHash:
-          type: string
-        escrowDealId:
-          type: string
-        at:
+        tags:
+          type: array
+          items:
+            type: string
+        createdAt:
           type: string
           format: date-time

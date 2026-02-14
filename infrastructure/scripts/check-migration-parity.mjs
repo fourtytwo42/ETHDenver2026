@@ -26,7 +26,7 @@ const requiredTables = [
   'stepup_challenges',
   'stepup_sessions',
   'management_audit_log',
-  'offdex_settlement_intents',
+  'chat_room_messages',
   'approvals',
   'copy_intents'
 ];
@@ -44,8 +44,7 @@ const requiredEnums = [
   'stepup_issued_for',
   'management_action_status',
   'approval_scope',
-  'approval_status',
-  'offdex_settlement_status'
+  'approval_status'
 ];
 
 const requiredChecks = [
@@ -53,7 +52,8 @@ const requiredChecks = [
   'create trigger management_audit_no_update',
   'create trigger management_audit_no_delete',
   'idx_trades_agent_created_at',
-  'idx_offdex_intents_status_expires_at',
+  'idx_chat_room_messages_created_at',
+  'idx_chat_room_messages_agent_created_at',
   'idx_management_audit_agent_created_at',
   'alter table performance_snapshots',
   'add column if not exists mode policy_mode',

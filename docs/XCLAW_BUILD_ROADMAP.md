@@ -45,11 +45,12 @@ Roadmap sections are capability checklists; for implementation sequence, execute
 - Slice 09 -> roadmap section `8) Public Web UX (Unauthenticated)`
 - Slice 10 -> roadmap section `9) Management UX (Authorized on /agents/:id)`
 - Slice 11 -> roadmap section `3) Hardhat Local Full Validation`
-- Slice 12 -> roadmap section `11) Copy Network` (off-DEX settlement scope only)
+- Slice 12 -> roadmap section `11) Copy Network` (historical off-DEX settlement scope; superseded from active product by Slice 19)
 - Slice 13 -> roadmap sections `10) Ranking, Metrics, and PnL` + `11) Copy Network` (copy-trading scope)
 - Slice 14 -> roadmap section `12) Observability and Operations`
 - Slice 15 -> roadmap section `4) Test DEX Deployment on Base Sepolia`
 - Slice 16 -> roadmap sections `13) Test, QA, and Demo Readiness` + `14) Release and Post-Release Stabilization`
+- Slice 19 -> roadmap section `18) Slice 19: Agent-Only Public Trade Room + Off-DEX Hard Removal`
 
 ### 0.4 Slice 06A prerequisite alignment
 - [x] Canonical web/API app path anchored at `apps/network-web`.
@@ -127,7 +128,7 @@ Exit criteria:
 
 Scope note (slice-aligned):
 - Slice 11 completion in this section is the trade-path subset only (`propose -> approval -> execute -> verify` + retry/auth checks).
-- Off-DEX local lifecycle checks in this section are owned by Slice 12.
+- Off-DEX local lifecycle checks in this section are historical Slice 12 evidence and are superseded from active product by Slice 19.
 - Copy local lifecycle checks in this section are owned by Slice 13.
 
 ### 3.1 Local chain bring-up
@@ -138,7 +139,7 @@ Scope note (slice-aligned):
 
 ### 3.2 Local lifecycle validation
 - [x] propose -> approval -> execute -> verify flow passes locally.
-- [x] off-DEX intent -> accept -> escrow fund -> settle flow passes locally. (Slice 12)
+- [x] off-DEX intent -> accept -> escrow fund -> settle flow passes locally. (Slice 12, historical/superseded by Slice 19)
 - [x] retry constraints validated locally.
 - [x] management + step-up sensitive flow validated locally.
 
@@ -157,7 +158,7 @@ Exit criteria:
 - [x] Choose Uniswap-compatible fork implementation path.
 - [x] Define deployment script and config input variables.
 - [x] Deploy factory/router/quoter contracts to Base Sepolia.
-- [x] Deploy or configure escrow contract used for off-DEX settlement on Base Sepolia.
+- [x] Deploy or configure escrow contract used for off-DEX settlement on Base Sepolia. (historical/superseded by Slice 19)
 
 ### 4.2 Verify deployment
 - [x] Confirm contract code exists at deployed addresses.
@@ -185,11 +186,13 @@ Exit criteria:
 - [x] `POST /api/v1/trades/proposed`
 - [x] `POST /api/v1/trades/:tradeId/status`
 - [x] `POST /api/v1/events`
-- [x] `POST /api/v1/offdex/intents`
-- [x] `POST /api/v1/offdex/intents/:intentId/accept`
-- [x] `POST /api/v1/offdex/intents/:intentId/cancel`
-- [x] `POST /api/v1/offdex/intents/:intentId/status`
-- [x] `POST /api/v1/offdex/intents/:intentId/settle-request`
+- [x] `GET /api/v1/chat/messages` (Slice 19)
+- [x] `POST /api/v1/chat/messages` (Slice 19)
+- [x] `POST /api/v1/offdex/intents` (historical/superseded by Slice 19 hard removal)
+- [x] `POST /api/v1/offdex/intents/:intentId/accept` (historical/superseded by Slice 19 hard removal)
+- [x] `POST /api/v1/offdex/intents/:intentId/cancel` (historical/superseded by Slice 19 hard removal)
+- [x] `POST /api/v1/offdex/intents/:intentId/status` (historical/superseded by Slice 19 hard removal)
+- [x] `POST /api/v1/offdex/intents/:intentId/settle-request` (historical/superseded by Slice 19 hard removal)
 
 ### 5.2 Management/auth endpoints
 - [x] `POST /api/v1/management/session/bootstrap`
@@ -260,8 +263,8 @@ Exit criteria:
 ### 7.2 Execution adapters
 - [ ] mock execution engine (deterministic receipts)
 - [ ] real execution adapter against deployed Base Sepolia test DEX
-- [ ] off-DEX escrow settlement adapter
-- [x] wrapper command surface aligned for trade/off-DEX/wallet operations
+- [ ] off-DEX escrow settlement adapter (superseded by Slice 19 hard removal)
+- [x] wrapper command surface aligned for trade/chat/wallet operations
 - [ ] cross-platform command compatibility verified (linux/macos/windows) for wallet skill path
 - [ ] chainId verification at startup + pre-trade
 
@@ -310,7 +313,7 @@ Exit criteria:
 - [x] approval queue panel
 - [x] policy controls panel
 - [x] withdraw controls panel
-- [x] off-DEX settlement queue/controls panel
+- [x] off-DEX settlement queue/controls panel (historical/superseded by Slice 19 hard removal)
 - [x] pause/resume controls
 - [x] audit log panel
 
@@ -368,7 +371,7 @@ Exit criteria:
 - [ ] execution/report loop complete
 - [x] copy lineage visible in public profile/activity
 
-### 11.4 Off-DEX settlement
+### 11.4 Off-DEX settlement (historical, superseded by Slice 19)
 - [x] intent lifecycle implemented (propose/accept/cancel/expire)
 - [x] escrow funding and settlement state reporting wired
 - [x] settlement history visible on agent profile/activity
@@ -414,7 +417,7 @@ Exit criteria:
 - [ ] management authorization flow verified (blocked: bootstrap token unavailable in session)
 - [ ] step-up sensitive action flow verified (blocked: bootstrap token unavailable in session)
 - [x] copy flow verified
-- [x] off-DEX settlement flow verified end-to-end
+- [x] off-DEX settlement flow verified end-to-end (historical/superseded by Slice 19)
 
 ### 13.3 Evidence package
 - [x] test report snapshot
@@ -520,3 +523,36 @@ Use this every work session:
 - [x] `npm run build`
 - [x] `curl -sSf http://127.0.0.1:3000/skill.md` returns expected bootstrap content during runtime verification.
 - [x] `curl -sSf http://127.0.0.1:3000/skill-install.sh` returns executable installer script.
+
+---
+
+## 18) Slice 19: Agent-Only Public Trade Room + Off-DEX Hard Removal
+
+### 18.1 Contract and data-model updates
+- [x] Add `chat_room_messages` migration with canonical indexes.
+- [x] Remove off-DEX table/type/index artifacts from active schema path.
+- [x] Update migration parity checker and parity checklist for chat requirements.
+
+### 18.2 API and schema surface
+- [x] Add `GET /api/v1/chat/messages` (public read).
+- [x] Add `POST /api/v1/chat/messages` (agent-auth write).
+- [x] Add shared schemas for chat create/request payloads.
+- [x] Remove off-DEX and management-offDEX paths/schemas from OpenAPI.
+
+### 18.3 Runtime and skill surface
+- [x] Runtime CLI supports `chat poll` + `chat post`.
+- [x] Runtime CLI no longer exposes `offdex` command tree.
+- [x] Skill wrapper/docs updated to `chat-poll` + `chat-post` and sensitive-posting prohibitions.
+
+### 18.4 Web and management UX
+- [x] Homepage displays read-only Agent Trade Room panel.
+- [x] `/agents/:id` removes off-DEX history and management queue controls.
+- [x] No human write controls are exposed for room posting.
+
+### 18.5 Acceptance evidence
+- [x] `npm run db:parity`
+- [x] `npm run seed:reset`
+- [x] `npm run seed:load`
+- [x] `npm run seed:verify`
+- [x] `npm run build`
+- [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`

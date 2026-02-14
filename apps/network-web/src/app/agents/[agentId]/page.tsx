@@ -53,19 +53,6 @@ type AgentProfilePayload = {
         copiedPnlUsd: string | null;
       }
     | null;
-  offdexHistory: Array<{
-    settlementIntentId: string;
-    chainKey: string;
-    role: 'maker' | 'taker';
-    status: string;
-    pairLabel: string;
-    escrowContract: string;
-    makerFundTxHash: string | null;
-    takerFundTxHash: string | null;
-    settlementTxHash: string | null;
-    createdAt: string;
-    updatedAt: string;
-  }>;
 };
 
 type TradePayload = {
@@ -127,17 +114,6 @@ type ManagementStatePayload = {
     allowed_tokens: string[];
     created_at: string;
   } | null;
-  offdexQueue: Array<{
-    settlement_intent_id: string;
-    chain_key: string;
-    status: string;
-    maker_token: string;
-    taker_token: string;
-    maker_amount: string;
-    taker_amount: string;
-    expires_at: string;
-    created_at: string;
-  }>;
   auditLog: Array<{
     audit_id: string;
     action_type: string;
@@ -318,23 +294,6 @@ export default function AgentPublicProfilePage() {
   const [orderAmountIn, setOrderAmountIn] = useState('0.01');
   const [orderLimitPrice, setOrderLimitPrice] = useState('2500');
   const [orderSlippageBps, setOrderSlippageBps] = useState('50');
-
-  function renderTxHash(hash: string | null): string {
-    if (!hash) {
-      return '-';
-    }
-    return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
-  }
-
-  function txExplorerUrl(chainKey: string, hash: string | null): string | null {
-    if (!hash) {
-      return null;
-    }
-    if (chainKey === 'base_sepolia') {
-      return `https://sepolia.basescan.org/tx/${hash}`;
-    }
-    return null;
-  }
 
   useEffect(() => {
     if (!agentId) {
@@ -629,66 +588,6 @@ export default function AgentPublicProfilePage() {
               <div>
                 Self PnL: {formatUsd(profile.copyBreakdown.selfPnlUsd)} | Copied PnL: {formatUsd(profile.copyBreakdown.copiedPnlUsd)}
               </div>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="panel" id="offdex">
-          <h2 className="section-title">Off-DEX Settlement History</h2>
-          {!profile ? <p className="muted">Loading off-DEX history...</p> : null}
-          {profile && profile.offdexHistory.length === 0 ? <p className="muted">No off-DEX settlement history yet.</p> : null}
-          {profile && profile.offdexHistory.length > 0 ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Role</th>
-                    <th>Pair</th>
-                    <th>Status</th>
-                    <th>Maker Fund Tx</th>
-                    <th>Taker Fund Tx</th>
-                    <th>Settlement Tx</th>
-                    <th>Updated (UTC)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profile.offdexHistory.map((intent) => (
-                    <tr key={intent.settlementIntentId}>
-                      <td>{intent.role}</td>
-                      <td>{intent.pairLabel}</td>
-                      <td>{intent.status}</td>
-                      <td>
-                        {txExplorerUrl(intent.chainKey, intent.makerFundTxHash) ? (
-                          <a href={txExplorerUrl(intent.chainKey, intent.makerFundTxHash) ?? '#'} target="_blank" rel="noreferrer">
-                            {renderTxHash(intent.makerFundTxHash)}
-                          </a>
-                        ) : (
-                          renderTxHash(intent.makerFundTxHash)
-                        )}
-                      </td>
-                      <td>
-                        {txExplorerUrl(intent.chainKey, intent.takerFundTxHash) ? (
-                          <a href={txExplorerUrl(intent.chainKey, intent.takerFundTxHash) ?? '#'} target="_blank" rel="noreferrer">
-                            {renderTxHash(intent.takerFundTxHash)}
-                          </a>
-                        ) : (
-                          renderTxHash(intent.takerFundTxHash)
-                        )}
-                      </td>
-                      <td>
-                        {txExplorerUrl(intent.chainKey, intent.settlementTxHash) ? (
-                          <a href={txExplorerUrl(intent.chainKey, intent.settlementTxHash) ?? '#'} target="_blank" rel="noreferrer">
-                            {renderTxHash(intent.settlementTxHash)}
-                          </a>
-                        ) : (
-                          renderTxHash(intent.settlementTxHash)
-                        )}
-                      </td>
-                      <td>{formatUtc(intent.updatedAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           ) : null}
         </section>
@@ -1028,74 +927,6 @@ export default function AgentPublicProfilePage() {
                     Request Withdraw
                   </button>
                 </div>
-              </article>
-
-              <article className="management-card">
-                <h3>Off-DEX Settlement Queue</h3>
-                {management.data.offdexQueue.length === 0 ? <p className="muted">No pending off-DEX intents.</p> : null}
-                {management.data.offdexQueue.map((intent) => (
-                  <div key={intent.settlement_intent_id} className="queue-item">
-                    <div>
-                      <strong>
-                        {intent.maker_token}/{intent.taker_token}
-                      </strong>
-                      <div className="muted">{intent.status}</div>
-                    </div>
-                    <div className="toolbar">
-                      <button
-                        type="button"
-                        className="theme-toggle"
-                        onClick={() =>
-                          void runManagementAction(
-                            () =>
-                              managementPost('/api/v1/management/offdex/decision', {
-                                agentId,
-                                intentId: intent.settlement_intent_id,
-                                action: 'approve'
-                              }).then(() => Promise.resolve()),
-                            `Off-DEX intent approved: ${intent.settlement_intent_id}`
-                          )
-                        }
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        className="theme-toggle"
-                        onClick={() =>
-                          void runManagementAction(
-                            () =>
-                              managementPost('/api/v1/management/offdex/decision', {
-                                agentId,
-                                intentId: intent.settlement_intent_id,
-                                action: 'settle_request'
-                              }).then(() => Promise.resolve()),
-                            `Settlement requested: ${intent.settlement_intent_id}`
-                          )
-                        }
-                      >
-                        Settle Request
-                      </button>
-                      <button
-                        type="button"
-                        className="theme-toggle"
-                        onClick={() =>
-                          void runManagementAction(
-                            () =>
-                              managementPost('/api/v1/management/offdex/decision', {
-                                agentId,
-                                intentId: intent.settlement_intent_id,
-                                action: 'cancel'
-                              }).then(() => Promise.resolve()),
-                            `Off-DEX intent cancelled: ${intent.settlement_intent_id}`
-                          )
-                        }
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ))}
               </article>
 
               <article className="management-card">

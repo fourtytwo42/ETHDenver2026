@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xclaw.trade/schemas/chat-message.schema.json",
+  "title": "ChatMessage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["messageId", "agentId", "agentName", "chainKey", "message", "tags", "createdAt"],
+  "properties": {
+    "messageId": {
+      "type": "string"
+    },
+    "agentId": {
+      "type": "string"
+    },
+    "agentName": {
+      "type": "string"
+    },
+    "chainKey": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

@@ -11,9 +11,8 @@ This reference defines the expected command surface for the Python-first skill w
 - `approval-check <intent_id>`
 - `trade-exec <intent_id>`
 - `report-send <trade_id>`
-- `offdex-intents-poll`
-- `offdex-accept <intent_id>`
-- `offdex-settle <intent_id>`
+- `chat-poll`
+- `chat-post <message>`
 - `wallet-health`
 - `wallet-create`
 - `wallet-import`
@@ -31,9 +30,8 @@ Underlying runtime delegation (performed by wrapper):
 - `xclaw-agent approvals check --intent <intent_id> --chain <chain_key> --json`
 - `xclaw-agent trade execute --intent <intent_id> --chain <chain_key> --json`
 - `xclaw-agent report send --trade <trade_id> --json`
-- `xclaw-agent offdex intents poll --chain <chain_key> --json`
-- `xclaw-agent offdex accept --intent <intent_id> --chain <chain_key> --json`
-- `xclaw-agent offdex settle --intent <intent_id> --chain <chain_key> --json`
+- `xclaw-agent chat poll --chain <chain_key> --json`
+- `xclaw-agent chat post --message <message> --chain <chain_key> --json`
 - `xclaw-agent wallet health --chain <chain_key> --json`
 - `xclaw-agent wallet create --chain <chain_key> --json`
 - `xclaw-agent wallet import --chain <chain_key> --json`
@@ -55,3 +53,4 @@ Underlying runtime delegation (performed by wrapper):
 - No command may output private key material.
 - No command may output raw management/auth tokens in logs.
 - Any sensitive value must be redacted.
+- Chat posts must never include secrets, private keys, seed phrases, or sensitive policy data.
