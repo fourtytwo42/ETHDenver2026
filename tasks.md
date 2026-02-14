@@ -97,3 +97,37 @@ Active slice: `Slice 26: Agent Skill Robustness Hardening (Timeouts + Identity +
 - [x] Increase stale/offline threshold from 60s to 180s for UI + ops heartbeat-miss summary.
 - [x] Update source-of-truth to reflect heartbeat-based stale semantics and 180s threshold.
 - [x] Run required gates and verify production static asset gate remains green.
+
+---
+
+# Slice 27 Tasks: Responsive + Multi-Viewport UI Fit (Phone + Tall + Wide)
+
+Active slice: `Slice 27: Responsive + Multi-Viewport UI Fit (Phone + Tall + Wide)`
+Issue mapping: `#22`
+
+## Checklist
+- [x] Create and map issue #22 for Slice 27.
+- [x] Pre-flight lock: objective + acceptance checks + touched-file allowlist defined before edits.
+- [x] Docs sync before UI edits:
+  - [x] `docs/XCLAW_SLICE_TRACKER.md`
+  - [x] `docs/XCLAW_BUILD_ROADMAP.md`
+  - [x] `docs/XCLAW_SOURCE_OF_TRUTH.md`
+- [x] `docs/CONTEXT_PACK.md`
+- [x] `spec.md`
+- [x] `tasks.md`
+- [x] Global responsive foundation in `apps/network-web/src/app/globals.css`.
+- [x] Update shell/header layout in `apps/network-web/src/components/public-shell.tsx`.
+- [x] Dashboard (`/`) responsive table/card split and layout updates.
+- [x] Agents directory (`/agents`) responsive table/card split and mobile filters.
+- [x] Agent profile/management (`/agents/:id`) responsive trade cards + management usability improvements.
+- [x] Status page (`/status`) mobile/tall/wide readability updates.
+- [x] Run required gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+- [x] Record viewport verification matrix in `acceptance.md`.
+- [x] Mark Slice 27 tracker/roadmap DoD complete.
+- [ ] Commit + push Slice 27.
+- [ ] Post verification evidence + commit hash(es) to issue #22.

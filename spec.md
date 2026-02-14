@@ -138,3 +138,45 @@ Harden the agent runtime/skill command surface to prevent hangs, improve identit
 - Non-goals:
   - no trading/runtime command behavior changes,
   - no auth/session behavior changes.
+
+---
+
+# Slice 27 Spec: Responsive + Multi-Viewport UI Fit (Phone + Tall + Wide)
+
+## Goal
+Upgrade `apps/network-web` responsive behavior and styling so `/`, `/agents`, `/agents/:id`, and `/status` fit cleanly on phone, tall-screen, desktop, and wide-monitor viewports while preserving canonical X-Claw semantics.
+
+## Success Criteria
+1. No critical overflow/clipping of core controls/content at 360px width.
+2. Desktop-table/mobile-card pattern is implemented for:
+   - dashboard leaderboard (`/`)
+   - agents directory listing (`/agents`)
+   - trades list on agent profile (`/agents/:id`)
+3. `/agents/:id` management controls remain usable on phone and sticky-rail behavior remains on desktop.
+4. `/status` diagnostic panels collapse to readable mobile card layouts.
+5. Dark/light themes and canonical status vocabulary remain unchanged.
+6. Required gates pass and viewport verification evidence is recorded.
+
+## Non-Goals
+1. No API/OpenAPI/schema changes.
+2. No runtime/agent command-surface changes.
+3. No dependency additions.
+
+## Constraints / Safety
+1. Preserve one-site model (public and authorized management on `/agents/:id`).
+2. Keep exact status vocabulary unchanged: `active`, `offline`, `degraded`, `paused`, `deactivated`.
+3. Keep management trust boundaries and action semantics unchanged.
+
+## Acceptance Checks
+- `npm run db:parity`
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:verify`
+- `npm run build`
+- Manual viewport checks:
+  - 360x800
+  - 390x844
+  - 768x1024
+  - 900x1600
+  - 1440x900
+  - 1920x1080

@@ -160,39 +160,78 @@ export default function AgentsDirectoryPage() {
         {payload && payload.items.length === 0 ? <p className="muted">No agents match the current filters.</p> : null}
 
         {payload && payload.items.length > 0 ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Agent</th>
-                  <th>Status</th>
-                  <th>Platform</th>
-                  <th>Last Activity (UTC)</th>
-                  <th>Registered (UTC)</th>
-                </tr>
-              </thead>
-              <tbody>
+          <>
+            <div className="table-desktop">
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Agent</th>
+                      <th>Status</th>
+                      <th>Platform</th>
+                      <th>Last Activity (UTC)</th>
+                      <th>Registered (UTC)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payload.items.map((item) => (
+                      <tr key={item.agent_id}>
+                        <td>
+                          <Link href={`/agents/${item.agent_id}`}>{item.agent_name}</Link>
+                        </td>
+                        <td>{isPublicStatus(item.public_status) ? <PublicStatusBadge status={item.public_status} /> : item.public_status}</td>
+                        <td>{item.runtime_platform}</td>
+                        <td>
+                          {formatUtc(item.last_activity_at)}
+                          {isStale(item.last_heartbeat_at, HEARTBEAT_STALE_THRESHOLD_SECONDS) ? (
+                            <div className="stale">idle</div>
+                          ) : (
+                            <div className="muted">idle</div>
+                          )}
+                        </td>
+                        <td>{formatUtc(item.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="cards-mobile">
+              <div className="cards-mobile-grid">
                 {payload.items.map((item) => (
-                  <tr key={item.agent_id}>
-                    <td>
-                      <Link href={`/agents/${item.agent_id}`}>{item.agent_name}</Link>
-                    </td>
-                    <td>{isPublicStatus(item.public_status) ? <PublicStatusBadge status={item.public_status} /> : item.public_status}</td>
-                    <td>{item.runtime_platform}</td>
-                    <td>
-                      {formatUtc(item.last_activity_at)}
-                      {isStale(item.last_heartbeat_at, HEARTBEAT_STALE_THRESHOLD_SECONDS) ? (
-                        <div className="stale">idle</div>
-                      ) : (
-                        <div className="muted">idle</div>
-                      )}
-                    </td>
-                    <td>{formatUtc(item.created_at)}</td>
-                  </tr>
+                  <article className="data-card" key={`${item.agent_id}:mobile`}>
+                    <div>
+                      <strong>
+                        <Link href={`/agents/${item.agent_id}`}>{item.agent_name}</Link>
+                      </strong>
+                    </div>
+                    <div className="toolbar" style={{ marginBottom: 0 }}>
+                      {isPublicStatus(item.public_status) ? <PublicStatusBadge status={item.public_status} /> : item.public_status}
+                    </div>
+                    <div className="data-pairs">
+                      <div>
+                        <div className="data-label">Platform</div>
+                        <div className="data-value">{item.runtime_platform}</div>
+                      </div>
+                      <div>
+                        <div className="data-label">Last Activity (UTC)</div>
+                        <div className="data-value">{formatUtc(item.last_activity_at)}</div>
+                        {isStale(item.last_heartbeat_at, HEARTBEAT_STALE_THRESHOLD_SECONDS) ? (
+                          <div className="stale">idle</div>
+                        ) : (
+                          <div className="muted">idle</div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="data-label">Registered (UTC)</div>
+                        <div className="data-value">{formatUtc(item.created_at)}</div>
+                      </div>
+                    </div>
+                  </article>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </div>
+          </>
         ) : null}
 
         <div className="toolbar" style={{ marginTop: '0.8rem' }}>

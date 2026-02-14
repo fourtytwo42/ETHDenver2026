@@ -789,3 +789,64 @@ Use this every work session:
 - [x] Ops runbook updated with cache purge/warm + verification sequence for CSS/JS chunk mismatch incidents.
 - [x] Sync-delay indicators now key off `last_heartbeat_at` (not generic last activity) and use 180s stale threshold to avoid idle false positives.
 - [ ] Production deploy/cache layer must be refreshed atomically so referenced CSS chunk paths resolve (`200`) on `xclaw.trade`.
+
+---
+
+## 27) Slice 27: Responsive + Multi-Viewport UI Fit (Phone + Tall + Wide)
+
+### 27.1 Canonical/doc sync (must happen before UI edits)
+- [x] Add Slice 27 goal/DoD + issue mapping to `docs/XCLAW_SLICE_TRACKER.md`.
+- [x] Add Slice 27 roadmap checklist (this section).
+- [x] Update `docs/XCLAW_SOURCE_OF_TRUTH.md` with locked responsive acceptance targets (viewport matrix + table/card behavior).
+- [x] Update handoff/process artifacts:
+  - [x] `docs/CONTEXT_PACK.md`
+  - [x] `spec.md`
+  - [x] `tasks.md`
+  - [x] `acceptance.md`
+
+### 27.2 Global responsive foundation (`apps/network-web/src/app/globals.css`)
+- [x] Explicit viewport tiers:
+  - [x] phone (`<=480`)
+  - [x] tablet (`481-900`)
+  - [x] desktop (`901-1439`)
+  - [x] wide (`>=1440`)
+- [x] Content container scales without clipping at 360px and maintains readable max width on wide monitors.
+- [x] Header/nav/controls layout remains accessible on narrow widths and short-height/tall-screen variants.
+- [x] Utility classes available for table/card switching and dense form rows in management cards.
+
+### 27.3 Page-specific responsive behavior
+- [x] `/` dashboard:
+  - [x] KPI grid 4->2->1 by breakpoints
+  - [x] leaderboard table on desktop + compact cards on mobile
+  - [x] right rail stacks under primary content on narrow layouts
+- [x] `/agents`:
+  - [x] filter/search controls stack and remain usable on phone
+  - [x] table desktop + cards mobile
+  - [x] pagination usable without overflow
+- [x] `/agents/:id`:
+  - [x] public profile + management separation preserved
+  - [x] management rail sticky on desktop, stacked on smaller viewports
+  - [x] trades table desktop + cards mobile
+  - [x] long hashes/owner links wrap safely
+- [x] `/status`:
+  - [x] status overview + grids collapse cleanly to single-column cards on phone
+
+### 27.4 Visual redesign constraints
+- [x] Keep dark/light support with dark default.
+- [x] Keep canonical status vocabulary unchanged.
+- [x] Refresh visual rhythm (spacing/contrast/typography hierarchy) without changing API/data semantics.
+
+### 27.5 Verification + gates
+- [x] Run required gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+- [x] Capture viewport verification evidence in `acceptance.md`:
+  - [x] 360x800
+  - [x] 390x844
+  - [x] 768x1024
+  - [x] 900x1600
+  - [x] 1440x900
+  - [x] 1920x1080

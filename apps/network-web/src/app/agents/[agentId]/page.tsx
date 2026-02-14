@@ -590,34 +590,71 @@ export default function AgentPublicProfilePage() {
           {!trades ? <p className="muted">Loading trades...</p> : null}
           {trades && trades.length === 0 ? <p className="muted">No trades found for this agent.</p> : null}
           {trades && trades.length > 0 ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Source</th>
-                    <th>Mode</th>
-                    <th>Pair</th>
-                    <th>Status</th>
-                    <th>Execution ID</th>
-                    <th>Reason</th>
-                    <th>Created (UTC)</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <>
+              <div className="table-desktop">
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Source</th>
+                        <th>Mode</th>
+                        <th>Pair</th>
+                        <th>Status</th>
+                        <th>Execution ID</th>
+                        <th>Reason</th>
+                        <th>Created (UTC)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {trades.map((trade) => (
+                        <tr key={trade.trade_id}>
+                          <td>{trade.source_label ?? (trade.source_trade_id ? 'copied' : 'self')}</td>
+                          <td>{trade.is_mock ? <ModeBadge mode="mock" /> : <ModeBadge mode="real" />}</td>
+                          <td>{trade.pair}</td>
+                          <td>{trade.status}</td>
+                          <td className="hard-wrap">{trade.is_mock ? trade.mock_receipt_id ?? '-' : trade.tx_hash ?? '-'}</td>
+                          <td>{trade.reason_code ?? trade.reason_message ?? trade.reason ?? '-'}</td>
+                          <td>{formatUtc(trade.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="cards-mobile">
+                <div className="cards-mobile-grid">
                   {trades.map((trade) => (
-                    <tr key={trade.trade_id}>
-                      <td>{trade.source_label ?? (trade.source_trade_id ? 'copied' : 'self')}</td>
-                      <td>{trade.is_mock ? <ModeBadge mode="mock" /> : <ModeBadge mode="real" />}</td>
-                      <td>{trade.pair}</td>
-                      <td>{trade.status}</td>
-                      <td>{trade.is_mock ? trade.mock_receipt_id ?? '-' : trade.tx_hash ?? '-'}</td>
-                      <td>{trade.reason_code ?? trade.reason_message ?? trade.reason ?? '-'}</td>
-                      <td>{formatUtc(trade.created_at)}</td>
-                    </tr>
+                    <article key={`${trade.trade_id}:mobile`} className="data-card">
+                      <div>
+                        <strong>{trade.pair}</strong>
+                      </div>
+                      <div className="toolbar" style={{ marginBottom: 0 }}>
+                        {trade.is_mock ? <ModeBadge mode="mock" /> : <ModeBadge mode="real" />}
+                        <span>{trade.status}</span>
+                      </div>
+                      <div className="data-pairs">
+                        <div>
+                          <div className="data-label">Source</div>
+                          <div className="data-value">{trade.source_label ?? (trade.source_trade_id ? 'copied' : 'self')}</div>
+                        </div>
+                        <div>
+                          <div className="data-label">Execution ID</div>
+                          <div className="data-value hard-wrap">{trade.is_mock ? trade.mock_receipt_id ?? '-' : trade.tx_hash ?? '-'}</div>
+                        </div>
+                        <div>
+                          <div className="data-label">Reason</div>
+                          <div className="data-value">{trade.reason_code ?? trade.reason_message ?? trade.reason ?? '-'}</div>
+                        </div>
+                        <div>
+                          <div className="data-label">Created (UTC)</div>
+                          <div className="data-value">{formatUtc(trade.created_at)}</div>
+                        </div>
+                      </div>
+                    </article>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              </div>
+            </>
           ) : null}
           {profile?.copyBreakdown ? (
             <div style={{ marginTop: '0.8rem' }}>
@@ -844,7 +881,7 @@ export default function AgentPublicProfilePage() {
                   <div className="queue-item">
                     <div>
                       <div className="muted">Expires: {formatUtc(ownerLink.expiresAt)} UTC</div>
-                      <div style={{ wordBreak: 'break-all' }}>{ownerLink.managementUrl}</div>
+                      <div className="hard-wrap">{ownerLink.managementUrl}</div>
                     </div>
                   </div>
                 ) : null}

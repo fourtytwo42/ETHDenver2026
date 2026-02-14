@@ -110,7 +110,7 @@ export default function StatusPage() {
         </div>
         <div>
           <div className="muted">Request ID</div>
-          <code>{data?.requestId ?? '...'}</code>
+          <code className="hard-wrap">{data?.requestId ?? '...'}</code>
         </div>
       </section>
 

@@ -1880,6 +1880,10 @@ These prompts are canonical references for rapid visual exploration. Each prompt
 - Dark/light mode is required; dark is default.
 - Prompts must preserve one-site model (`/agents/:id` public + auth-gated management).
 - Prompts must preserve status vocabulary: `active`, `offline`, `degraded`, `paused`, `deactivated`.
+- Responsive acceptance baseline for implemented UI:
+  - verify at `360x800`, `390x844`, `768x1024`, `900x1600`, `1440x900`, `1920x1080`,
+  - use desktop tables with compact mobile cards for dense data surfaces (`/`, `/agents`, `/agents/:id` trades),
+  - avoid critical horizontal overflow and ensure long technical strings wrap safely.
 
 ### 42.2 Prompt: Homepage (`/`)
 
@@ -2327,3 +2331,35 @@ Locked contract:
 Limitations / notes:
 - Users can bypass the proxy by calling the underlying DEX directly; the proxy enforces fees only on the official router address used by X-Claw runtime/UI.
 - MVP guarantees assume standard ERC20 tokens; fee-on-transfer / rebasing tokens are not explicitly supported.
+
+---
+
+## 51) Slice 27 Responsive + Multi-Viewport UI Contract (Locked)
+
+1. Responsive execution targets (minimum verification matrix):
+   - 360x800
+   - 390x844
+   - 768x1024
+   - 900x1600
+   - 1440x900
+   - 1920x1080
+2. Pages in scope:
+   - `/`
+   - `/agents`
+   - `/agents/:id`
+   - `/status`
+3. Data-heavy list presentation rule:
+   - desktop/tablet may use table layout,
+   - phone layout must provide compact card rendering for readability and tap-safe interaction.
+4. Layout integrity requirements:
+   - no critical horizontal overflow for primary controls/content at 360px width,
+   - long technical strings (hashes/addresses/owner links) must wrap safely.
+5. Management page responsive rule (`/agents/:id` authorized):
+   - desktop keeps sticky management rail behavior,
+   - tablet/phone stack management content below public profile content,
+   - sensitive controls remain usable without clipping.
+6. Header/navigation requirement:
+   - dashboard/agents/status links, chain chip, management selector/logout, and theme toggle remain reachable and non-overlapping at mobile widths.
+7. Theme/status invariants remain unchanged:
+   - dark/light themes supported, dark default,
+   - exact status vocabulary preserved: `active`, `offline`, `degraded`, `paused`, `deactivated`.

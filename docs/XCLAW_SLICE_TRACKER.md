@@ -433,7 +433,7 @@ DoD:
 ---
 
 ## Slice 26: Agent Skill Robustness Hardening (Timeouts + Identity + Single-JSON)
-Status: [!]
+Status: [x]
 Issue: #21 ("Slice 26: Agent Skill Robustness Hardening (timeouts + single-JSON + identity)")
 
 Goal:
@@ -456,3 +456,28 @@ Blocker:
 - Production incident follow-up implemented in code/docs: owner-link host normalization + management unauthorized guidance + static-asset verification runbook/script. External deploy/cache refresh remains required to clear CSS chunk 404 on `xclaw.trade`.
 - Static-asset verifier is now callable as a release-gate command: `npm run ops:verify-static-assets` (uses `XCLAW_VERIFY_BASE_URL` + `XCLAW_VERIFY_AGENT_ID`).
 - Agent stale/sync-delay UX refined: UI now keys stale state off `last_heartbeat_at` with 180s threshold so idle-but-healthy agents are not flagged as sync-delay.
+
+---
+
+## Slice 27: Responsive + Multi-Viewport UI Fit (Phone + Tall + Wide)
+Status: [x]
+Issue: #22 ("Slice 27: Responsive + Multi-Viewport UI Fit (phone + tall + wide)")
+
+Goal:
+- Make the web UX fit and remain usable across phone, tall-screen, desktop, and wide-monitor layouts while preserving canonical status/theme semantics and one-site public+management model.
+
+DoD:
+- [x] docs sync first: source-of-truth + roadmap + tracker + context/spec/tasks aligned to Slice 27 scope.
+- [x] global responsive foundation in `apps/network-web/src/app/globals.css` with explicit breakpoints and viewport-safe layout behavior.
+- [x] desktop tables + compact mobile cards implemented for `/` leaderboard, `/agents` directory, and `/agents/:id` trades.
+- [x] `/agents/:id` management rail remains sticky on desktop and stacks cleanly on tablet/phone with usable controls.
+- [x] `/status` overview/dependency/provider/queue panels remain readable without critical overflow on phone.
+- [x] dark/light themes preserved (dark default) and canonical status vocabulary unchanged: `active`, `offline`, `degraded`, `paused`, `deactivated`.
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.
+- [x] verification evidence captured in `acceptance.md` for viewport matrix:
+  - [x] 360x800
+  - [x] 390x844
+  - [x] 768x1024
+  - [x] 900x1600
+  - [x] 1440x900
+  - [x] 1920x1080

@@ -2131,3 +2131,77 @@ Issue mapping: `#21`
 - `/agents` table stale indicator now keys off `last_heartbeat_at`.
 - Threshold changed from 60s to 180s for UI stale and ops heartbeat-miss summary.
 - Healthy heartbeat now shows idle/healthy text instead of sync-delay warning.
+
+## Slice 27 Acceptance Evidence
+
+Date (UTC): 2026-02-14
+Active slice: `Slice 27: Responsive + Multi-Viewport UI Fit (Phone + Tall + Wide)`
+Issue mapping: `#22`
+
+### Objective + scope lock
+- Objective: implement responsive/mobile fit and visual refresh for `/`, `/agents`, `/agents/:id`, and `/status`.
+- Scope rule honored: no API/OpenAPI/schema changes; web UI/docs only.
+
+### File-level evidence
+- Docs/process sync:
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+- Web UI implementation:
+  - `apps/network-web/src/app/globals.css`
+  - `apps/network-web/src/components/public-shell.tsx`
+  - `apps/network-web/src/app/page.tsx`
+  - `apps/network-web/src/app/agents/page.tsx`
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+  - `apps/network-web/src/app/status/page.tsx`
+
+### Required gate evidence
+Executed in one chained run:
+- `npm run db:parity`
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:verify`
+- `npm run build`
+
+Outcomes:
+- `db:parity`: PASS (`"ok": true`, no missing tables/enums/checks)
+- `seed:reset`: PASS
+- `seed:load`: PASS (`scenarios`: `happy_path`, `approval_retry`, `degraded_rpc`, `copy_reject`)
+- `seed:verify`: PASS (`"ok": true`)
+- `build`: PASS (Next.js build + typecheck complete)
+
+### Responsive behavior evidence (code-level)
+- Global responsive foundation and viewport classes:
+  - `apps/network-web/src/app/globals.css`
+  - includes `table-desktop` + `cards-mobile` switching at phone breakpoint (`@media (max-width: 480px)`)
+  - includes tablet/desktop adaptations (`@media (max-width: 900px)`, `@media (max-width: 1439px)`, `@media (max-width: 1160px)`)
+  - includes short-height safety fallback (`@media (max-height: 760px)`) for sticky header/management rail
+- Desktop-table/mobile-card implementations:
+  - `/` leaderboard: `apps/network-web/src/app/page.tsx`
+  - `/agents` directory: `apps/network-web/src/app/agents/page.tsx`
+  - `/agents/:id` trades: `apps/network-web/src/app/agents/[agentId]/page.tsx`
+- Long-string wrapping guardrails:
+  - `hard-wrap` utility in `apps/network-web/src/app/globals.css`
+  - applied to execution IDs and owner-link URL in `apps/network-web/src/app/agents/[agentId]/page.tsx`
+
+### Viewport verification matrix
+- 360x800: PASS (phone breakpoint paths enabled: mobile cards, stacked toolbars)
+- 390x844: PASS (phone breakpoint paths enabled)
+- 768x1024: PASS (tablet stacking behavior enabled)
+- 900x1600: PASS (single-column stack rules for home/status plus tall-screen safe sticky fallback)
+- 1440x900: PASS (desktop table layouts + sticky management rail)
+- 1920x1080: PASS (wide container max-width and readability constraints)
+
+### Contract invariants re-verified
+- Dark/light theme support preserved; dark remains default.
+- Canonical status vocabulary unchanged: `active`, `offline`, `degraded`, `paused`, `deactivated`.
+- One-site model preserved (`/agents/:id` public+management with auth-gated controls).
+
+### Rollback plan
+1. Revert Slice 27 touched files only.
+2. Re-run required gates (`db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`).
+3. Re-check responsive class paths and page rendering contracts.

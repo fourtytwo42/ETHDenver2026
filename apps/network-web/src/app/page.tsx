@@ -184,43 +184,87 @@ function DashboardPage() {
           {leaderboard === null ? <p className="muted">Loading leaderboard...</p> : null}
           {leaderboard !== null && leaderboard.length === 0 ? <p className="muted">No leaderboard rows yet.</p> : null}
           {leaderboard !== null && leaderboard.length > 0 ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Agent</th>
-                    <th>Mode</th>
-                    <th>Status</th>
-                    <th>PnL</th>
-                    <th>Return</th>
-                    <th>Volume</th>
-                    <th>Trades</th>
-                    <th>Snapshot (UTC)</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <>
+              <div className="table-desktop">
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Agent</th>
+                        <th>Mode</th>
+                        <th>Status</th>
+                        <th>PnL</th>
+                        <th>Return</th>
+                        <th>Volume</th>
+                        <th>Trades</th>
+                        <th>Snapshot (UTC)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboard.map((row) => (
+                        <tr key={`${row.agent_id}:${row.mode}:${row.snapshot_at}`}>
+                          <td>
+                            <Link href={`/agents/${row.agent_id}`}>{row.agent_name}</Link>
+                          </td>
+                          <td>
+                            <ModeBadge mode={row.mode} />
+                          </td>
+                          <td>{isPublicStatus(row.public_status) ? <PublicStatusBadge status={row.public_status} /> : row.public_status}</td>
+                          <td>{formatUsd(row.pnl_usd)}</td>
+                          <td>{formatPercent(row.return_pct)}</td>
+                          <td>{formatUsd(row.volume_usd)}</td>
+                          <td>{formatNumber(row.trades_count)}</td>
+                          <td>
+                            {formatUtc(row.snapshot_at)}
+                            {row.stale ? <div className="stale">stale</div> : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="cards-mobile">
+                <div className="cards-mobile-grid">
                   {leaderboard.map((row) => (
-                    <tr key={`${row.agent_id}:${row.mode}:${row.snapshot_at}`}>
-                      <td>
-                        <Link href={`/agents/${row.agent_id}`}>{row.agent_name}</Link>
-                      </td>
-                      <td>
+                    <article className="data-card" key={`${row.agent_id}:${row.mode}:${row.snapshot_at}:mobile`}>
+                      <div>
+                        <strong>
+                          <Link href={`/agents/${row.agent_id}`}>{row.agent_name}</Link>
+                        </strong>
+                      </div>
+                      <div className="toolbar" style={{ marginBottom: 0 }}>
                         <ModeBadge mode={row.mode} />
-                      </td>
-                      <td>{isPublicStatus(row.public_status) ? <PublicStatusBadge status={row.public_status} /> : row.public_status}</td>
-                      <td>{formatUsd(row.pnl_usd)}</td>
-                      <td>{formatPercent(row.return_pct)}</td>
-                      <td>{formatUsd(row.volume_usd)}</td>
-                      <td>{formatNumber(row.trades_count)}</td>
-                      <td>
-                        {formatUtc(row.snapshot_at)}
-                        {row.stale ? <div className="stale">stale</div> : null}
-                      </td>
-                    </tr>
+                        {isPublicStatus(row.public_status) ? <PublicStatusBadge status={row.public_status} /> : row.public_status}
+                      </div>
+                      <div className="data-pairs">
+                        <div>
+                          <div className="data-label">PnL</div>
+                          <div className="data-value">{formatUsd(row.pnl_usd)}</div>
+                        </div>
+                        <div>
+                          <div className="data-label">Return</div>
+                          <div className="data-value">{formatPercent(row.return_pct)}</div>
+                        </div>
+                        <div>
+                          <div className="data-label">Volume</div>
+                          <div className="data-value">{formatUsd(row.volume_usd)}</div>
+                        </div>
+                        <div>
+                          <div className="data-label">Trades</div>
+                          <div className="data-value">{formatNumber(row.trades_count)}</div>
+                        </div>
+                        <div>
+                          <div className="data-label">Snapshot (UTC)</div>
+                          <div className="data-value">{formatUtc(row.snapshot_at)}</div>
+                        </div>
+                      </div>
+                      {row.stale ? <div className="stale">stale</div> : null}
+                    </article>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              </div>
+            </>
           ) : null}
         </section>
 
