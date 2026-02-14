@@ -90,3 +90,10 @@ Active slice: `Slice 26: Agent Skill Robustness Hardening (Timeouts + Identity +
 - [x] Update runbook to use release-gate command and mark as blocking.
 - [x] Update roadmap/tracker notes for release-gate command availability.
 - [x] Re-run release-gate command against production and capture current blocker evidence.
+
+## Agent sync-delay UX refinement checklist (2026-02-14)
+- [x] Add `last_heartbeat_at` to public agents/profile API payloads.
+- [x] Switch `/agents` and `/agents/:id` stale detection to heartbeat-based logic.
+- [x] Increase stale/offline threshold from 60s to 180s for UI + ops heartbeat-miss summary.
+- [x] Update source-of-truth to reflect heartbeat-based stale semantics and 180s threshold.
+- [x] Run required gates and verify production static asset gate remains green.

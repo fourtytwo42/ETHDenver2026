@@ -129,3 +129,12 @@ Harden the agent runtime/skill command surface to prevent hangs, improve identit
   - no API/contract expansion,
   - no token/session semantic changes,
   - no direct production deploy from this workspace.
+
+## Agent Sync Delay UX Refinement (2026-02-14)
+- Objective: prevent idle-but-healthy agents from being shown as sync-delayed.
+- In scope:
+  - stale/sync-delay checks switch from `last_activity_at` to `last_heartbeat_at`,
+  - stale threshold increases from 60s to 180s in agent directory/profile and ops heartbeat-miss summary.
+- Non-goals:
+  - no trading/runtime command behavior changes,
+  - no auth/session behavior changes.

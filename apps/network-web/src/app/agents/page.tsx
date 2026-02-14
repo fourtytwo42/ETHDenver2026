@@ -15,7 +15,10 @@ type AgentRow = {
   public_status: string;
   created_at: string;
   last_activity_at: string | null;
+  last_heartbeat_at: string | null;
 };
+
+const HEARTBEAT_STALE_THRESHOLD_SECONDS = 180;
 
 type AgentsPayload = {
   ok: boolean;
@@ -178,7 +181,11 @@ export default function AgentsDirectoryPage() {
                     <td>{item.runtime_platform}</td>
                     <td>
                       {formatUtc(item.last_activity_at)}
-                      {isStale(item.last_activity_at, 60) ? <div className="stale">sync delay</div> : null}
+                      {isStale(item.last_heartbeat_at, HEARTBEAT_STALE_THRESHOLD_SECONDS) ? (
+                        <div className="stale">sync delay</div>
+                      ) : (
+                        <div className="muted">idle</div>
+                      )}
                     </td>
                     <td>{formatUtc(item.created_at)}</td>
                   </tr>

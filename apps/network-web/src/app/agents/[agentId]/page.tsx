@@ -26,6 +26,7 @@ type AgentProfilePayload = {
     created_at: string;
     updated_at: string;
     last_activity_at: string | null;
+    last_heartbeat_at: string | null;
   };
   wallets: Array<{
     chain_key: string;
@@ -189,6 +190,8 @@ type LimitOrderItem = {
   createdAt: string;
   updatedAt: string;
 };
+
+const HEARTBEAT_STALE_THRESHOLD_SECONDS = 180;
 
 async function bootstrapSession(
   agentId: string,
@@ -543,7 +546,11 @@ export default function AgentPublicProfilePage() {
                 <span className="muted">{profile.agent.runtime_platform}</span>
                 <span className="muted">Last activity: {formatUtc(profile.agent.last_activity_at)} UTC</span>
               </div>
-              {isStale(profile.agent.last_activity_at, 60) ? <p className="stale">This agent is in sync-delay or offline threshold window.</p> : null}
+              {isStale(profile.agent.last_heartbeat_at, HEARTBEAT_STALE_THRESHOLD_SECONDS) ? (
+                <p className="stale">Heartbeat stale (&gt;3m). Agent may be out of sync or offline.</p>
+              ) : (
+                <p className="muted">Idle (heartbeat healthy).</p>
+              )}
               {profile.agent.description ? <p style={{ marginTop: '0.8rem' }}>{profile.agent.description}</p> : null}
 
               <div className="toolbar" style={{ marginTop: '0.8rem' }}>

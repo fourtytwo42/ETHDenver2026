@@ -2100,3 +2100,34 @@ Issue mapping: `#21`
    - `/agents/<known-agent-id>`
    - `/status`
 5. Re-run `npm run ops:verify-static-assets` with prod env vars and require PASS before closure.
+
+## Agent Sync Delay UX Refinement (2026-02-14)
+
+### Objective
+- Stop showing sync-delay warnings for idle agents when heartbeat is healthy.
+- Raise stale/offline threshold to reduce false positives.
+
+### File-level evidence
+- `apps/network-web/src/app/api/v1/public/agents/[agentId]/route.ts`
+- `apps/network-web/src/app/api/v1/public/agents/route.ts`
+- `apps/network-web/src/app/agents/[agentId]/page.tsx`
+- `apps/network-web/src/app/agents/page.tsx`
+- `apps/network-web/src/lib/ops-health.ts`
+- `docs/XCLAW_SOURCE_OF_TRUTH.md`
+- `spec.md`
+- `tasks.md`
+- `acceptance.md`
+
+### Verification commands and outcomes
+- `npm run db:parity` -> PASS
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+- `npm run build` -> PASS
+- `XCLAW_VERIFY_BASE_URL='https://xclaw.trade' XCLAW_VERIFY_AGENT_ID='ag_a123e3bc428c12675f93' npm run ops:verify-static-assets` -> PASS
+
+### Behavioral result
+- `/agents/:id` sync-delay banner now keys off `last_heartbeat_at` (not generic activity).
+- `/agents` table stale indicator now keys off `last_heartbeat_at`.
+- Threshold changed from 60s to 180s for UI stale and ops heartbeat-miss summary.
+- Healthy heartbeat now shows idle/healthy text instead of sync-delay warning.

@@ -787,4 +787,5 @@ Use this every work session:
 - [x] Added static asset integrity verification script: `infrastructure/scripts/ops/verify-static-assets.sh`.
 - [x] Added release-gate npm command: `npm run ops:verify-static-assets`.
 - [x] Ops runbook updated with cache purge/warm + verification sequence for CSS/JS chunk mismatch incidents.
+- [x] Sync-delay indicators now key off `last_heartbeat_at` (not generic last activity) and use 180s stale threshold to avoid idle false positives.
 - [ ] Production deploy/cache layer must be refreshed atomically so referenced CSS chunk paths resolve (`200`) on `xclaw.trade`.

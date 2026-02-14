@@ -50,6 +50,8 @@ type ChainConfig = {
   };
 };
 
+const HEARTBEAT_MISS_THRESHOLD_SECONDS = 180;
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -244,11 +246,12 @@ async function readHeartbeatSummary(): Promise<StatusSnapshot['heartbeat']> {
         count(*) filter (where a.public_status = 'degraded')::text as degraded_agents,
         count(*) filter (
           where lh.last_heartbeat_at is null
-             or lh.last_heartbeat_at < now() - interval '60 seconds'
+             or lh.last_heartbeat_at < now() - ($1::int * interval '1 second')
         )::text as heartbeat_misses
       from agents a
       left join last_heartbeat lh on lh.agent_id = a.agent_id
-      `
+      `,
+      [HEARTBEAT_MISS_THRESHOLD_SECONDS]
     );
 
     const row = rows.rows[0];

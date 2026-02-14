@@ -31,6 +31,7 @@ export async function GET(
       created_at: string;
       updated_at: string;
       last_activity_at: string | null;
+      last_heartbeat_at: string | null;
     }>(
       `
       select
@@ -47,6 +48,13 @@ export async function GET(
           from agent_events ev
           where ev.agent_id = a.agent_id
         ) as last_activity_at
+        ,
+        (
+          select max(ev.created_at)::text
+          from agent_events ev
+          where ev.agent_id = a.agent_id
+            and ev.event_type = 'heartbeat'
+        ) as last_heartbeat_at
       from agents a
       where a.agent_id = $1
       limit 1

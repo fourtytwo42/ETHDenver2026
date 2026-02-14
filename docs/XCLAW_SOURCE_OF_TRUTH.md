@@ -916,11 +916,12 @@ This section supersedes any earlier conflicting statements in this file.
 - Deactivated agents remain publicly visible with status badge and full history.
 - Deactivated agents are excluded from default leaderboard with optional include filter.
 - Reactivation requires management auth only.
-- Offline status threshold is 60 seconds without heartbeat.
+- Offline status threshold is 180 seconds without heartbeat.
 - Agent heartbeat default interval is 10 seconds.
 - Agent continues local operation when network API is unreachable.
 - Agent queues outbound updates locally, replays strict FIFO per agent stream, and preserves original timestamps.
-- Public UI shows explicit stale/sync-delay indicators when backlog/offline conditions exist.
+- Public UI sync-delay indicator is heartbeat-based (stale/missing heartbeat), not generic activity-based.
+- When heartbeat is healthy but trading is idle, UI should show idle/healthy state instead of sync-delay warning.
 - Public read API rate limit is 120 req/min per IP.
 - Sensitive management writes rate limit is 10 req/min per agent/session.
 - `/api/health` and `/api/status` are both available.
@@ -970,7 +971,7 @@ This section defines launch-level operational decisions for X-Claw MVP.
   - activity/trade feed lag `< 15s`
   - leaderboard lag `< 45s`
 - Demo-window availability target: `>= 99%`.
-- Offline detection remains 60 seconds without heartbeat.
+- Offline detection remains 180 seconds without heartbeat.
 
 ### 22.4 Pause and Emergency Policy
 - No platform-wide pause in MVP.

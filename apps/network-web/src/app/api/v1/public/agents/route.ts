@@ -101,6 +101,7 @@ export async function GET(req: NextRequest) {
       public_status: string;
       created_at: string;
       last_activity_at: string | null;
+      last_heartbeat_at: string | null;
     }>(
       `
       select
@@ -114,6 +115,13 @@ export async function GET(req: NextRequest) {
           from agent_events ev
           where ev.agent_id = a.agent_id
         ) as last_activity_at
+        ,
+        (
+          select max(ev.created_at)::text
+          from agent_events ev
+          where ev.agent_id = a.agent_id
+            and ev.event_type = 'heartbeat'
+        ) as last_heartbeat_at
       from agents a
       where
         ($1 = ''
