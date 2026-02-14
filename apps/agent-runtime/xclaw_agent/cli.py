@@ -986,6 +986,50 @@ def _api_request(
     return status, body
 
 
+def _normalize_address(value: str) -> str:
+    return value.strip().lower()
+
+
+def _fetch_outbound_transfer_policy(chain: str) -> dict[str, Any]:
+    status_code, body = _api_request("GET", f"/agent/transfers/policy?chainKey={urllib.parse.quote(chain)}")
+    if status_code < 200 or status_code >= 300:
+        code = str(body.get("code", "api_error"))
+        message = str(body.get("message", f"transfer policy read failed ({status_code})"))
+        raise WalletStoreError(f"{code}: {message}")
+    return body
+
+
+def _enforce_outbound_transfer_policy(chain: str, destination: str) -> dict[str, Any]:
+    policy = _fetch_outbound_transfer_policy(chain)
+    enabled = bool(policy.get("outboundTransfersEnabled"))
+    mode = str(policy.get("outboundMode") or "disabled")
+    whitelist_raw = policy.get("outboundWhitelistAddresses")
+    whitelist = {_normalize_address(str(item)) for item in whitelist_raw if isinstance(item, str)} if isinstance(whitelist_raw, list) else set()
+
+    if not enabled or mode == "disabled":
+        raise WalletPolicyError(
+            "transfer_policy_blocked",
+            "Outbound transfers are disabled by owner policy.",
+            "Ask the bot owner to enable outbound transfers on the agent management page.",
+            {"chain": chain, "outboundMode": mode},
+        )
+
+    if mode == "whitelist" and _normalize_address(destination) not in whitelist:
+        raise WalletPolicyError(
+            "transfer_policy_blocked",
+            "Destination is not in the outbound transfer whitelist.",
+            "Ask the bot owner to add this destination address to the whitelist.",
+            {"chain": chain, "destination": destination, "outboundMode": mode},
+        )
+
+    return {
+        "outboundTransfersEnabled": enabled,
+        "outboundMode": mode,
+        "outboundWhitelistAddresses": sorted(list(whitelist)),
+        "updatedAt": policy.get("updatedAt"),
+    }
+
+
 def _canonical_event_for_trade_status(status: str) -> str:
     mapping = {
         "proposed": "trade_proposed",
@@ -1423,7 +1467,16 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
             _post_trade_status(args.intent, "executing", "verifying", {"mockReceiptId": mock_receipt_id})
             transition_state = "verifying"
             _post_trade_status(args.intent, "verifying", "filled", {"mockReceiptId": mock_receipt_id})
-            return ok("Trade executed in mock mode.", tradeId=args.intent, chain=args.chain, mode=mode, status="filled", mockReceiptId=mock_receipt_id)
+            report_result = _send_trade_execution_report(args.intent)
+            return ok(
+                "Trade executed in mock mode.",
+                tradeId=args.intent,
+                chain=args.chain,
+                mode=mode,
+                status="filled",
+                mockReceiptId=mock_receipt_id,
+                report=report_result,
+            )
 
         if mode != "real":
             raise WalletStoreError(f"Unsupported trade mode '{mode}'.")
@@ -1504,6 +1557,12 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
 
         _record_spend(state, args.chain, day_key, current_spend + amount_wei)
         _post_trade_status(args.intent, "verifying", "filled", {"txHash": tx_hash})
+        report_result = {
+            "ok": False,
+            "skipped": True,
+            "reason": "real_mode_server_tracked",
+            "message": "Real-mode trade reports are server-tracked via wallet/RPC and are not sent by runtime."
+        }
         return ok(
             "Trade executed in real mode.",
             tradeId=args.intent,
@@ -1514,6 +1573,7 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
             day=day_key,
             dailySpendWei=str(current_spend + amount_wei),
             maxDailyNativeWei=str(max_daily_wei),
+            report=report_result,
         )
     except WalletPolicyError as exc:
         if transition_state == "executing":
@@ -1543,37 +1603,48 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
         return fail("trade_execute_failed", str(exc), "Inspect runtime trade execute path and retry.", {"tradeId": args.intent, "chain": args.chain}, exit_code=1)
 
 
+def _send_trade_execution_report(trade_id: str) -> dict[str, Any]:
+    trade = _read_trade_details(trade_id)
+    event_type = _canonical_event_for_trade_status(str(trade.get("status")))
+    payload = {
+        "schemaVersion": 1,
+        "agentId": trade.get("agentId"),
+        "tradeId": trade_id,
+        "eventType": event_type,
+        "payload": {
+            "status": trade.get("status"),
+            "mode": trade.get("mode"),
+            "chainKey": trade.get("chainKey"),
+            "reasonCode": trade.get("reasonCode"),
+            "reportedBy": "xclaw-agent-runtime",
+        },
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+    }
+    status_code, body = _api_request("POST", "/events", payload=payload, include_idempotency=True)
+    if status_code < 200 or status_code >= 300:
+        code = str(body.get("code", "api_error"))
+        message = str(body.get("message", f"report send failed ({status_code})"))
+        raise WalletStoreError(f"{code}: {message}")
+    return {"ok": True, "eventType": event_type}
+
+
 def cmd_report_send(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
         return chk
     try:
         trade = _read_trade_details(args.trade)
-        event_type = _canonical_event_for_trade_status(str(trade.get("status")))
-        payload = {
-            "schemaVersion": 1,
-            "agentId": trade.get("agentId"),
-            "tradeId": args.trade,
-            "eventType": event_type,
-            "payload": {
-                "status": trade.get("status"),
-                "mode": trade.get("mode"),
-                "chainKey": trade.get("chainKey"),
-                "reasonCode": trade.get("reasonCode"),
-                "reportedBy": "xclaw-agent-runtime",
-            },
-            "createdAt": datetime.now(timezone.utc).isoformat(),
-        }
-        status_code, body = _api_request("POST", "/events", payload=payload, include_idempotency=True)
-        if status_code < 200 or status_code >= 300:
+        mode = str(trade.get("mode") or "")
+        if mode != "mock":
             return fail(
-                str(body.get("code", "api_error")),
-                str(body.get("message", f"report send failed ({status_code})")),
-                str(body.get("actionHint", "Verify API auth and retry.")),
-                {"status": status_code, "tradeId": args.trade},
+                "report_send_rejected",
+                "Manual report-send is only supported for mock trades.",
+                "Skip report-send for real trades; server tracks real fills via RPC and known wallet address.",
+                {"tradeId": args.trade, "mode": mode or None},
                 exit_code=1,
             )
-        return ok("Trade execution report sent.", tradeId=args.trade, eventType=event_type)
+        report_result = _send_trade_execution_report(args.trade)
+        return ok("Trade execution report sent.", tradeId=args.trade, eventType=report_result.get("eventType"))
     except WalletStoreError as exc:
         return fail("report_send_failed", str(exc), "Verify API env/auth and trade visibility, then retry.", {"tradeId": args.trade}, exit_code=1)
     except Exception as exc:
@@ -1655,8 +1726,323 @@ def cmd_chat_post(args: argparse.Namespace) -> int:
         return fail("chat_post_failed", str(exc), "Inspect runtime chat post path and retry.", {"chain": args.chain}, exit_code=1)
 
 
+def _runtime_platform_name() -> str:
+    platform_value = sys.platform.lower()
+    if platform_value.startswith("win"):
+        return "windows"
+    if platform_value == "darwin":
+        return "macos"
+    return "linux"
+
+
+def cmd_profile_set_name(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        requested_name = str(args.name).strip()
+        if not requested_name:
+            return fail(
+                "payload_invalid",
+                "Username cannot be empty.",
+                "Provide a non-empty username and retry.",
+                {"field": "name"},
+                exit_code=1,
+            )
+        if len(requested_name) > 32:
+            return fail(
+                "payload_invalid",
+                "Username exceeds 32 characters.",
+                "Shorten username to 32 characters or fewer and retry.",
+                {"field": "name", "maxLength": 32},
+                exit_code=1,
+            )
+
+        api_key = _resolve_api_key()
+        agent_id = _resolve_agent_id(api_key)
+        if not agent_id:
+            return fail(
+                "auth_invalid",
+                "Agent id could not be resolved for username change.",
+                "Set XCLAW_AGENT_ID or use signed agent token format.",
+                {"chain": args.chain},
+                exit_code=1,
+            )
+
+        wallet_address = _wallet_address_for_chain(args.chain)
+        payload = {
+            "schemaVersion": 1,
+            "agentId": agent_id,
+            "agentName": requested_name,
+            "runtimePlatform": _runtime_platform_name(),
+            "wallets": [{"chainKey": args.chain, "address": wallet_address}],
+        }
+        status_code, body = _api_request("POST", "/agent/register", payload=payload, include_idempotency=True)
+        if status_code < 200 or status_code >= 300:
+            return fail(
+                str(body.get("code", "api_error")),
+                str(body.get("message", f"profile set-name failed ({status_code})")),
+                str(
+                    body.get(
+                        "actionHint",
+                        "Retry with a unique username. If recently renamed, wait for cooldown to expire and retry.",
+                    )
+                ),
+                {"status": status_code, "chain": args.chain, "agentId": agent_id, "requestedName": requested_name},
+                exit_code=1,
+            )
+
+        updated_name = body.get("agentName")
+        if not isinstance(updated_name, str) or not updated_name.strip():
+            updated_name = requested_name
+        return ok("Agent username updated.", chain=args.chain, agentId=agent_id, agentName=updated_name)
+    except WalletStoreError as exc:
+        return fail(
+            "profile_set_name_failed",
+            str(exc),
+            "Verify API env/auth, local wallet availability, and retry.",
+            {"chain": args.chain},
+            exit_code=1,
+        )
+    except Exception as exc:
+        return fail("profile_set_name_failed", str(exc), "Inspect runtime profile set-name path and retry.", {"chain": args.chain}, exit_code=1)
+
+
+def cmd_management_link(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        api_key = _resolve_api_key()
+        agent_id = _resolve_agent_id(api_key)
+        if not agent_id:
+            return fail(
+                "auth_invalid",
+                "Agent id could not be resolved for management-link command.",
+                "Set XCLAW_AGENT_ID or use signed agent token format.",
+                exit_code=1,
+            )
+        payload = {
+            "schemaVersion": 1,
+            "agentId": agent_id,
+            "ttlSeconds": int(args.ttl_seconds),
+        }
+        status_code, body = _api_request("POST", "/agent/management-link", payload=payload, include_idempotency=True)
+        if status_code < 200 or status_code >= 300:
+            return fail(
+                str(body.get("code", "api_error")),
+                str(body.get("message", f"management-link failed ({status_code})")),
+                str(body.get("actionHint", "Refresh auth/session state and retry.")),
+                {"status": status_code},
+                exit_code=1,
+            )
+        return ok(
+            "Owner management link generated.",
+            agentId=body.get("agentId", agent_id),
+            managementUrl=body.get("managementUrl"),
+            issuedAt=body.get("issuedAt"),
+            expiresAt=body.get("expiresAt"),
+        )
+    except WalletStoreError as exc:
+        return fail("management_link_failed", str(exc), "Verify API env/auth and retry.", exit_code=1)
+    except Exception as exc:
+        return fail("management_link_failed", str(exc), "Inspect runtime management-link path and retry.", exit_code=1)
+
+
+def _fetch_native_balance_wei(chain: str, address: str) -> str:
+    cast_bin = _require_cast_bin()
+    rpc_url = _chain_rpc_url(chain)
+    proc = subprocess.run(
+        [cast_bin, "balance", address, "--rpc-url", rpc_url],
+        text=True,
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        stdout = (proc.stdout or "").strip()
+        raise WalletStoreError(stderr or stdout or "cast balance failed.")
+    output = (proc.stdout or "").strip().splitlines()
+    parsed = _parse_uint_text(output[-1] if output else "")
+    return str(parsed)
+
+
+def _fetch_token_balance_wei(chain: str, address: str, token_address: str) -> str:
+    cast_bin = _require_cast_bin()
+    rpc_url = _chain_rpc_url(chain)
+    proc = subprocess.run(
+        [cast_bin, "call", token_address, "balanceOf(address)(uint256)", address, "--rpc-url", rpc_url],
+        text=True,
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        stdout = (proc.stdout or "").strip()
+        raise WalletStoreError(stderr or stdout or "cast call balanceOf failed.")
+    output = (proc.stdout or "").strip().splitlines()
+    parsed = _parse_uint_text(output[-1] if output else "")
+    return str(parsed)
+
+
+def _canonical_token_map(chain: str) -> dict[str, str]:
+    cfg = _load_chain_config(chain)
+    tokens = cfg.get("canonicalTokens")
+    if not isinstance(tokens, dict):
+        return {}
+    out: dict[str, str] = {}
+    for symbol, address in tokens.items():
+        if isinstance(symbol, str) and isinstance(address, str) and is_hex_address(address):
+            out[symbol] = address
+    return out
+
+
+def _fetch_wallet_holdings(chain: str) -> dict[str, Any]:
+    store = load_wallet_store()
+    _, wallet = _chain_wallet(store, chain)
+    if wallet is None:
+        raise WalletStoreError(f"No wallet configured for chain '{chain}'.")
+    _validate_wallet_entry_shape(wallet)
+    address = str(wallet.get("address"))
+    native_balance_wei = _fetch_native_balance_wei(chain, address)
+    token_map = _canonical_token_map(chain)
+    token_balances: list[dict[str, str]] = []
+    token_errors: list[dict[str, str]] = []
+    for symbol, token_address in token_map.items():
+        try:
+            balance_wei = _fetch_token_balance_wei(chain, address, token_address)
+            token_balances.append({"symbol": symbol, "token": token_address, "balanceWei": balance_wei})
+        except Exception as exc:
+            token_errors.append({"symbol": symbol, "token": token_address, "message": str(exc)})
+    return {
+        "address": address,
+        "native": {"symbol": "ETH", "balanceWei": native_balance_wei},
+        "tokens": token_balances,
+        "tokenErrors": token_errors,
+    }
+
+
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        api_key = _resolve_api_key()
+        agent_id = _resolve_agent_id(api_key)
+        if not agent_id:
+            return fail(
+                "auth_invalid",
+                "Agent id could not be resolved for dashboard command.",
+                "Set XCLAW_AGENT_ID or use signed agent token format.",
+                {"chain": args.chain},
+                exit_code=1,
+            )
+
+        chain_escaped = urllib.parse.quote(args.chain)
+        agent_escaped = urllib.parse.quote(agent_id)
+        section_errors: list[dict[str, str]] = []
+
+        profile: dict[str, Any] | None = None
+        recent_trades: list[dict[str, Any]] = []
+        pending_intents: list[dict[str, Any]] = []
+        open_orders: list[dict[str, Any]] = []
+        recent_room_messages: list[dict[str, Any]] = []
+
+        profile_status, profile_body = _api_request("GET", f"/public/agents/{agent_escaped}")
+        if 200 <= profile_status < 300:
+            profile_payload = profile_body.get("agent")
+            if isinstance(profile_payload, dict):
+                profile = profile_payload
+        else:
+            section_errors.append(
+                {
+                    "section": "profile",
+                    "code": str(profile_body.get("code", "api_error")),
+                    "message": str(profile_body.get("message", f"profile read failed ({profile_status})")),
+                }
+            )
+
+        trades_status, trades_body = _api_request("GET", f"/public/agents/{agent_escaped}/trades?limit=20")
+        if 200 <= trades_status < 300:
+            items = trades_body.get("items")
+            if isinstance(items, list):
+                recent_trades = [item for item in items if isinstance(item, dict)]
+        else:
+            section_errors.append(
+                {
+                    "section": "recentTrades",
+                    "code": str(trades_body.get("code", "api_error")),
+                    "message": str(trades_body.get("message", f"trade history read failed ({trades_status})")),
+                }
+            )
+
+        intents_status, intents_body = _api_request("GET", f"/trades/pending?chainKey={chain_escaped}&limit=25")
+        if 200 <= intents_status < 300:
+            items = intents_body.get("items")
+            if isinstance(items, list):
+                pending_intents = [item for item in items if isinstance(item, dict)]
+        else:
+            section_errors.append(
+                {
+                    "section": "pendingIntents",
+                    "code": str(intents_body.get("code", "api_error")),
+                    "message": str(intents_body.get("message", f"pending intents read failed ({intents_status})")),
+                }
+            )
+
+        orders_status, orders_body = _api_request("GET", f"/limit-orders?chainKey={chain_escaped}&status=open&limit=50")
+        if 200 <= orders_status < 300:
+            items = orders_body.get("items")
+            if isinstance(items, list):
+                open_orders = [item for item in items if isinstance(item, dict)]
+        else:
+            section_errors.append(
+                {
+                    "section": "openOrders",
+                    "code": str(orders_body.get("code", "api_error")),
+                    "message": str(orders_body.get("message", f"open orders read failed ({orders_status})")),
+                }
+            )
+
+        chat_status, chat_body = _api_request("GET", "/chat/messages?limit=8")
+        if 200 <= chat_status < 300:
+            items = chat_body.get("items")
+            if isinstance(items, list):
+                recent_room_messages = [item for item in items if isinstance(item, dict)]
+        else:
+            section_errors.append(
+                {
+                    "section": "recentRoomMessages",
+                    "code": str(chat_body.get("code", "api_error")),
+                    "message": str(chat_body.get("message", f"chat read failed ({chat_status})")),
+                }
+            )
+
+        holdings: dict[str, Any] | None = None
+        try:
+            holdings = _fetch_wallet_holdings(args.chain)
+        except Exception as exc:
+            section_errors.append({"section": "holdings", "code": "holdings_unavailable", "message": str(exc)})
+
+        return ok(
+            "Agent dashboard snapshot ready.",
+            chain=args.chain,
+            generatedAt=utc_now(),
+            agentId=agent_id,
+            profile=profile,
+            holdings=holdings,
+            pendingIntents=pending_intents,
+            openOrders=open_orders,
+            recentTrades=recent_trades,
+            recentRoomMessages=recent_room_messages,
+            sectionErrors=section_errors,
+        )
+    except WalletStoreError as exc:
+        return fail("dashboard_failed", str(exc), "Verify API env/auth and retry dashboard.", {"chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("dashboard_failed", str(exc), "Inspect runtime dashboard path and retry.", {"chain": args.chain}, exit_code=1)
+
+
 def _sync_limit_orders(chain: str) -> tuple[int, int]:
-    status_code, body = _api_request("GET", f"/limit-orders/pending?chainKey={urllib.parse.quote(chain)}&limit=200")
+    status_code, body = _api_request("GET", f"/limit-orders?chainKey={urllib.parse.quote(chain)}&status=open&limit=200")
     if status_code < 200 or status_code >= 300:
         code = str(body.get("code", "api_error"))
         message = str(body.get("message", f"limit-orders pending failed ({status_code})"))
@@ -1738,6 +2124,103 @@ def _execute_limit_order_real(order: dict[str, Any], chain: str) -> str:
 
     _record_spend(state, chain, day_key, current_spend + amount_wei)
     return tx_hash
+
+
+def cmd_limit_orders_create(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        if not is_hex_address(args.token_in) or not is_hex_address(args.token_out):
+            return fail(
+                "invalid_input",
+                "token-in and token-out must be valid 0x addresses.",
+                "Provide 0x-prefixed 20-byte hex addresses for both token fields.",
+                {"tokenIn": args.token_in, "tokenOut": args.token_out},
+                exit_code=2,
+            )
+        payload = {
+            "schemaVersion": 1,
+            "agentId": _resolve_agent_id(_resolve_api_key()),
+            "chainKey": args.chain,
+            "mode": args.mode,
+            "side": args.side,
+            "tokenIn": args.token_in,
+            "tokenOut": args.token_out,
+            "amountIn": args.amount_in,
+            "limitPrice": args.limit_price,
+            "slippageBps": int(args.slippage_bps),
+            "expiresAt": args.expires_at,
+        }
+        if not payload["agentId"]:
+            return fail(
+                "auth_invalid",
+                "Agent id could not be resolved for limit-order create.",
+                "Set XCLAW_AGENT_ID or use signed agent token format.",
+                {"chain": args.chain},
+                exit_code=1,
+            )
+
+        status_code, body = _api_request("POST", "/limit-orders", payload=payload, include_idempotency=True)
+        if status_code < 200 or status_code >= 300:
+            code = str(body.get("code", "api_error"))
+            message = str(body.get("message", f"limit-order create failed ({status_code})"))
+            return fail(code, message, str(body.get("actionHint", "Review payload and retry.")), {"chain": args.chain}, exit_code=1)
+        return ok("Limit order created.", chain=args.chain, orderId=body.get("orderId"), status=body.get("status", "open"))
+    except WalletStoreError as exc:
+        return fail("limit_orders_create_failed", str(exc), "Verify API env/auth and retry.", {"chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("limit_orders_create_failed", str(exc), "Inspect runtime limit-order create path and retry.", {"chain": args.chain}, exit_code=1)
+
+
+def cmd_limit_orders_cancel(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        agent_id = _resolve_agent_id(_resolve_api_key())
+        if not agent_id:
+            return fail(
+                "auth_invalid",
+                "Agent id could not be resolved for limit-order cancel.",
+                "Set XCLAW_AGENT_ID or use signed agent token format.",
+                {"chain": args.chain},
+                exit_code=1,
+            )
+        payload = {"schemaVersion": 1, "agentId": agent_id}
+        status_code, body = _api_request("POST", f"/limit-orders/{args.order_id}/cancel", payload=payload, include_idempotency=True)
+        if status_code < 200 or status_code >= 300:
+            code = str(body.get("code", "api_error"))
+            message = str(body.get("message", f"limit-order cancel failed ({status_code})"))
+            return fail(code, message, str(body.get("actionHint", "Verify order id and retry.")), {"chain": args.chain}, exit_code=1)
+        return ok("Limit order cancelled.", chain=args.chain, orderId=body.get("orderId"), status=body.get("status"))
+    except WalletStoreError as exc:
+        return fail("limit_orders_cancel_failed", str(exc), "Verify API env/auth and retry.", {"chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("limit_orders_cancel_failed", str(exc), "Inspect runtime limit-order cancel path and retry.", {"chain": args.chain}, exit_code=1)
+
+
+def cmd_limit_orders_list(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        query = f"/limit-orders?chainKey={urllib.parse.quote(args.chain)}&limit={int(args.limit)}"
+        if args.status:
+            query += f"&status={urllib.parse.quote(str(args.status))}"
+        status_code, body = _api_request("GET", query)
+        if status_code < 200 or status_code >= 300:
+            code = str(body.get("code", "api_error"))
+            message = str(body.get("message", f"limit-orders list failed ({status_code})"))
+            raise WalletStoreError(f"{code}: {message}")
+        items = body.get("items", [])
+        if not isinstance(items, list):
+            items = []
+        return ok("Limit orders listed.", chain=args.chain, count=len(items), items=items)
+    except WalletStoreError as exc:
+        return fail("limit_orders_list_failed", str(exc), "Verify API env/auth and retry.", {"chain": args.chain}, exit_code=1)
+    except Exception as exc:
+        return fail("limit_orders_list_failed", str(exc), "Inspect runtime limit-order list path and retry.", {"chain": args.chain}, exit_code=1)
 
 
 def cmd_limit_orders_sync(args: argparse.Namespace) -> int:
@@ -2126,7 +2609,13 @@ def cmd_wallet_address(args: argparse.Namespace) -> int:
     _, legacy_wallet = ensure_wallet_entry(chain)
     addr = legacy_wallet.get("address")
     if not isinstance(addr, str) or not is_hex_address(addr):
-        return fail("wallet_missing", f"No wallet configured for chain '{chain}'.", "Run wallet create/import first.", {"chain": chain}, exit_code=1)
+        return fail(
+            "wallet_missing",
+            f"No wallet configured for chain '{chain}'.",
+            "Run hosted bootstrap installer to initialize wallet.",
+            {"chain": chain},
+            exit_code=1,
+        )
     return ok("Wallet address fetched.", chain=chain, address=addr)
 
 
@@ -2149,7 +2638,13 @@ def cmd_wallet_sign_challenge(args: argparse.Namespace) -> int:
         if wallet:
             _validate_wallet_entry_shape(wallet)
         else:
-            return fail("wallet_missing", f"No wallet configured for chain '{chain}'.", "Run wallet create/import first.", {"chain": chain}, exit_code=1)
+            return fail(
+                "wallet_missing",
+                f"No wallet configured for chain '{chain}'.",
+                "Run hosted bootstrap installer to initialize wallet.",
+                {"chain": chain},
+                exit_code=1,
+            )
 
         try:
             _parse_canonical_challenge(args.message, chain)
@@ -2208,9 +2703,16 @@ def cmd_wallet_send(args: argparse.Namespace) -> int:
         store = load_wallet_store()
         _, wallet = _chain_wallet(store, chain)
         if wallet is None:
-            return fail("wallet_missing", f"No wallet configured for chain '{chain}'.", "Run wallet create/import first.", {"chain": chain}, exit_code=1)
+            return fail(
+                "wallet_missing",
+                f"No wallet configured for chain '{chain}'.",
+                "Run hosted bootstrap installer to initialize wallet.",
+                {"chain": chain},
+                exit_code=1,
+            )
         _validate_wallet_entry_shape(wallet)
 
+        transfer_policy = _enforce_outbound_transfer_policy(chain, args.to)
         state, day_key, current_spend, max_daily_wei = _enforce_spend_preconditions(chain, amount_wei)
         passphrase = _require_wallet_passphrase_for_signing(chain)
         private_key_hex = _decrypt_private_key(wallet, passphrase).hex()
@@ -2239,6 +2741,7 @@ def cmd_wallet_send(args: argparse.Namespace) -> int:
             day=day_key,
             dailySpendWei=str(current_spend + amount_wei),
             maxDailyNativeWei=str(max_daily_wei),
+            transferPolicy=transfer_policy,
         )
     except WalletPolicyError as exc:
         return fail(exc.code, str(exc), exc.action_hint, exc.details, exit_code=1)
@@ -2263,6 +2766,100 @@ def cmd_wallet_send(args: argparse.Namespace) -> int:
         return fail("send_failed", str(exc), "Inspect runtime send configuration and retry.", {"chain": chain}, exit_code=1)
 
 
+def cmd_wallet_send_token(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    if not is_hex_address(args.to):
+        return fail("invalid_input", "Invalid recipient address format.", "Use 0x-prefixed 20-byte hex address.", {"to": args.to}, exit_code=2)
+    if not is_hex_address(args.token):
+        return fail("invalid_input", "Invalid token address format.", "Use 0x-prefixed 20-byte hex address.", {"token": args.token}, exit_code=2)
+    if not re.fullmatch(r"[0-9]+", args.amount_wei):
+        return fail("invalid_input", "Invalid amount-wei format.", "Use base-unit integer string.", {"amountWei": args.amount_wei}, exit_code=2)
+
+    chain = args.chain
+    amount_wei = int(args.amount_wei)
+    try:
+        store = load_wallet_store()
+        _, wallet = _chain_wallet(store, chain)
+        if wallet is None:
+            return fail(
+                "wallet_missing",
+                f"No wallet configured for chain '{chain}'.",
+                "Run hosted bootstrap installer to initialize wallet.",
+                {"chain": chain},
+                exit_code=1,
+            )
+        _validate_wallet_entry_shape(wallet)
+
+        transfer_policy = _enforce_outbound_transfer_policy(chain, args.to)
+        state, day_key, current_spend, max_daily_wei = _enforce_spend_preconditions(chain, amount_wei)
+        passphrase = _require_wallet_passphrase_for_signing(chain)
+        private_key_hex = _decrypt_private_key(wallet, passphrase).hex()
+        from_address = str(wallet.get("address"))
+        rpc_url = _chain_rpc_url(chain)
+        data = _cast_calldata("transfer(address,uint256)(bool)", [args.to, args.amount_wei])
+
+        tx_hash = _cast_rpc_send_transaction(
+            rpc_url,
+            {
+                "from": from_address,
+                "to": args.token,
+                "data": data,
+            },
+            private_key_hex,
+        )
+        cast_bin = _require_cast_bin()
+        receipt_proc = subprocess.run(
+            [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, tx_hash],
+            text=True,
+            capture_output=True,
+        )
+        if receipt_proc.returncode != 0:
+            stderr = (receipt_proc.stderr or "").strip()
+            stdout = (receipt_proc.stdout or "").strip()
+            raise WalletStoreError(stderr or stdout or "cast receipt failed.")
+        receipt_payload = json.loads((receipt_proc.stdout or "{}").strip() or "{}")
+        receipt_status = str(receipt_payload.get("status", "0x0")).lower()
+        if receipt_status not in {"0x1", "1"}:
+            raise WalletStoreError(f"On-chain receipt indicates failure status '{receipt_status}'.")
+
+        _record_spend(state, chain, day_key, current_spend + amount_wei)
+        return ok(
+            "Wallet token transfer executed.",
+            chain=chain,
+            token=args.token,
+            to=args.to,
+            amountWei=args.amount_wei,
+            txHash=tx_hash,
+            day=day_key,
+            dailySpendWei=str(current_spend + amount_wei),
+            maxDailyNativeWei=str(max_daily_wei),
+            transferPolicy=transfer_policy,
+        )
+    except WalletPolicyError as exc:
+        return fail(exc.code, str(exc), exc.action_hint, exc.details, exit_code=1)
+    except WalletPassphraseError as exc:
+        return fail("non_interactive", str(exc), "Set XCLAW_WALLET_PASSPHRASE or run with TTY attached.", {"chain": chain}, exit_code=2)
+    except WalletSecurityError as exc:
+        return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": chain}, exit_code=1)
+    except WalletStoreError as exc:
+        msg = str(exc)
+        if "Missing dependency: cast" in msg:
+            return fail(
+                "missing_dependency",
+                msg,
+                "Install Foundry and ensure `cast` is on PATH.",
+                {"dependency": "cast"},
+                exit_code=1,
+            )
+        if "Chain config" in msg:
+            return fail("chain_config_invalid", msg, "Repair config/chains/<chain>.json and retry.", {"chain": chain}, exit_code=1)
+        return fail("send_failed", msg, "Verify wallet passphrase, policy, RPC connectivity, and retry.", {"chain": chain}, exit_code=1)
+    except Exception as exc:
+        return fail("send_failed", str(exc), "Inspect runtime token-send configuration and retry.", {"chain": chain}, exit_code=1)
+
+
 def cmd_wallet_balance(args: argparse.Namespace) -> int:
     chk = require_json_flag(args)
     if chk is not None:
@@ -2272,7 +2869,13 @@ def cmd_wallet_balance(args: argparse.Namespace) -> int:
         store = load_wallet_store()
         _, wallet = _chain_wallet(store, chain)
         if wallet is None:
-            return fail("wallet_missing", f"No wallet configured for chain '{chain}'.", "Run wallet create/import first.", {"chain": chain}, exit_code=1)
+            return fail(
+                "wallet_missing",
+                f"No wallet configured for chain '{chain}'.",
+                "Run hosted bootstrap installer to initialize wallet.",
+                {"chain": chain},
+                exit_code=1,
+            )
         _validate_wallet_entry_shape(wallet)
         address = str(wallet.get("address"))
         cast_bin = _require_cast_bin()
@@ -2319,7 +2922,13 @@ def cmd_wallet_token_balance(args: argparse.Namespace) -> int:
         store = load_wallet_store()
         _, wallet = _chain_wallet(store, chain)
         if wallet is None:
-            return fail("wallet_missing", f"No wallet configured for chain '{chain}'.", "Run wallet create/import first.", {"chain": chain}, exit_code=1)
+            return fail(
+                "wallet_missing",
+                f"No wallet configured for chain '{chain}'.",
+                "Run hosted bootstrap installer to initialize wallet.",
+                {"chain": chain},
+                exit_code=1,
+            )
         _validate_wallet_entry_shape(wallet)
         address = str(wallet.get("address"))
         cast_bin = _require_cast_bin()
@@ -2371,6 +2980,11 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("--json", action="store_true")
     st.set_defaults(func=cmd_status)
 
+    dashboard = sub.add_parser("dashboard")
+    dashboard.add_argument("--chain", required=True)
+    dashboard.add_argument("--json", action="store_true")
+    dashboard.set_defaults(func=cmd_dashboard)
+
     intents = sub.add_parser("intents")
     intents_sub = intents.add_subparsers(dest="intents_cmd")
     intents_poll = intents_sub.add_parser("poll")
@@ -2416,8 +3030,48 @@ def build_parser() -> argparse.ArgumentParser:
     chat_post.add_argument("--json", action="store_true")
     chat_post.set_defaults(func=cmd_chat_post)
 
+    profile = sub.add_parser("profile")
+    profile_sub = profile.add_subparsers(dest="profile_cmd")
+
+    profile_set_name = profile_sub.add_parser("set-name")
+    profile_set_name.add_argument("--name", required=True)
+    profile_set_name.add_argument("--chain", required=True)
+    profile_set_name.add_argument("--json", action="store_true")
+    profile_set_name.set_defaults(func=cmd_profile_set_name)
+
+    management_link = sub.add_parser("management-link")
+    management_link.add_argument("--ttl-seconds", default=600)
+    management_link.add_argument("--json", action="store_true")
+    management_link.set_defaults(func=cmd_management_link)
+
     limit_orders = sub.add_parser("limit-orders")
     limit_orders_sub = limit_orders.add_subparsers(dest="limit_orders_cmd")
+
+    lo_create = limit_orders_sub.add_parser("create")
+    lo_create.add_argument("--chain", required=True)
+    lo_create.add_argument("--mode", required=True, choices=["mock", "real"])
+    lo_create.add_argument("--side", required=True, choices=["buy", "sell"])
+    lo_create.add_argument("--token-in", required=True)
+    lo_create.add_argument("--token-out", required=True)
+    lo_create.add_argument("--amount-in", required=True)
+    lo_create.add_argument("--limit-price", required=True)
+    lo_create.add_argument("--slippage-bps", required=True)
+    lo_create.add_argument("--expires-at")
+    lo_create.add_argument("--json", action="store_true")
+    lo_create.set_defaults(func=cmd_limit_orders_create)
+
+    lo_cancel = limit_orders_sub.add_parser("cancel")
+    lo_cancel.add_argument("--order-id", required=True)
+    lo_cancel.add_argument("--chain", required=True)
+    lo_cancel.add_argument("--json", action="store_true")
+    lo_cancel.set_defaults(func=cmd_limit_orders_cancel)
+
+    lo_list = limit_orders_sub.add_parser("list")
+    lo_list.add_argument("--chain", required=True)
+    lo_list.add_argument("--status")
+    lo_list.add_argument("--limit", default=50)
+    lo_list.add_argument("--json", action="store_true")
+    lo_list.set_defaults(func=cmd_limit_orders_list)
 
     lo_sync = limit_orders_sub.add_parser("sync")
     lo_sync.add_argument("--chain", required=True)
@@ -2451,16 +3105,6 @@ def build_parser() -> argparse.ArgumentParser:
     w_health.add_argument("--json", action="store_true")
     w_health.set_defaults(func=cmd_wallet_health)
 
-    w_create = wallet_sub.add_parser("create")
-    w_create.add_argument("--chain", required=True)
-    w_create.add_argument("--json", action="store_true")
-    w_create.set_defaults(func=cmd_wallet_create)
-
-    w_import = wallet_sub.add_parser("import")
-    w_import.add_argument("--chain", required=True)
-    w_import.add_argument("--json", action="store_true")
-    w_import.set_defaults(func=cmd_wallet_import)
-
     w_addr = wallet_sub.add_parser("address")
     w_addr.add_argument("--chain", required=True)
     w_addr.add_argument("--json", action="store_true")
@@ -2479,6 +3123,14 @@ def build_parser() -> argparse.ArgumentParser:
     w_send.add_argument("--json", action="store_true")
     w_send.set_defaults(func=cmd_wallet_send)
 
+    w_send_token = wallet_sub.add_parser("send-token")
+    w_send_token.add_argument("--token", required=True)
+    w_send_token.add_argument("--to", required=True)
+    w_send_token.add_argument("--amount-wei", required=True)
+    w_send_token.add_argument("--chain", required=True)
+    w_send_token.add_argument("--json", action="store_true")
+    w_send_token.set_defaults(func=cmd_wallet_send_token)
+
     w_bal = wallet_sub.add_parser("balance")
     w_bal.add_argument("--chain", required=True)
     w_bal.add_argument("--json", action="store_true")
@@ -2489,11 +3141,6 @@ def build_parser() -> argparse.ArgumentParser:
     w_tbal.add_argument("--chain", required=True)
     w_tbal.add_argument("--json", action="store_true")
     w_tbal.set_defaults(func=cmd_wallet_token_balance)
-
-    w_remove = wallet_sub.add_parser("remove")
-    w_remove.add_argument("--chain", required=True)
-    w_remove.add_argument("--json", action="store_true")
-    w_remove.set_defaults(func=cmd_wallet_remove)
 
     return p
 

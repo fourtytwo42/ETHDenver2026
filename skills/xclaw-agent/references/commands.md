@@ -7,40 +7,50 @@ This reference defines the expected command surface for the Python-first skill w
 ## Core Commands
 
 - `status`
+- `dashboard`
 - `intents-poll`
 - `approval-check <intent_id>`
 - `trade-exec <intent_id>`
 - `report-send <trade_id>`
 - `chat-poll`
 - `chat-post <message>`
+- `username-set <name>`
+- `owner-link`
+- `limit-orders-create <mode> <side> <token_in> <token_out> <amount_in> <limit_price> <slippage_bps>`
+- `limit-orders-cancel <order_id>`
+- `limit-orders-list`
+- `limit-orders-run-loop`
 - `wallet-health`
-- `wallet-create`
-- `wallet-import`
 - `wallet-address`
 - `wallet-sign-challenge <message>`
 - `wallet-send <to> <amount_wei>`
+- `wallet-send-token <token> <to> <amount_wei>`
 - `wallet-balance`
 - `wallet-token-balance <token_address>`
-- `wallet-remove`
 
 Underlying runtime delegation (performed by wrapper):
 
 - `xclaw-agent status --json`
+- `xclaw-agent dashboard --chain <chain_key> --json`
 - `xclaw-agent intents poll --chain <chain_key> --json`
 - `xclaw-agent approvals check --intent <intent_id> --chain <chain_key> --json`
 - `xclaw-agent trade execute --intent <intent_id> --chain <chain_key> --json`
 - `xclaw-agent report send --trade <trade_id> --json`
 - `xclaw-agent chat poll --chain <chain_key> --json`
 - `xclaw-agent chat post --message <message> --chain <chain_key> --json`
+- `xclaw-agent profile set-name --name <name> --chain <chain_key> --json`
+- `xclaw-agent management-link --ttl-seconds <seconds> --json`
+- `xclaw-agent limit-orders create --chain <chain_key> --mode <mock|real> --side <buy|sell> --token-in <token> --token-out <token> --amount-in <amount> --limit-price <price> --slippage-bps <bps> --json`
+- `xclaw-agent limit-orders cancel --order-id <order_id> --chain <chain_key> --json`
+- `xclaw-agent limit-orders list --chain <chain_key> --json`
+- `xclaw-agent limit-orders run-loop --chain <chain_key> --json`
 - `xclaw-agent wallet health --chain <chain_key> --json`
-- `xclaw-agent wallet create --chain <chain_key> --json`
-- `xclaw-agent wallet import --chain <chain_key> --json`
 - `xclaw-agent wallet address --chain <chain_key> --json`
 - `xclaw-agent wallet sign-challenge --message <message> --chain <chain_key> --json`
 - `xclaw-agent wallet send --to <address> --amount-wei <amount_wei> --chain <chain_key> --json`
+- `xclaw-agent wallet send-token --token <token_address> --to <address> --amount-wei <amount_wei> --chain <chain_key> --json`
 - `xclaw-agent wallet balance --chain <chain_key> --json`
 - `xclaw-agent wallet token-balance --token <token_address> --chain <chain_key> --json`
-- `xclaw-agent wallet remove --chain <chain_key> --json`
 
 ## Output Requirements
 
@@ -54,3 +64,4 @@ Underlying runtime delegation (performed by wrapper):
 - No command may output raw management/auth tokens in logs.
 - Any sensitive value must be redacted.
 - Chat posts must never include secrets, private keys, seed phrases, or sensitive policy data.
+- Outbound transfer commands (`wallet-send`, `wallet-send-token`) are policy-gated by owner settings on `/agents/:id`.

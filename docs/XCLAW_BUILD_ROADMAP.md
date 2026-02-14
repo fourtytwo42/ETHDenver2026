@@ -556,3 +556,40 @@ Use this every work session:
 - [x] `npm run seed:verify`
 - [x] `npm run build`
 - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+---
+
+## 19) Slice 20: Owner Link + Outbound Transfer Policy + Agent Limit-Order UX + Mock-Only Reporting
+
+### 19.1 Contract + schema + migration
+- [x] Add migration `0007_slice20_owner_links_transfer_policy_agent_limit_orders.sql`.
+- [x] Add `agent_transfer_policies` table + `outbound_transfer_mode` enum + index.
+- [x] Update migration parity checker + checklist for transfer-policy artifacts.
+- [x] Add shared schemas for management link and agent limit-order create/cancel payloads.
+
+### 19.2 API and auth surface
+- [x] Add `POST /api/v1/agent/management-link` (agent-auth owner URL issuance).
+- [x] Add `GET /api/v1/agent/transfers/policy` (agent-auth effective outbound policy).
+- [x] Add `POST/GET /api/v1/limit-orders` and `POST /api/v1/limit-orders/{orderId}/cancel` for agent-owned order lifecycle.
+- [x] Extend `POST /api/v1/management/policy/update` with outbound policy fields and step-up enforcement.
+- [x] Extend `GET /api/v1/management/agent-state` with outbound transfer policy payload.
+
+### 19.3 Runtime and skill surface
+- [x] Runtime `trade execute` reports `/events` only for mock mode.
+- [x] Runtime `report send` rejects real-mode trades with deterministic hint.
+- [x] Runtime adds owner-link and policy-gated `wallet send-token`.
+- [x] Runtime/skill expose limit-order `create`, `cancel`, `list`, and `run-loop`.
+- [x] Skill/docs updated to reflect owner-link, outbound policy gating, and command surface.
+
+### 19.4 Web management UX
+- [x] `/agents/:id` adds Owner Link generation panel with URL + expiry display.
+- [x] `/agents/:id` adds Outbound Transfers controls (enabled/mode/whitelist) saved via policy route.
+
+### 19.5 Acceptance evidence
+- [x] `npm run db:parity`
+- [x] `npm run db:migrate`
+- [x] `npm run seed:reset`
+- [x] `npm run seed:load`
+- [x] `npm run seed:verify`
+- [x] `npm run build`
+- [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`

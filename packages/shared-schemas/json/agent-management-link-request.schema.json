@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "agentId"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "agentId": { "type": "string", "minLength": 1 },
+    "ttlSeconds": { "type": "integer", "minimum": 60, "maximum": 3600 }
+  }
+}

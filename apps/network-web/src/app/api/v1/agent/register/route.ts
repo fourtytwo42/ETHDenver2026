@@ -22,6 +22,21 @@ type RegisterRequest = {
   }>;
 };
 
+const NAME_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
+class NameChangeTooSoonError extends Error {
+  readonly currentName: string;
+  readonly requestedName: string;
+  readonly nextAllowedAt: string;
+
+  constructor(currentName: string, requestedName: string, nextAllowedAt: string) {
+    super('Agent name can only be changed once every 7 days.');
+    this.currentName = currentName;
+    this.requestedName = requestedName;
+    this.nextAllowedAt = nextAllowedAt;
+  }
+}
+
 async function upsertWallets(client: { query: (text: string, values: unknown[]) => Promise<unknown> }, body: RegisterRequest): Promise<void> {
   for (const wallet of body.wallets) {
     await client.query(
@@ -92,15 +107,44 @@ export async function POST(req: NextRequest) {
     }
 
     await withTransaction(async (client) => {
+      const existing = await client.query<{ agent_name: string; last_name_change_at: string | null }>(
+        `
+        select agent_name, last_name_change_at::text
+        from agents
+        where agent_id = $1
+        for update
+        `,
+        [body.agentId]
+      );
+
+      if (existing.rows.length > 0) {
+        const currentName = existing.rows[0].agent_name;
+        const lastNameChangeAt = existing.rows[0].last_name_change_at;
+        const requestedDifferentName = currentName !== agentName;
+        if (requestedDifferentName && lastNameChangeAt) {
+          const parsedLastChange = new Date(lastNameChangeAt);
+          if (!Number.isNaN(parsedLastChange.getTime())) {
+            const nextAllowedAtMs = parsedLastChange.getTime() + NAME_CHANGE_COOLDOWN_MS;
+            if (nextAllowedAtMs > Date.now()) {
+              throw new NameChangeTooSoonError(currentName, agentName, new Date(nextAllowedAtMs).toISOString());
+            }
+          }
+        }
+      }
+
       await client.query(
         `
         insert into agents (
-          agent_id, agent_name, runtime_platform, public_status, openclaw_metadata, created_at, updated_at
-        ) values ($1, $2, $3, 'offline', '{}'::jsonb, now(), now())
+          agent_id, agent_name, runtime_platform, public_status, openclaw_metadata, last_name_change_at, created_at, updated_at
+        ) values ($1, $2, $3, 'offline', '{}'::jsonb, null, now(), now())
         on conflict (agent_id)
         do update set
           agent_name = excluded.agent_name,
           runtime_platform = excluded.runtime_platform,
+          last_name_change_at = case
+            when agents.agent_name is distinct from excluded.agent_name then now()
+            else agents.last_name_change_at
+          end,
           updated_at = now()
         `,
         [body.agentId, agentName, body.runtimePlatform]
@@ -127,6 +171,25 @@ export async function POST(req: NextRequest) {
     await storeIdempotencyResponse(idempotency.ctx, 200, responseBody);
     return successResponse(responseBody, 200, requestId);
   } catch (error) {
+    if (error instanceof NameChangeTooSoonError) {
+      return errorResponse(
+        429,
+        {
+          code: 'rate_limited',
+          message: `Agent name can only be changed once every 7 days. Current name is '${error.currentName}'.`,
+          actionHint: `Run the same register command again after ${error.nextAllowedAt} UTC, or choose to keep the current name until then.`,
+          details: {
+            field: 'agentName',
+            currentName: error.currentName,
+            requestedName: error.requestedName,
+            renameCooldown: '7d',
+            nextAllowedAt: error.nextAllowedAt
+          }
+        },
+        requestId
+      );
+    }
+
     const maybeCode = (error as { code?: string }).code;
     const maybeConstraint = (error as { constraint?: string }).constraint;
     if (maybeCode === '23505') {

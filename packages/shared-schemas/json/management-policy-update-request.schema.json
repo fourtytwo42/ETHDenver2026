@@ -13,6 +13,13 @@
       "type": "array",
       "items": { "type": "string", "minLength": 1 },
       "maxItems": 100
+    },
+    "outboundTransfersEnabled": { "type": "boolean" },
+    "outboundMode": { "type": "string", "enum": ["disabled", "allow_all", "whitelist"] },
+    "outboundWhitelistAddresses": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+      "maxItems": 200
     }
   }
 }

@@ -380,6 +380,59 @@ Results:
 ### Files updated for this checkpoint
 - `docs/XCLAW_BUILD_ROADMAP.md`
 - `docs/XCLAW_SLICE_TRACKER.md`
+
+## Slice 20 Acceptance Evidence
+
+Date (UTC): 2026-02-14
+Active slice: `Slice 20: Owner Link + Outbound Transfer Policy + Agent Limit-Order UX + Mock-Only Reporting`
+Issue mapping: `#20`
+
+### File-level evidence (Slice 20)
+- Runtime + skill:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_trade_path.py`
+  - `skills/xclaw-agent/scripts/xclaw_agent_skill.py`
+  - `skills/xclaw-agent/SKILL.md`
+  - `skills/xclaw-agent/references/commands.md`
+- API/UI:
+  - `apps/network-web/src/app/api/v1/agent/management-link/route.ts`
+  - `apps/network-web/src/app/api/v1/agent/transfers/policy/route.ts`
+  - `apps/network-web/src/app/api/v1/limit-orders/route.ts`
+  - `apps/network-web/src/app/api/v1/limit-orders/[orderId]/cancel/route.ts`
+  - `apps/network-web/src/app/api/v1/management/policy/update/route.ts`
+  - `apps/network-web/src/app/api/v1/management/agent-state/route.ts`
+  - `apps/network-web/src/app/api/v1/management/owner-link/route.ts`
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+- Contracts/docs/migrations:
+  - `infrastructure/migrations/0007_slice20_owner_links_transfer_policy_agent_limit_orders.sql`
+  - `infrastructure/scripts/check-migration-parity.mjs`
+  - `docs/db/MIGRATION_PARITY_CHECKLIST.md`
+  - `packages/shared-schemas/json/agent-management-link-request.schema.json`
+  - `packages/shared-schemas/json/agent-limit-order-create-request.schema.json`
+  - `packages/shared-schemas/json/agent-limit-order-cancel-request.schema.json`
+  - `packages/shared-schemas/json/management-policy-update-request.schema.json`
+  - `docs/api/openapi.v1.yaml`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `spec.md`
+  - `tasks.md`
+
+### Required gate command matrix
+- [x] `npm run db:parity`
+- [x] `npm run db:migrate`
+- [x] `npm run seed:reset`
+- [x] `npm run seed:load`
+- [x] `npm run seed:verify`
+- [x] `npm run build`
+- [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+### High-risk rollback notes
+- Risk domain: auth/session token issuance, outbound transfer policy enforcement, migration.
+- Rollback path:
+  1. revert Slice 20 touched files listed above,
+  2. rerun migration parity + seed + build gates,
+  3. confirm agent runtime command surface and management UI return to pre-slice state.
 - `docs/XCLAW_SOURCE_OF_TRUTH.md`
 - `acceptance.md`
 

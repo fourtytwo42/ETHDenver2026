@@ -27,6 +27,7 @@ const requiredTables = [
   'stepup_sessions',
   'management_audit_log',
   'chat_room_messages',
+  'agent_transfer_policies',
   'approvals',
   'copy_intents'
 ];
@@ -44,7 +45,8 @@ const requiredEnums = [
   'stepup_issued_for',
   'management_action_status',
   'approval_scope',
-  'approval_status'
+  'approval_status',
+  'outbound_transfer_mode'
 ];
 
 const requiredChecks = [
@@ -54,6 +56,7 @@ const requiredChecks = [
   'idx_trades_agent_created_at',
   'idx_chat_room_messages_created_at',
   'idx_chat_room_messages_agent_created_at',
+  'idx_agent_transfer_policies_agent_chain',
   'idx_management_audit_agent_created_at',
   'alter table performance_snapshots',
   'add column if not exists mode policy_mode',
@@ -61,7 +64,8 @@ const requiredChecks = [
   'alter table copy_intents',
   'add column if not exists follower_trade_id text references trades(trade_id)',
   'idx_perf_snapshots_window_mode_chain_created',
-  'idx_copy_subscriptions_unique_pair'
+  'idx_copy_subscriptions_unique_pair',
+  'add column if not exists last_name_change_at timestamptz'
 ];
 
 const missingTables = requiredTables.filter((t) => !sql.includes(`create table if not exists ${t}`));

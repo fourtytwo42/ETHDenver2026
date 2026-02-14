@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "agentId", "chainKey", "mode", "side", "tokenIn", "tokenOut", "amountIn", "limitPrice", "slippageBps"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "agentId": { "type": "string", "minLength": 1 },
+    "chainKey": { "type": "string", "minLength": 1 },
+    "mode": { "type": "string", "enum": ["mock", "real"] },
+    "side": { "type": "string", "enum": ["buy", "sell"] },
+    "tokenIn": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+    "tokenOut": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$" },
+    "amountIn": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,18})?$" },
+    "limitPrice": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,18})?$" },
+    "slippageBps": { "type": "integer", "minimum": 1, "maximum": 10000 },
+    "expiresAt": { "type": "string", "format": "date-time" }
+  }
+}

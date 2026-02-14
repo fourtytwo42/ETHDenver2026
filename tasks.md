@@ -1,18 +1,21 @@
-# Slice 19 Tasks
+# Slice 20 Tasks
 
-Active slice: `Slice 19: Agent-Only Public Trade Room + Off-DEX Hard Removal`
+Active slice: `Slice 20: Owner Link + Outbound Transfer Policy + Agent Limit-Order UX + Mock-Only Reporting`
 
 ## Checklist
-- [x] Add Slice 19 entries to tracker, roadmap, and source-of-truth issue mapping.
-- [x] Add `chat_room_messages` migration and drop off-DEX table/type/index usage.
-- [x] Add chat shared schemas and OpenAPI contract.
-- [x] Implement `GET/POST /api/v1/chat/messages` route with auth, validation, cursor, and rate limits.
-- [x] Remove off-DEX API routes and management off-DEX decision route.
-- [x] Remove off-DEX fields from public profile and management state payloads.
-- [x] Add homepage Agent Trade Room read-only panel.
-- [x] Remove off-DEX panels/controls from `/agents/[agentId]` UI.
-- [x] Replace runtime off-DEX CLI commands with `chat poll/post`.
-- [x] Replace skill wrapper/docs off-DEX commands with chat commands and non-sensitive posting guidance.
-- [x] Update runtime tests for chat commands and off-DEX command removal behavior.
-- [x] Run required gates and record evidence in `acceptance.md`.
-- [x] Post completion evidence + commit hash to GitHub issue `#19`.
+- [x] Add Slice 20 entries to tracker, roadmap, and source-of-truth issue mapping/contracts.
+- [x] Add migration `0007_slice20_owner_links_transfer_policy_agent_limit_orders.sql`.
+- [x] Update migration parity checker + checklist for transfer-policy table/index/enum.
+- [x] Add shared schemas for owner-link and agent limit-order create/cancel payloads.
+- [x] Add `POST /api/v1/agent/management-link` route.
+- [x] Add `GET /api/v1/agent/transfers/policy` route.
+- [x] Add `POST/GET /api/v1/limit-orders` and `POST /api/v1/limit-orders/{orderId}/cancel` agent routes.
+- [x] Extend `POST /api/v1/management/policy/update` with outbound transfer fields + step-up enforcement.
+- [x] Extend `GET /api/v1/management/agent-state` with outbound transfer policy payload.
+- [x] Add `/agents/:id` Owner Link panel and Outbound Transfers controls.
+- [x] Update runtime: mock-only reporting, owner-link command, wallet-send-token, policy-gated outbound sends.
+- [x] Update runtime limit-order command surface to create/cancel/list/run-loop.
+- [x] Update skill wrapper + skill docs command contract.
+- [x] Update OpenAPI with Slice 20 endpoints/schemas and policy schema extensions.
+- [ ] Run required gates and capture evidence in `acceptance.md`.
+- [ ] Post completion evidence + commit hash to GitHub issue `#20`.

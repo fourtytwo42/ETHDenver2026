@@ -114,6 +114,12 @@ type ManagementStatePayload = {
     allowed_tokens: string[];
     created_at: string;
   } | null;
+  outboundTransfersPolicy: {
+    outboundTransfersEnabled: boolean;
+    outboundMode: 'disabled' | 'allow_all' | 'whitelist';
+    outboundWhitelistAddresses: string[];
+    updatedAt: string | null;
+  };
   auditLog: Array<{
     audit_id: string;
     action_type: string;
@@ -294,6 +300,10 @@ export default function AgentPublicProfilePage() {
   const [orderAmountIn, setOrderAmountIn] = useState('0.01');
   const [orderLimitPrice, setOrderLimitPrice] = useState('2500');
   const [orderSlippageBps, setOrderSlippageBps] = useState('50');
+  const [ownerLink, setOwnerLink] = useState<{ managementUrl: string; expiresAt: string } | null>(null);
+  const [outboundTransfersEnabled, setOutboundTransfersEnabled] = useState(false);
+  const [outboundMode, setOutboundMode] = useState<'disabled' | 'allow_all' | 'whitelist'>('disabled');
+  const [outboundWhitelistInput, setOutboundWhitelistInput] = useState('');
 
   useEffect(() => {
     if (!agentId) {
@@ -378,6 +388,9 @@ export default function AgentPublicProfilePage() {
         const payload = (await managementRes.json()) as ManagementStatePayload;
         if (!cancelled) {
           setManagement({ phase: 'ready', data: payload });
+          setOutboundTransfersEnabled(payload.outboundTransfersPolicy.outboundTransfersEnabled);
+          setOutboundMode(payload.outboundTransfersPolicy.outboundMode);
+          setOutboundWhitelistInput(payload.outboundTransfersPolicy.outboundWhitelistAddresses.join(','));
           rememberManagedAgent(agentId);
 
           const savedDestination =
@@ -455,6 +468,9 @@ export default function AgentPublicProfilePage() {
 
       const payload = (await managementRes.json()) as ManagementStatePayload;
       setManagement({ phase: 'ready', data: payload });
+      setOutboundTransfersEnabled(payload.outboundTransfersPolicy.outboundTransfersEnabled);
+      setOutboundMode(payload.outboundTransfersPolicy.outboundMode);
+      setOutboundWhitelistInput(payload.outboundTransfersPolicy.outboundWhitelistAddresses.join(','));
       const [depositPayload, limitOrderPayload] = await Promise.all([
         managementGet(`/api/v1/management/deposit?agentId=${encodeURIComponent(agentId)}`),
         managementGet(`/api/v1/management/limit-orders?agentId=${encodeURIComponent(agentId)}&limit=50`)
@@ -755,6 +771,102 @@ export default function AgentPublicProfilePage() {
                     }
                   >
                     Verify
+                  </button>
+                </div>
+              </article>
+
+              <article className="management-card">
+                <h3>Owner Link</h3>
+                <p className="muted">Generate a short-lived one-time owner URL for management bootstrap.</p>
+                <div className="toolbar">
+                  <button
+                    className="theme-toggle"
+                    type="button"
+                    onClick={() =>
+                      void runManagementAction(
+                        () =>
+                          managementPost('/api/v1/management/owner-link', {
+                            schemaVersion: 1,
+                            agentId,
+                            ttlSeconds: 600
+                          }).then((payload) => {
+                            const data = payload as { managementUrl?: string; expiresAt?: string };
+                            if (data.managementUrl && data.expiresAt) {
+                              setOwnerLink({ managementUrl: data.managementUrl, expiresAt: data.expiresAt });
+                            }
+                            return Promise.resolve();
+                          }),
+                        'Owner link generated.'
+                      )
+                    }
+                  >
+                    Generate Owner Link
+                  </button>
+                </div>
+                {ownerLink ? (
+                  <div className="queue-item">
+                    <div>
+                      <div className="muted">Expires: {formatUtc(ownerLink.expiresAt)} UTC</div>
+                      <div style={{ wordBreak: 'break-all' }}>{ownerLink.managementUrl}</div>
+                    </div>
+                  </div>
+                ) : null}
+              </article>
+
+              <article className="management-card">
+                <h3>Outbound Transfers</h3>
+                <p className="muted">Applies to native and token transfers from agent wallet runtime.</p>
+                <div className="toolbar">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={outboundTransfersEnabled}
+                      onChange={(event) => setOutboundTransfersEnabled(event.target.checked)}
+                    />{' '}
+                    Enabled
+                  </label>
+                  <select
+                    value={outboundMode}
+                    onChange={(event) => setOutboundMode((event.target.value as 'disabled' | 'allow_all' | 'whitelist') ?? 'disabled')}
+                  >
+                    <option value="disabled">disabled</option>
+                    <option value="allow_all">allow_all</option>
+                    <option value="whitelist">whitelist</option>
+                  </select>
+                </div>
+                <div className="toolbar">
+                  <input
+                    value={outboundWhitelistInput}
+                    onChange={(event) => setOutboundWhitelistInput(event.target.value)}
+                    placeholder="Comma-separated whitelist addresses"
+                  />
+                </div>
+                <div className="toolbar">
+                  <button
+                    className="theme-toggle"
+                    type="button"
+                    onClick={() =>
+                      void runManagementAction(
+                        () =>
+                          managementPost('/api/v1/management/policy/update', {
+                            agentId,
+                            mode: management.data.latestPolicy?.mode ?? 'mock',
+                            approvalMode: management.data.latestPolicy?.approval_mode ?? 'per_trade',
+                            maxTradeUsd: management.data.latestPolicy?.max_trade_usd ?? '50',
+                            maxDailyUsd: management.data.latestPolicy?.max_daily_usd ?? '250',
+                            allowedTokens: management.data.latestPolicy?.allowed_tokens ?? [],
+                            outboundTransfersEnabled,
+                            outboundMode,
+                            outboundWhitelistAddresses: outboundWhitelistInput
+                              .split(',')
+                              .map((value) => value.trim())
+                              .filter((value) => value.length > 0)
+                          }).then(() => Promise.resolve()),
+                        'Outbound transfer policy saved.'
+                      )
+                    }
+                  >
+                    Save Outbound Policy (Step-up Required)
                   </button>
                 </div>
               </article>

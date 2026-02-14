@@ -307,3 +307,22 @@ DoD:
 - [x] `/agents/:id` page no longer exposes off-DEX history or management queue controls.
 - [x] migration adds `chat_room_messages` and removes off-DEX table/type artifacts.
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
+
+---
+
+## Slice 20: Owner Link + Outbound Transfer Policy + Agent Limit-Order UX + Mock-Only Reporting
+Status: [x]
+
+Goal:
+- Add owner-link issuance and outbound transfer policy controls, simplify agent limit-order UX, and enforce mock-only runtime reporting to `/events`.
+
+DoD:
+- [x] `POST /api/v1/agent/management-link` issues short-lived owner management URLs for authenticated registered agents.
+- [x] `GET /api/v1/agent/transfers/policy` returns effective chain-scoped outbound transfer policy for runtime enforcement.
+- [x] `POST/GET /api/v1/limit-orders` and `POST /api/v1/limit-orders/{orderId}/cancel` are implemented with agent auth ownership checks.
+- [x] limit-order create enforces cap of max 10 open/triggered orders per agent+chain.
+- [x] management policy update supports outbound transfer fields and requires step-up when outbound controls are changed.
+- [x] `/agents/:id` management rail includes Owner Link + Outbound Transfers panels.
+- [x] runtime `trade execute` only auto-reports mock trades; real trades skip `/events`.
+- [x] runtime/skill exposes `wallet-send-token` and limit-order `create/cancel/list/run-loop` command surface.
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.

@@ -36,14 +36,14 @@ def _err(code: str, message: str, action_hint: Optional[str] = None, details: Op
 
 
 def _resolve_agent_binary() -> Optional[str]:
-    path_binary = shutil.which("xclaw-agent")
-    if path_binary:
-        return path_binary
-
     script_dir = Path(__file__).resolve().parent
     repo_binary = script_dir.parent.parent.parent / "apps" / "agent-runtime" / "bin" / "xclaw-agent"
     if repo_binary.exists() and os.access(repo_binary, os.X_OK):
         return str(repo_binary)
+
+    path_binary = shutil.which("xclaw-agent")
+    if path_binary:
+        return path_binary
 
     return None
 
@@ -134,7 +134,7 @@ def main(argv: List[str]) -> int:
         return _err(
             "usage",
             "Missing command.",
-            "Use one of: status, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, wallet-health, wallet-create, wallet-import, wallet-address, wallet-sign-challenge, wallet-send, wallet-balance, wallet-token-balance, wallet-remove",
+            "Use one of: status, dashboard, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, username-set, owner-link, limit-orders-create, limit-orders-cancel, limit-orders-list, limit-orders-run-loop, wallet-health, wallet-address, wallet-sign-challenge, wallet-send, wallet-send-token, wallet-balance, wallet-token-balance",
             exit_code=2,
         )
 
@@ -142,27 +142,28 @@ def main(argv: List[str]) -> int:
 
     api_commands = {
         "status",
+        "dashboard",
         "intents-poll",
         "approval-check",
         "trade-exec",
         "report-send",
         "chat-poll",
         "chat-post",
-        "limit-orders-sync",
-        "limit-orders-status",
-        "limit-orders-run-once",
+        "username-set",
+        "owner-link",
+        "limit-orders-create",
+        "limit-orders-cancel",
+        "limit-orders-list",
         "limit-orders-run-loop",
     }
     wallet_commands = {
         "wallet-health",
-        "wallet-create",
-        "wallet-import",
         "wallet-address",
         "wallet-sign-challenge",
         "wallet-send",
+        "wallet-send-token",
         "wallet-balance",
         "wallet-token-balance",
-        "wallet-remove",
     }
 
     if cmd in api_commands:
@@ -179,6 +180,9 @@ def main(argv: List[str]) -> int:
 
     if cmd == "status":
         return _run_agent(["status", "--json"])
+
+    if cmd == "dashboard":
+        return _run_agent(["dashboard", "--chain", chain, "--json"])
 
     if cmd == "intents-poll":
         return _run_agent(["intents", "poll", "--chain", chain, "--json"])
@@ -206,11 +210,17 @@ def main(argv: List[str]) -> int:
             return _err("usage", "chat-post requires <message>", "usage: chat-post <message>", exit_code=2)
         return _run_agent(["chat", "post", "--message", argv[2], "--chain", chain, "--json"])
 
-    if cmd == "wallet-create":
-        return _run_agent(["wallet", "create", "--chain", chain, "--json"])
+    if cmd == "username-set":
+        if len(argv) < 3:
+            return _err("usage", "username-set requires <name>", "usage: username-set <name>", exit_code=2)
+        return _run_agent(["profile", "set-name", "--name", argv[2], "--chain", chain, "--json"])
 
-    if cmd == "wallet-import":
-        return _run_agent(["wallet", "import", "--chain", chain, "--json"])
+    if cmd == "owner-link":
+        args = ["management-link", "--json"]
+        ttl = os.environ.get("XCLAW_OWNER_LINK_TTL_SECONDS")
+        if ttl:
+            args.extend(["--ttl-seconds", ttl])
+        return _run_agent(args)
 
     if cmd == "wallet-health":
         return _run_agent(["wallet", "health", "--chain", chain, "--json"])
@@ -242,6 +252,45 @@ def main(argv: List[str]) -> int:
             return _err("invalid_input", "Invalid amount_wei format.", "Use base-unit integer string, for example 10000000000000000.", {"amountWei": amount_wei}, exit_code=2)
         return _run_agent(["wallet", "send", "--to", to_addr, "--amount-wei", amount_wei, "--chain", chain, "--json"])
 
+    if cmd == "wallet-send-token":
+        if len(argv) < 5:
+            return _err(
+                "usage",
+                "wallet-send-token requires <token> <to> <amount_wei>",
+                "usage: wallet-send-token <token> <to> <amount_wei>",
+                exit_code=2,
+            )
+        token_addr = argv[2]
+        to_addr = argv[3]
+        amount_wei = argv[4]
+        if not _is_hex_address(token_addr):
+            return _err(
+                "invalid_input",
+                "Invalid token address format.",
+                "Use 0x-prefixed 20-byte hex address.",
+                {"token": token_addr},
+                exit_code=2,
+            )
+        if not _is_hex_address(to_addr):
+            return _err("invalid_input", "Invalid recipient address format.", "Use 0x-prefixed 20-byte hex address.", {"to": to_addr}, exit_code=2)
+        if not _is_uint_string(amount_wei):
+            return _err("invalid_input", "Invalid amount_wei format.", "Use base-unit integer string.", {"amountWei": amount_wei}, exit_code=2)
+        return _run_agent(
+            [
+                "wallet",
+                "send-token",
+                "--token",
+                token_addr,
+                "--to",
+                to_addr,
+                "--amount-wei",
+                amount_wei,
+                "--chain",
+                chain,
+                "--json",
+            ]
+        )
+
     if cmd == "wallet-balance":
         return _run_agent(["wallet", "balance", "--chain", chain, "--json"])
 
@@ -253,19 +302,51 @@ def main(argv: List[str]) -> int:
             return _err("invalid_input", "Invalid token address format.", "Use 0x-prefixed 20-byte hex address.", {"token": token_addr}, exit_code=2)
         return _run_agent(["wallet", "token-balance", "--token", token_addr, "--chain", chain, "--json"])
 
-    if cmd == "wallet-remove":
-        return _run_agent(["wallet", "remove", "--chain", chain, "--json"])
+    if cmd == "limit-orders-create":
+        if len(argv) < 9:
+            return _err(
+                "usage",
+                "limit-orders-create requires <mode> <side> <token_in> <token_out> <amount_in> <limit_price> <slippage_bps>",
+                "usage: limit-orders-create <mode> <side> <token_in> <token_out> <amount_in> <limit_price> <slippage_bps>",
+                exit_code=2,
+            )
+        return _run_agent(
+            [
+                "limit-orders",
+                "create",
+                "--chain",
+                chain,
+                "--mode",
+                argv[2],
+                "--side",
+                argv[3],
+                "--token-in",
+                argv[4],
+                "--token-out",
+                argv[5],
+                "--amount-in",
+                argv[6],
+                "--limit-price",
+                argv[7],
+                "--slippage-bps",
+                argv[8],
+                "--json",
+            ]
+        )
 
-    if cmd == "limit-orders-sync":
-        return _run_agent(["limit-orders", "sync", "--chain", chain, "--json"])
+    if cmd == "limit-orders-cancel":
+        if len(argv) < 3:
+            return _err("usage", "limit-orders-cancel requires <order_id>", "usage: limit-orders-cancel <order_id>", exit_code=2)
+        return _run_agent(["limit-orders", "cancel", "--order-id", argv[2], "--chain", chain, "--json"])
 
-    if cmd == "limit-orders-status":
-        return _run_agent(["limit-orders", "status", "--chain", chain, "--json"])
-
-    if cmd == "limit-orders-run-once":
-        args = ["limit-orders", "run-once", "--chain", chain, "--json"]
-        if os.environ.get("XCLAW_LIMIT_ORDERS_SYNC_ONCE", "1") != "0":
-            args.append("--sync")
+    if cmd == "limit-orders-list":
+        args = ["limit-orders", "list", "--chain", chain, "--json"]
+        status = os.environ.get("XCLAW_LIMIT_ORDERS_LIST_STATUS")
+        limit = os.environ.get("XCLAW_LIMIT_ORDERS_LIST_LIMIT")
+        if status:
+            args.extend(["--status", status])
+        if limit:
+            args.extend(["--limit", limit])
         return _run_agent(args)
 
     if cmd == "limit-orders-run-loop":
@@ -283,7 +364,7 @@ def main(argv: List[str]) -> int:
     return _err(
         "unknown_command",
         f"Unknown command: {cmd}",
-        "Use one of: status, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, limit-orders-sync, limit-orders-status, limit-orders-run-once, limit-orders-run-loop, wallet-health, wallet-create, wallet-import, wallet-address, wallet-sign-challenge, wallet-send, wallet-balance, wallet-token-balance, wallet-remove",
+        "Use one of: status, dashboard, intents-poll, approval-check, trade-exec, report-send, chat-poll, chat-post, username-set, owner-link, limit-orders-create, limit-orders-cancel, limit-orders-list, limit-orders-run-loop, wallet-health, wallet-address, wallet-sign-challenge, wallet-send, wallet-send-token, wallet-balance, wallet-token-balance",
         exit_code=2,
     )
 

@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const [agent, approvals, policy, audit] = await Promise.all([
+    const [agent, approvals, policy, audit, outboundPolicy] = await Promise.all([
       dbQuery<{
         agent_id: string;
         public_status: string;
@@ -108,6 +108,21 @@ export async function GET(req: NextRequest) {
         limit 25
         `,
         [agentId]
+      ),
+      dbQuery<{
+        outbound_transfers_enabled: boolean;
+        outbound_mode: 'disabled' | 'allow_all' | 'whitelist';
+        outbound_whitelist_addresses: unknown;
+        updated_at: string;
+      }>(
+        `
+        select outbound_transfers_enabled, outbound_mode::text, outbound_whitelist_addresses, updated_at::text
+        from agent_transfer_policies
+        where agent_id = $1
+          and chain_key = 'base_sepolia'
+        limit 1
+        `,
+        [agentId]
       )
     ]);
 
@@ -156,6 +171,22 @@ export async function GET(req: NextRequest) {
         },
         approvalsQueue: approvals.rows,
         latestPolicy: policy.rows[0] ?? null,
+        outboundTransfersPolicy:
+          (outboundPolicy.rowCount ?? 0) > 0
+            ? {
+                outboundTransfersEnabled: outboundPolicy.rows[0].outbound_transfers_enabled,
+                outboundMode: outboundPolicy.rows[0].outbound_mode,
+                outboundWhitelistAddresses: Array.isArray(outboundPolicy.rows[0].outbound_whitelist_addresses)
+                  ? outboundPolicy.rows[0].outbound_whitelist_addresses
+                  : [],
+                updatedAt: outboundPolicy.rows[0].updated_at
+              }
+            : {
+                outboundTransfersEnabled: false,
+                outboundMode: 'disabled',
+                outboundWhitelistAddresses: [],
+                updatedAt: null
+              },
         auditLog: audit.rows,
         stepup,
         managementSession: {

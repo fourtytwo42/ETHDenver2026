@@ -72,6 +72,18 @@ export type RevokeAllOutput = {
   newManagementToken: string;
 };
 
+export type IssueOwnerManagementLinkInput = {
+  agentId: string;
+  ttlSeconds: number;
+};
+
+export type IssueOwnerManagementLinkOutput = {
+  agentId: string;
+  token: string;
+  issuedAt: string;
+  expiresAt: string;
+};
+
 function getManagementKey(): Buffer {
   const decoded = Buffer.from(requireManagementTokenEncKey(), 'base64');
   if (decoded.length !== 32) {
@@ -170,6 +182,22 @@ function generateOpaqueToken(): string {
   return randomBytes(32).toString('base64url');
 }
 
+function generateOwnerLinkToken(expiresAt: Date): string {
+  return `ol1.${Math.floor(expiresAt.getTime() / 1000)}.${generateOpaqueToken()}`;
+}
+
+function parseOwnerLinkToken(token: string): { expiresAtSec: number } | null {
+  const parts = token.split('.');
+  if (parts.length !== 3 || parts[0] !== 'ol1') {
+    return null;
+  }
+  const expiresAtSec = Number.parseInt(parts[1] ?? '', 10);
+  if (!Number.isFinite(expiresAtSec) || expiresAtSec <= 0) {
+    return null;
+  }
+  return { expiresAtSec };
+}
+
 export async function bootstrapManagementSession(input: BootstrapInput): Promise<ServiceResult<BootstrapOutput>> {
   const fingerprint = fingerprintManagementToken(input.token);
 
@@ -186,6 +214,7 @@ export async function bootstrapManagementSession(input: BootstrapInput): Promise
         and token_fingerprint = $2
       order by created_at desc
       limit 1
+      for update
       `,
       [input.agentId, fingerprint]
     );
@@ -215,6 +244,40 @@ export async function bootstrapManagementSession(input: BootstrapInput): Promise
         }
       };
     }
+
+    const ownerToken = parseOwnerLinkToken(decrypted);
+    if (ownerToken && ownerToken.expiresAtSec * 1000 <= Date.now()) {
+      await client.query(
+        `
+        update management_tokens
+        set status = 'rotated',
+            rotated_at = now(),
+            updated_at = now()
+        where token_id = $1
+        `,
+        [row.token_id]
+      );
+      return {
+        ok: false,
+        error: {
+          status: 401,
+          code: 'auth_invalid' as const,
+          message: 'Management bootstrap token has expired.',
+          actionHint: 'Generate a fresh owner link token and retry immediately.'
+        }
+      };
+    }
+
+    await client.query(
+      `
+      update management_tokens
+      set status = 'rotated',
+          rotated_at = now(),
+          updated_at = now()
+      where token_id = $1
+      `,
+      [row.token_id]
+    );
 
     const sessionCountResult = await client.query<{ total: string }>(
       'select count(*)::text as total from management_sessions where agent_id = $1',
@@ -267,6 +330,58 @@ export async function bootstrapManagementSession(input: BootstrapInput): Promise
         sessionId,
         managementCookieValue: `${sessionId}.${sessionSecret}`,
         csrfToken: randomBytes(24).toString('base64url'),
+        expiresAt: expiresAt.toISOString()
+      }
+    };
+  });
+}
+
+export async function issueOwnerManagementLink(input: IssueOwnerManagementLinkInput): Promise<ServiceResult<IssueOwnerManagementLinkOutput>> {
+  const ttlSeconds = Math.min(Math.max(Math.trunc(input.ttlSeconds), 60), 3600);
+  const issuedAt = new Date();
+  const expiresAt = nowPlusSeconds(ttlSeconds);
+  const token = generateOwnerLinkToken(expiresAt);
+  const tokenCiphertext = encryptToken(token);
+  const tokenFingerprint = fingerprintManagementToken(token);
+
+  return withTransaction(async (client) => {
+    const agent = await client.query<{ agent_id: string }>(
+      `
+      select agent_id
+      from agents
+      where agent_id = $1
+      limit 1
+      `,
+      [input.agentId]
+    );
+
+    if (agent.rowCount === 0) {
+      return {
+        ok: false,
+        error: {
+          status: 401,
+          code: 'auth_invalid' as const,
+          message: 'Authenticated agent is not registered.',
+          actionHint: 'Register agent before issuing owner management links.'
+        }
+      };
+    }
+
+    await client.query(
+      `
+      insert into management_tokens (
+        token_id, agent_id, token_ciphertext, token_fingerprint, status, rotated_at, created_at, updated_at
+      ) values ($1, $2, $3, $4, 'active', null, now(), now())
+      `,
+      [makeId('mtk'), input.agentId, tokenCiphertext, tokenFingerprint]
+    );
+
+    return {
+      ok: true,
+      data: {
+        agentId: input.agentId,
+        token,
+        issuedAt: issuedAt.toISOString(),
         expiresAt: expiresAt.toISOString()
       }
     };

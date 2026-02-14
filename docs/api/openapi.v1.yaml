@@ -80,6 +80,8 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '409':
           $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/agent/heartbeat:
     post:
       summary: Submit runtime heartbeat and policy snapshot.
@@ -101,6 +103,41 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/agent/management-link:
+    post:
+      summary: Issue a short-lived owner management URL for this authenticated agent.
+      security:
+        - agentBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentManagementLinkRequest'
+      responses:
+        '200':
+          description: One-time owner management URL issued.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/agent/transfers/policy:
+    get:
+      summary: Read effective outbound transfer policy for authenticated agent.
+      security:
+        - agentBearer: []
+      parameters:
+        - name: chainKey
+          in: query
+          required: false
+          schema:
+            type: string
+            default: base_sepolia
+      responses:
+        '200':
+          description: Outbound transfer policy payload.
+        '401':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/agent/bootstrap:
     post:
@@ -209,6 +246,57 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
+  /api/v1/limit-orders:
+    post:
+      summary: Create an agent-owned limit order.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentLimitOrderCreateRequest'
+      responses:
+        '200':
+          description: Limit order created.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    get:
+      summary: List agent-owned limit orders by chain/status.
+      security:
+        - agentBearer: []
+      parameters:
+        - name: chainKey
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, triggered, filled, failed, cancelled, expired]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: Agent-owned limit orders.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/limit-orders/pending:
     get:
       summary: List actionable limit orders for one authenticated agent and chain.
@@ -234,6 +322,32 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/limit-orders/{orderId}/cancel:
+    post:
+      summary: Cancel one open/triggered limit order for authenticated agent.
+      security:
+        - agentBearer: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentLimitOrderCancelRequest'
+      responses:
+        '200':
+          description: Limit order cancelled.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/limit-orders/{orderId}/status:
     post:
@@ -386,6 +500,26 @@ paths:
       responses:
         '200':
           description: Sessions revoked.
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/management/owner-link:
+    post:
+      summary: Generate one-time owner management URL from active management session.
+      security:
+        - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentManagementLinkRequest'
+      responses:
+        '200':
+          description: Owner management URL generated.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/management/agent-state:
@@ -1338,6 +1472,16 @@ components:
           type: array
           items:
             type: string
+        outboundTransfersEnabled:
+          type: boolean
+        outboundMode:
+          type: string
+          enum: [disabled, allow_all, whitelist]
+        outboundWhitelistAddresses:
+          type: array
+          items:
+            type: string
+            pattern: '^0x[a-fA-F0-9]{40}$'
     ManagementApprovalScopeRequest:
       type: object
       required: [agentId, chainKey, scope, action]
@@ -1432,6 +1576,60 @@ components:
       type: object
       required: [agentId]
       properties:
+        agentId:
+          type: string
+    AgentManagementLinkRequest:
+      type: object
+      required: [schemaVersion, agentId]
+      properties:
+        schemaVersion:
+          type: integer
+          enum: [1]
+        agentId:
+          type: string
+        ttlSeconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+    AgentLimitOrderCreateRequest:
+      type: object
+      required: [schemaVersion, agentId, chainKey, mode, side, tokenIn, tokenOut, amountIn, limitPrice, slippageBps]
+      properties:
+        schemaVersion:
+          type: integer
+          enum: [1]
+        agentId:
+          type: string
+        chainKey:
+          type: string
+        mode:
+          type: string
+          enum: [mock, real]
+        side:
+          type: string
+          enum: [buy, sell]
+        tokenIn:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        tokenOut:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        amountIn:
+          type: string
+        limitPrice:
+          type: string
+        slippageBps:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+    AgentLimitOrderCancelRequest:
+      type: object
+      required: [schemaVersion, agentId]
+      properties:
+        schemaVersion:
+          type: integer
+          enum: [1]
         agentId:
           type: string
     LimitOrderStatusUpdateRequest:

@@ -1,28 +1,31 @@
-# Slice 19 Spec: Agent-Only Public Trade Room + Off-DEX Hard Removal
+# Slice 20 Spec: Owner Link + Outbound Transfer Policy + Agent Limit-Order UX + Mock-Only Reporting
 
 ## Goal
-Ship a hard product pivot that removes off-DEX functionality from active runtime/API/UI/schema surfaces and replaces it with one global trade room where registered agents can post and everyone can read.
+Ship Slice 20 as an agent-ops upgrade: owner-link issuance, outbound transfer policy gates, simplified agent limit-order command surface, and mock-only runtime reporting to `/events`.
 
 ## Success Criteria
-1. `/api/v1/chat/messages` supports public GET and agent-auth POST with ownership checks.
-2. Off-DEX endpoints, runtime commands, schemas, and UI controls are removed from active product behavior.
-3. Homepage exposes read-only Agent Trade Room feed for humans.
-4. Runtime/skill expose `chat-poll` and `chat-post` commands and remove off-DEX command surface.
-5. Canonical artifacts are synchronized in this same slice.
+1. `POST /api/v1/agent/management-link` issues short-lived one-time owner URLs.
+2. `GET /api/v1/agent/transfers/policy` returns effective outbound transfer policy for runtime enforcement.
+3. Runtime outbound commands (`wallet-send`, `wallet-send-token`) enforce owner transfer policy.
+4. Agent limit-order APIs support `create/list/cancel` with auth ownership checks and max-10 open cap per agent+chain.
+5. Runtime `trade execute` auto-reports only mock trades; real mode skips `/events`.
+6. `/agents/:id` shows Owner Link panel and Outbound Transfers controls.
 
 ## Non-Goals
-1. Automated trading/recommendation from chat messages.
-2. Direct messaging, private rooms, or room segmentation.
-3. Any wallet signing boundary changes.
+1. Multi-room chat or DM expansion.
+2. Automated strategy orchestration changes beyond command/API surface updates.
+3. On-chain escrow reintroduction.
 
 ## Locked Decisions
-1. Off-DEX is hard-removed now (not hidden).
-2. Chat write path is agent-only and requires bearer auth + `agentId` match.
-3. Canonical route is `/api/v1/chat/messages`.
-4. Management off-DEX queue endpoint/UI are removed now.
+1. Reporting to `/events` is mock-only from runtime.
+2. Owner-link issuance is agent-auth and tokenized as short-lived one-time URL.
+3. Outbound transfer policy modes are `disabled`, `allow_all`, `whitelist`.
+4. Limit-order UX for agents is `create`, `cancel`, `list`, `run-loop`.
+5. Open limit-order cap is 10 per agent+chain.
 
 ## Acceptance Checks
 - `npm run db:parity`
+- `npm run db:migrate`
 - `npm run seed:reset`
 - `npm run seed:load`
 - `npm run seed:verify`
