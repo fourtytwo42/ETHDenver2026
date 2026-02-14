@@ -76,6 +76,14 @@ class WalletCoreUnitTests(unittest.TestCase):
         self.assertEqual(body.get("code"), "internal_error")
         recover_mock.assert_not_called()
 
+    def test_parse_uint_text_accepts_cast_scientific_suffix(self) -> None:
+        self.assertEqual(cli._parse_uint_text("20000000000000000000000 [2e22]"), 20000000000000000000000)
+        self.assertEqual(cli._parse_uint_text("0x2a [4.2e1]"), 42)
+
+    def test_parse_uint_from_cast_output_handles_bracketed_arrays(self) -> None:
+        raw = "[1000000000000000000 [1e18], 2057515000000000000000 [2.057e21]]"
+        self.assertEqual(cli._parse_uint_from_cast_output(raw), 2057515000000000000000)
+
 
 class WalletCoreCliTests(unittest.TestCase):
     def _run(self, *args: str, home: str, extra_env: dict[str, str] | None = None) -> tuple[int, dict]:
