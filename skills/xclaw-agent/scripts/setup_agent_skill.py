@@ -12,6 +12,9 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+APP_DIR = Path.home() / ".xclaw-agent"
+POLICY_FILE = APP_DIR / "policy.json"
+
 
 def run(cmd: list[str], check: bool = True, capture: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -132,6 +135,49 @@ def ensure_ready() -> dict[str, str]:
     return versions
 
 
+def _chmod_if_posix(path: Path, mode: int) -> None:
+    if os.name == "nt":
+        return
+    os.chmod(path, mode)
+
+
+def ensure_default_policy_file(default_chain: str) -> None:
+    """Create a safe default local policy file when missing.
+
+    Policy is required for spend actions (spot swap, transfers) and is enforced by xclaw-agent runtime.
+    """
+    APP_DIR.mkdir(parents=True, exist_ok=True)
+    _chmod_if_posix(APP_DIR, 0o700)
+
+    if POLICY_FILE.exists():
+        # Do not mutate an existing policy; owners may have tightened it.
+        return
+
+    # NOTE: Slice 06 policy caps are temporarily native-denominated. In practice, this cap is used
+    # as a coarse safety brake for any spend-like action until USD-cap pipeline slices land.
+    #
+    # Defaults are intentionally permissive enough for testnet usage while still being finite.
+    payload = {
+        "paused": False,
+        "chains": {
+            # Enable the default chain to avoid "policy missing" spend failures after install.
+            default_chain: {"chain_enabled": True},
+            # Hardhat-local is commonly used for local verification; keep enabled when present.
+            "hardhat_local": {"chain_enabled": True},
+        },
+        "spend": {
+            # Keep spot swaps usable out-of-the-box. Owners can tighten to require explicit approval.
+            "approval_required": False,
+            "approval_granted": True,
+            # 1000e18 (1,000 "native wei-denominated units") daily cap as a coarse brake.
+            "max_daily_native_wei": "1000000000000000000000",
+        },
+    }
+
+    POLICY_FILE.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    _chmod_if_posix(POLICY_FILE, 0o600)
+
+
 def main() -> int:
     script_dir = Path(__file__).resolve().parent
     workspace = script_dir.parent.parent.parent.resolve()
@@ -140,6 +186,7 @@ def main() -> int:
         openclaw_bin = ensure_openclaw(workspace)
         managed_skill = ensure_managed_skill_copy(workspace)
         launcher = ensure_launcher(workspace, openclaw_bin)
+        ensure_default_policy_file(os.environ.get("XCLAW_DEFAULT_CHAIN", "base_sepolia"))
         versions = ensure_ready()
     except subprocess.CalledProcessError as exc:
         stderr = (exc.stderr or "").strip()

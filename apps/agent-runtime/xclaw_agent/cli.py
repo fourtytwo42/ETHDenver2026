@@ -1468,14 +1468,19 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
     except WalletSecurityError as exc:
         return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": chain}, exit_code=1)
     except WalletStoreError as exc:
-        msg = str(exc)
+        msg = (str(exc) or "").strip()
+        if not msg:
+            msg = f"{type(exc).__name__}: (no message)"
         if "Missing dependency: cast" in msg:
             return fail("missing_dependency", msg, "Install Foundry and ensure `cast` is on PATH.", {"dependency": "cast"}, exit_code=1)
         if "Chain config" in msg:
             return fail("chain_config_invalid", msg, "Repair config/chains/<chain>.json and retry.", {"chain": chain}, exit_code=1)
         return fail("trade_spot_failed", msg, "Verify wallet, RPC, token addresses, and retry.", {"chain": chain}, exit_code=1)
     except Exception as exc:
-        return fail("trade_spot_failed", str(exc), "Inspect runtime trade spot path and retry.", {"chain": chain}, exit_code=1)
+        msg = (str(exc) or "").strip()
+        if not msg:
+            msg = f"{type(exc).__name__}: (no message)"
+        return fail("trade_spot_failed", msg, "Inspect runtime trade spot path and retry.", {"chain": chain, "exceptionType": type(exc).__name__}, exit_code=1)
 
 
 def _read_trade_details(trade_id: str) -> dict[str, Any]:

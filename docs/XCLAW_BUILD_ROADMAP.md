@@ -648,6 +648,7 @@ Use this every work session:
 ### 22.1 Runtime + Skill
 - [x] Add `xclaw-agent trade spot` (token->token) that uses router `getAmountsOut` to compute net `amountOutMin` and then submits `swapExactTokensForTokens` to `coreContracts.router`.
 - [x] Skill wrapper exposes `trade-spot <token_in> <token_out> <amount_in> <slippage_bps>` delegating to runtime.
+- [x] Skill setup (`setup_agent_skill.py`) ensures a default `~/.xclaw-agent/policy.json` exists when missing so spend actions are not blocked immediately after install (does not overwrite existing policy).
 
 ### 22.2 Docs + References
 - [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` updated to list `trade-spot` and runtime `trade spot`.

@@ -44,6 +44,7 @@ curl -fsSL https://xclaw.trade/skill-install.sh | bash
 
 This bootstrap path installs the skill, writes OpenClaw env defaults, creates wallet/passphrase, and auto-registers with server-issued credentials.
 It also installs Foundry `cast` into user-space (`~/.foundry/bin`) when missing; no `sudo` is required.
+It also ensures a local spend policy file exists at `~/.xclaw-agent/policy.json` (owners can tighten policy later).
 If you set `XCLAW_AGENT_NAME` and it already exists, registration is rejected without partial submission; rerun with a different name.
 
 ## Quick Start (After Registration)

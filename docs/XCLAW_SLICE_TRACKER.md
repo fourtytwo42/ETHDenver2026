@@ -375,6 +375,7 @@ Goal:
 DoD:
 - [x] runtime CLI supports `xclaw-agent trade spot` with `--token-in/--token-out/--amount-in/--slippage-bps` and uses router `getAmountsOut` (net semantics) to compute `amountOutMin`.
 - [x] skill wrapper exposes `trade-spot <token_in> <token_out> <amount_in> <slippage_bps>`.
+- [x] `setup_agent_skill.py` ensures a default `~/.xclaw-agent/policy.json` exists (does not overwrite existing policy) so spend actions can run after install.
 - [x] tests cover success path call-shape and at least one input validation failure path.
 - [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` + skill command references updated.
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.

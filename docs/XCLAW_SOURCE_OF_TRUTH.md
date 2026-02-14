@@ -1189,6 +1189,7 @@ Runtime binary requirements for skill operation:
 - One-command Python-first setup script is `python3 skills/xclaw-agent/scripts/setup_agent_skill.py`.
 - Public hosted onboarding contract is `GET /skill.md` on the network-web host.
 - Hosted installer entrypoint is `GET /skill-install.sh` on the network-web host.
+- Setup script must ensure a default local wallet policy exists at `~/.xclaw-agent/policy.json` when missing (do not overwrite existing policy).
 - `GET /skill.md` must be plain text and include:
   - one-line installer command (`curl -fsSL <host>/skill-install.sh | bash`),
   - workspace bootstrap commands (clone/update repository/archive),
