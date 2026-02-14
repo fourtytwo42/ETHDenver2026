@@ -2261,7 +2261,10 @@ Note:
      - `10 WETH` (mock), and
      - `20,000 USDC` (mock).
    - Faucet is agent-auth only and limited to one successful request per UTC day per agent.
-   - The daily limiter must only be consumed when the faucet has sufficient ETH and token balances (no empty-faucet burns).
+   - The daily limiter must only be consumed on successful drip submission:
+     - do not consume the daily limiter when the faucet lacks sufficient ETH/token balances, and
+     - do not consume the daily limiter when tx submission fails due to nonce/mempool/RPC issues (no accidental burns).
+   - Faucet must use `pending` nonce sequencing for its 3 txs (WETH, USDC, ETH) to avoid `replacement transaction underpriced` when the faucet hot wallet has stuck pending txs.
    - Faucet rejects demo agents and placeholder wallet addresses.
 
 ---

@@ -8,6 +8,7 @@ import { dbQuery } from '@/lib/db';
 import { errorResponse, successResponse } from '@/lib/errors';
 import { parseJsonBody } from '@/lib/http';
 import { enforceAgentFaucetDailyRateLimit } from '@/lib/rate-limit';
+import { getRedisClient } from '@/lib/redis';
 import { getRequestId } from '@/lib/request-id';
 import { validatePayload } from '@/lib/validation';
 
@@ -24,6 +25,39 @@ const ERC20_ABI = [
   'function balanceOf(address owner) view returns (uint256)',
   'function transfer(address to, uint256 value) returns (bool)'
 ];
+
+function faucetDailyRedisKey(agentId: string, chainKey: string, now: Date): { redisKey: string; ttlSeconds: number } {
+  // Must match enforceAgentFaucetDailyRateLimit() key derivation.
+  const nextUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0);
+  const ttlSeconds = Math.max(1, Math.floor((nextUtcMidnight - now.getTime()) / 1000));
+  const keyDate = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+  const redisKey = `xclaw:ratelimit:v1:agent_faucet_daily:${agentId}:${chainKey}:${keyDate}`;
+  return { redisKey, ttlSeconds };
+}
+
+async function rollbackFaucetDailyLimit(agentId: string, chainKey: string): Promise<void> {
+  try {
+    const now = new Date();
+    const { redisKey } = faucetDailyRedisKey(agentId, chainKey, now);
+    const redis = await getRedisClient();
+    await redis.del(redisKey);
+  } catch {
+    // Best-effort: if Redis is down, limiter already fails open anyway.
+  }
+}
+
+function buildFeeOverrides(
+  feeData: Awaited<ReturnType<JsonRpcProvider['getFeeData']>>,
+  attempt: number
+): { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } {
+  // Bump strategy: +1 gwei maxPriority per attempt; maxFee follows maxFee or gasPrice with a buffer.
+  const bumpGwei = BigInt(1_000_000_000) * BigInt(attempt);
+  const basePriority = feeData.maxPriorityFeePerGas ?? BigInt(1_000_000_000); // 1 gwei fallback
+  const maxPriorityFeePerGas = basePriority + bumpGwei;
+  const baseMaxFee = feeData.maxFeePerGas ?? feeData.gasPrice ?? BigInt(2_000_000_000); // 2 gwei fallback
+  const maxFeePerGas = baseMaxFee + bumpGwei + BigInt(2_000_000_000);
+  return { maxFeePerGas, maxPriorityFeePerGas };
+}
 
 type AgentFaucetRequest = {
   schemaVersion: number;
@@ -245,12 +279,49 @@ export async function POST(req: NextRequest) {
       return limiter.response;
     }
 
-    const txWeth = await weth.transfer(trimmedRecipient, dripWeth);
-    const txUsdc = await usdc.transfer(trimmedRecipient, dripUsdc);
-    const tx = await signer.sendTransaction({
-      to: trimmedRecipient,
-      value: dripAmount
-    });
+    // Use explicit nonces from "pending" so we don't accidentally try to reuse a nonce when
+    // the faucet wallet has stuck pending transactions (common cause of replacement-underpriced).
+    const baseNonce = await provider.getTransactionCount(signer.address, 'pending');
+    const sendAttempts = 3;
+    let txWeth: { hash: string } | null = null;
+    let txUsdc: { hash: string } | null = null;
+    let tx: { hash: string } | null = null;
+
+    try {
+      for (let attempt = 0; attempt < sendAttempts; attempt += 1) {
+        const fees = buildFeeOverrides(feeData, attempt);
+        try {
+          txWeth = (await weth.transfer(trimmedRecipient, dripWeth, { nonce: baseNonce, ...fees })) as { hash: string };
+          txUsdc = (await usdc.transfer(trimmedRecipient, dripUsdc, { nonce: baseNonce + 1, ...fees })) as { hash: string };
+          tx = (await signer.sendTransaction({
+            to: trimmedRecipient,
+            value: dripAmount,
+            nonce: baseNonce + 2,
+            ...fees
+          })) as { hash: string };
+          break;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const retryable =
+            msg.includes('REPLACEMENT_UNDERPRICED') ||
+            msg.includes('replacement transaction underpriced') ||
+            msg.includes('nonce too low') ||
+            msg.includes('already known');
+          if (attempt < sendAttempts - 1 && retryable) {
+            continue;
+          }
+          throw err;
+        }
+      }
+    } catch (sendError) {
+      // Do not burn daily limiter on send failure (mempool/nonce issues, RPC flakiness, etc).
+      await rollbackFaucetDailyLimit(auth.agentId, chainKey);
+      throw sendError;
+    }
+    if (!txWeth || !txUsdc || !tx) {
+      await rollbackFaucetDailyLimit(auth.agentId, chainKey);
+      throw new Error('Faucet send failed (no tx hashes).');
+    }
 
     return successResponse(
       {
