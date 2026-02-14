@@ -37,4 +37,4 @@ Active slice: `Slice 25: Agent Skill UX Upgrade (Security + Reliability + Contra
   - [x] limit-orders-create failure surfaces server details
 - [x] Run gates: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.
 - [x] Run runtime tests.
-- [ ] Post evidence + commit hash to GitHub issue #20.
+- [x] Post evidence + commit hash to GitHub issue #20.
