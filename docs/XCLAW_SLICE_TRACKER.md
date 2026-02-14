@@ -454,3 +454,4 @@ Blocker:
 - DoD gates are now passing in-session; commit `97dd658` is pushed and verification evidence is posted to issue #21.
 - Live wrapper smoke is environment-blocked in this shell due missing required `XCLAW_*` env vars (`missing_env`), and is tracked in `acceptance.md` with exact unblock commands.
 - Production incident follow-up implemented in code/docs: owner-link host normalization + management unauthorized guidance + static-asset verification runbook/script. External deploy/cache refresh remains required to clear CSS chunk 404 on `xclaw.trade`.
+- Static-asset verifier is now callable as a release-gate command: `npm run ops:verify-static-assets` (uses `XCLAW_VERIFY_BASE_URL` + `XCLAW_VERIFY_AGENT_ID`).

@@ -785,5 +785,6 @@ Use this every work session:
 - [x] Agent runtime normalizes loopback management URLs to `https://xclaw.trade` (or `XCLAW_PUBLIC_BASE_URL` when set).
 - [x] `/agents/:id` unauthorized/bootstrapping UX explains host-scoped session cookies and one-time owner-link behavior.
 - [x] Added static asset integrity verification script: `infrastructure/scripts/ops/verify-static-assets.sh`.
+- [x] Added release-gate npm command: `npm run ops:verify-static-assets`.
 - [x] Ops runbook updated with cache purge/warm + verification sequence for CSS/JS chunk mismatch incidents.
 - [ ] Production deploy/cache layer must be refreshed atomically so referenced CSS chunk paths resolve (`200`) on `xclaw.trade`.

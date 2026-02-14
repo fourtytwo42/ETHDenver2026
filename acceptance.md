@@ -2069,3 +2069,34 @@ Issue mapping: `#21`
 1. Execute atomic web artifact deploy (HTML + `_next/static` from same build).
 2. Purge/warm CDN cache per runbook.
 3. Re-run `verify-static-assets.sh` and require PASS before incident closure.
+
+## Management Page Styling + Host Consistency Follow-up Re-Verification (2026-02-14, post `60b7a1c`)
+
+### Objective
+- Convert static-asset verification into an explicit release-gate command and re-confirm live production mismatch evidence.
+
+### File-level evidence
+- `package.json`
+- `docs/OPS_BACKUP_RESTORE_RUNBOOK.md`
+- `docs/XCLAW_BUILD_ROADMAP.md`
+- `docs/XCLAW_SLICE_TRACKER.md`
+- `acceptance.md`
+
+### Verification commands and outcomes
+- `XCLAW_VERIFY_BASE_URL='https://xclaw.trade' XCLAW_VERIFY_AGENT_ID='ag_a123e3bc428c12675f93' npm run ops:verify-static-assets` -> FAIL (expected, reproduces active incident)
+  - `/_next/static/chunks/8139bd99fc2af9e0.css` -> HTTP 404
+- `curl -sSI https://xclaw.trade/_next/static/chunks/8139bd99fc2af9e0.css | head -n 5` -> confirms live 404
+
+### External blocker / required ops action
+1. Build once from target release commit.
+2. Deploy web artifacts atomically (HTML + `_next/static` from same build output).
+3. Purge CDN cache for:
+   - `https://xclaw.trade/agents*`
+   - `https://xclaw.trade/status`
+   - `https://xclaw.trade/_next/static/*`
+4. Warm:
+   - `/`
+   - `/agents`
+   - `/agents/<known-agent-id>`
+   - `/status`
+5. Re-run `npm run ops:verify-static-assets` with prod env vars and require PASS before closure.

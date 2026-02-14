@@ -118,3 +118,14 @@ Harden the agent runtime/skill command surface to prevent hangs, improve identit
 - Non-goals:
   - no changes to one-time owner-link semantics,
   - no relaxation of host-scoped cookie/session security model.
+
+## Management Incident Follow-up (2026-02-14, gate hardening)
+- Objective: make static-asset verification executable as an explicit release-gate command and re-confirm production mismatch evidence.
+- In scope:
+  - add `npm run ops:verify-static-assets`,
+  - wire runbook/roadmap/tracker to this release-gate command,
+  - capture fresh live verification evidence.
+- Non-goals:
+  - no API/contract expansion,
+  - no token/session semantic changes,
+  - no direct production deploy from this workspace.

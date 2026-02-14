@@ -71,13 +71,14 @@ Run after every production web deploy:
 ```bash
 XCLAW_VERIFY_BASE_URL="https://xclaw.trade" \
 XCLAW_VERIFY_AGENT_ID="ag_a123e3bc428c12675f93" \
-infrastructure/scripts/ops/verify-static-assets.sh
+npm run ops:verify-static-assets
 ```
 
 The check:
 - fetches `/`, `/agents`, `/status`, and `/agents/$XCLAW_VERIFY_AGENT_ID`,
 - extracts referenced `/_next/static/*` assets,
 - verifies each returns `200` with expected content-type (`text/css` or javascript mime).
+- is treated as a release-blocking gate (do not declare deploy healthy until PASS).
 
 ### Cache purge/warm sequence (when mismatch is detected)
 1. Purge CDN cache for:
@@ -89,4 +90,4 @@ The check:
 - `/agents`
 - `/agents/<known-agent-id>`
 - `/status`
-3. Re-run `verify-static-assets.sh` and require PASS before declaring deploy healthy.
+3. Re-run `npm run ops:verify-static-assets` and require PASS before declaring deploy healthy.

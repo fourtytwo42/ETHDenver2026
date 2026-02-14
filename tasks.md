@@ -84,3 +84,9 @@ Active slice: `Slice 26: Agent Skill Robustness Hardening (Timeouts + Identity +
 - [x] Run mandatory gates (`db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`).
 - [x] Run targeted runtime test for management-link host normalization.
 - [x] Run static verifier against production and capture blocker output.
+
+## Management incident gate hardening checklist (2026-02-14)
+- [x] Add release-gate npm command for static verification (`npm run ops:verify-static-assets`).
+- [x] Update runbook to use release-gate command and mark as blocking.
+- [x] Update roadmap/tracker notes for release-gate command availability.
+- [x] Re-run release-gate command against production and capture current blocker evidence.
