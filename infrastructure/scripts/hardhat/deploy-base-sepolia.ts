@@ -6,6 +6,7 @@ import hre from 'hardhat';
 const EXPECTED_CHAIN_ID = 84532;
 const EXPLORER_BASE_URL = 'https://sepolia.basescan.org';
 const DEFAULT_ETH_USD = '2000';
+const DEFAULT_FEE_TREASURY_ENV = 'XCLAW_TREASURY_ADDRESS';
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -79,6 +80,7 @@ async function main() {
   const faucetAddress = (process.env.XCLAW_TESTNET_FAUCET_ADDRESS || '').trim();
 
   const [deployer] = await hre.ethers.getSigners();
+  const treasury = (process.env[DEFAULT_FEE_TREASURY_ENV] || '').trim() || deployer.address;
   const network = await hre.ethers.provider.getNetwork();
   const chainId = Number(network.chainId);
   if (chainId !== EXPECTED_CHAIN_ID) {
@@ -90,8 +92,8 @@ async function main() {
   await factory.waitForDeployment();
 
   const MockRouter = await hre.ethers.getContractFactory('MockRouter');
-  const router = await MockRouter.deploy();
-  await router.waitForDeployment();
+  const dexRouter = await MockRouter.deploy();
+  await dexRouter.waitForDeployment();
 
   const MockQuoter = await hre.ethers.getContractFactory('MockQuoter');
   const quoter = await MockQuoter.deploy();
@@ -112,16 +114,28 @@ async function main() {
 
   const price = await fetchEthUsdPrice();
   const priceE18 = parseDecimalToE18(price.priceUsd);
-  await (await router.setEthUsdPriceE18(priceE18)).wait();
-  await (await router.setTokenPair(await weth.getAddress(), await usdc.getAddress())).wait();
+  await (await dexRouter.setEthUsdPriceE18(priceE18)).wait();
+  await (await dexRouter.setTokenPair(await weth.getAddress(), await usdc.getAddress())).wait();
 
   // Seed mock router balances to act as "liquidity" for the simplistic swap adapter.
   // Target: $1,000,000 USDC and equivalent WETH at current ETH/USD.
   const seedUsdc = hre.ethers.parseEther('1000000');
   const seedWeth = (seedUsdc * 10n ** 18n) / priceE18; // WETH = USDC / (USD per ETH)
 
-  await (await usdc.transfer(await router.getAddress(), seedUsdc)).wait();
-  await (await weth.transfer(await router.getAddress(), seedWeth)).wait();
+  await (await usdc.transfer(await dexRouter.getAddress(), seedUsdc)).wait();
+  await (await weth.transfer(await dexRouter.getAddress(), seedWeth)).wait();
+
+  // Deploy the fee-charging V2-compatible proxy router that agents will call (Slice 22).
+  // Treasury is immutable; default to deployer address if env is not set.
+  if (!treasury) {
+    throw new Error(`Missing treasury address; set ${DEFAULT_FEE_TREASURY_ENV} or run with a signer.`);
+  }
+  if (!hre.ethers.isAddress(treasury)) {
+    throw new Error(`Invalid treasury address '${treasury}'.`);
+  }
+  const XClawFeeRouterV2 = await hre.ethers.getContractFactory('XClawFeeRouterV2');
+  const feeRouter = await XClawFeeRouterV2.deploy(await dexRouter.getAddress(), treasury);
+  await feeRouter.waitForDeployment();
 
   // Optional: seed the faucet wallet with drippable token balances (so server can transfer without minting).
   if (faucetAddress) {
@@ -134,13 +148,15 @@ async function main() {
   const deployedAt = new Date().toISOString();
   const txHashes = {
     factory: txHashOf(factory, 'factory'),
-    router: txHashOf(router, 'router'),
+    dexRouter: txHashOf(dexRouter, 'dexRouter'),
+    router: txHashOf(feeRouter, 'router'),
     quoter: txHashOf(quoter, 'quoter'),
     escrow: txHashOf(escrow, 'escrow')
   };
   const addresses = {
     factory: await factory.getAddress(),
-    router: await router.getAddress(),
+    dexRouter: await dexRouter.getAddress(),
+    router: await feeRouter.getAddress(),
     quoter: await quoter.getAddress(),
     escrow: await escrow.getAddress(),
     WETH: await weth.getAddress(),
@@ -158,6 +174,7 @@ async function main() {
     deploymentTxHashes: txHashes,
     explorerLinks: {
       factory: txLink(txHashes.factory),
+      dexRouter: txLink(txHashes.dexRouter),
       router: txLink(txHashes.router),
       quoter: txLink(txHashes.quoter),
       escrow: txLink(txHashes.escrow)
@@ -173,6 +190,11 @@ async function main() {
         WETH: seedWeth.toString()
       },
       faucetAddress: faucetAddress || null
+    },
+    slice22: {
+      feeBps: 50,
+      feeTreasury: treasury,
+      netSemantics: true
     },
     sourceVerification: {
       provider: 'basescan',

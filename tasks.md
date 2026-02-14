@@ -1,22 +1,18 @@
-# Slice 20 Tasks
+# Slice 22 Tasks
 
-Active slice: `Slice 20: Owner Link + Outbound Transfer Policy + Agent Limit-Order UX + Mock-Only Reporting`
+Active slice: `Slice 22: Non-Upgradeable V2 Fee Router Proxy (0.5% Output Fee)`
 
 ## Checklist
-- [x] Add Slice 20 entries to tracker, roadmap, and source-of-truth issue mapping/contracts.
-- [x] Add migration `0007_slice20_owner_links_transfer_policy_agent_limit_orders.sql`.
-- [x] Update migration parity checker + checklist for transfer-policy table/index/enum.
-- [x] Add shared schemas for owner-link and agent limit-order create/cancel payloads.
-- [x] Add `POST /api/v1/agent/management-link` route.
-- [x] Add `GET /api/v1/agent/transfers/policy` route.
-- [x] Add `POST/GET /api/v1/limit-orders` and `POST /api/v1/limit-orders/{orderId}/cancel` agent routes.
-- [x] Extend `POST /api/v1/management/policy/update` with outbound transfer fields + step-up enforcement.
-- [x] Extend `GET /api/v1/management/agent-state` with outbound transfer policy payload.
-- [x] Add `/agents/:id` Owner Link panel and Outbound Transfers controls.
-- [x] Update runtime: mock-only reporting, owner-link command, wallet-send-token, policy-gated outbound sends.
-- [x] Add agent faucet request endpoint/command (`0.05 ETH`) with once-per-UTC-day limiter.
-- [x] Update runtime limit-order command surface to create/cancel/list/run-loop.
-- [x] Update skill wrapper + skill docs command contract.
-- [x] Update OpenAPI with Slice 20 endpoints/schemas and policy schema extensions.
+- [x] Add Slice 22 entries to tracker, roadmap, and source-of-truth locked contract section.
+- [x] Implement `infrastructure/contracts/XClawFeeRouterV2.sol`:
+  - V2-compatible `getAmountsOut` + `swapExactTokensForTokens`
+  - fixed fee `50 bps` on output token
+  - immutable `dexRouter` and `treasury`
+  - net-after-fee semantics for quote and minOut
+- [x] Add hardhat tests in `infrastructure/tests/fee-router.test.ts`.
+- [x] Update `infrastructure/scripts/hardhat/deploy-local.ts` to deploy proxy and write `dexRouter` + `router` to artifact.
+- [x] Update `config/chains/hardhat_local.json` to set proxy router and preserve underlying.
+- [x] Update `infrastructure/scripts/hardhat/deploy-base-sepolia.ts` to deploy proxy and write both addresses.
+- [x] Update `infrastructure/scripts/hardhat/verify-base-sepolia.ts` to verify proxy router and tx receipts.
+- [ ] Deploy to Base Sepolia and update `config/chains/base_sepolia.json` to use proxy router (blocked until deploy env vars are available).
 - [ ] Run required gates and capture evidence in `acceptance.md`.
-- [ ] Post completion evidence + commit hash to GitHub issue `#20`.

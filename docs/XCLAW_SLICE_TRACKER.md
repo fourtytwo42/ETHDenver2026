@@ -343,3 +343,24 @@ DoD:
 - [x] Faucet daily limiter is only consumed when faucet has sufficient ETH and token balances (no "burned" rate limit on empty faucet).
 - [x] Faucet rejects demo agents and placeholder recipient addresses.
 - [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` and `docs/api/openapi.v1.yaml` are synced to new faucet behavior and mock token strategy.
+
+---
+
+## Slice 22: Non-Upgradeable V2 Fee Router Proxy (0.5% Output Fee)
+Status: [!]
+
+Goal:
+- Deploy a non-upgradeable V2-compatible router proxy that takes a fixed 50 bps fee on output token atomically and preserves net semantics for quotes/minOut.
+
+DoD:
+- [x] `infrastructure/contracts/XClawFeeRouterV2.sol` implemented with fee-on-output and net semantics.
+- [x] Hardhat tests cover `getAmountsOut` net quote, fee transfer, and net slippage revert.
+- [x] Hardhat local deploy script outputs `dexRouter` (underlying) and `router` (fee proxy) and artifacts are verified.
+- [x] `config/chains/hardhat_local.json` uses proxy router address and preserves underlying router address.
+- [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` updated with Slice 22 locked contract semantics.
+- [x] `docs/XCLAW_BUILD_ROADMAP.md` updated with Slice 22 checklist.
+- [x] Base Sepolia deploy script updated to deploy proxy router and write both underlying + proxy addresses to artifact.
+- [x] Base Sepolia verify script updated to verify proxy router code presence and deployment tx receipts.
+- [ ] Base Sepolia deploy executed and verified (requires deploy environment variables).
+- [ ] `config/chains/base_sepolia.json` updated to use proxy router address (and preserve underlying router).
+- [!] Blocker: Base Sepolia deploy/verify + config update require `BASE_SEPOLIA_RPC_URL` and `BASE_SEPOLIA_DEPLOYER_PRIVATE_KEY` in the deploy environment.

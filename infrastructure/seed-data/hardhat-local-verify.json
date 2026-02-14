@@ -1,9 +1,10 @@
 {
   "ok": true,
-  "verifiedAt": "2026-02-13T19:38:34.557Z",
+  "verifiedAt": "2026-02-14T07:48:42.991Z",
   "verifiedViaRpc": true,
   "verifiedContractCodePresent": {
     "factory": true,
+    "dexRouter": true,
     "router": true,
     "quoter": true,
     "escrow": true,

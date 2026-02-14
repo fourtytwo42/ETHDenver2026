@@ -1,34 +1,39 @@
-# Slice 20 Spec: Owner Link + Outbound Transfer Policy + Agent Limit-Order UX + Mock-Only Reporting
+# Slice 22 Spec: Non-Upgradeable V2 Fee Router Proxy (0.5% Output Fee, Net Semantics)
 
 ## Goal
-Ship Slice 20 as an agent-ops upgrade: owner-link issuance, outbound transfer policy gates, simplified agent limit-order command surface, and mock-only runtime reporting to `/events`.
+Deploy a non-upgradeable on-chain V2-compatible router proxy that:
+- preserves the existing agent runtime swap interface,
+- atomically takes a fixed 50 bps fee on the output token,
+- forwards net output to the caller-specified recipient,
+- sends fees to an immutable global treasury address,
+- enforces net-after-fee semantics for `getAmountsOut` and `amountOutMin`.
 
 ## Success Criteria
-1. `POST /api/v1/agent/management-link` issues short-lived one-time owner URLs.
-2. `GET /api/v1/agent/transfers/policy` returns effective outbound transfer policy for runtime enforcement.
-3. Runtime outbound commands (`wallet-send`, `wallet-send-token`) enforce owner transfer policy.
-4. Agent limit-order APIs support `create/list/cancel` with auth ownership checks and max-10 open cap per agent+chain.
-5. Runtime `trade execute` auto-reports only mock trades; real mode skips `/events`.
-6. `/agents/:id` shows Owner Link panel and Outbound Transfers controls.
-7. Agents can request fixed `0.05 ETH` faucet drip on `base_sepolia` at most once per UTC day.
+1. Hardhat tests validate net quote behavior and fee accounting.
+2. Hardhat-local chain config uses proxy router address with underlying router preserved.
+3. Runtime swaps succeed unchanged by only updating router address in chain config.
+4. Base Sepolia deploy script can deploy the proxy and emit artifact fields for proxy + underlying router.
+5. Base Sepolia chain config is updated to point router to the proxy (once deployed).
 
 ## Non-Goals
-1. Multi-room chat or DM expansion.
-2. Automated strategy orchestration changes beyond command/API surface updates.
-3. On-chain escrow reintroduction.
+1. Supporting fee-on-transfer/rebasing token edge-cases.
+2. Supporting all router methods; Slice 22 is limited to exact-in token->token swaps used by runtime.
+3. Upgradeable proxy patterns; deploying a new proxy per DEX change is the model.
 
 ## Locked Decisions
-1. Reporting to `/events` is mock-only from runtime.
-2. Owner-link issuance is agent-auth and tokenized as short-lived one-time URL.
-3. Outbound transfer policy modes are `disabled`, `allow_all`, `whitelist`.
-4. Limit-order UX for agents is `create`, `cancel`, `list`, `run-loop`.
-5. Open limit-order cap is 10 per agent+chain.
+1. Fee basis: output token.
+2. Fee bps: fixed 50 bps (0.5%).
+3. Treasury: global EVM address, immutable constructor arg.
+4. Interface: V2 router-compatible (`getAmountsOut`, `swapExactTokensForTokens`).
+5. Semantics: net-after-fee for `getAmountsOut` and `amountOutMin`.
+6. Upgradeability: none; deploy a new proxy if DEX changes.
 
 ## Acceptance Checks
 - `npm run db:parity`
-- `npm run db:migrate`
 - `npm run seed:reset`
 - `npm run seed:load`
 - `npm run seed:verify`
 - `npm run build`
-- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+- `npm run hardhat:deploy-local`
+- `npm run hardhat:verify-local`
+- `TS_NODE_PROJECT=tsconfig.hardhat.json npx hardhat test infrastructure/tests/fee-router.test.ts`

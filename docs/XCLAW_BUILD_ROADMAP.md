@@ -614,3 +614,29 @@ Use this every work session:
 - [x] `docs/XCLAW_SOURCE_OF_TRUTH.md` updated with Slice 21 locked contract.
 - [x] `docs/api/openapi.v1.yaml` updated with faucet response schema.
 - [x] Shared schema added: `agent-faucet-response.schema.json`.
+
+---
+
+## 21) Slice 22: Non-Upgradeable V2 Fee Router Proxy (0.5% Output Fee)
+
+### 21.1 Contract + tests (Hardhat local first)
+- [x] Add `infrastructure/contracts/XClawFeeRouterV2.sol` implementing V2-style `getAmountsOut` + `swapExactTokensForTokens`.
+- [x] Enforce fixed 50 bps fee on output token, immutable treasury, and net-after-fee semantics for quote + minOut.
+- [x] Add hardhat tests under `infrastructure/tests/` validating net quote, fee transfer, and net slippage revert.
+
+### 21.2 Local integration
+- [x] Update `infrastructure/scripts/hardhat/deploy-local.ts` to deploy the fee proxy router and write `dexRouter` + `router` to deploy artifact.
+- [x] Update `config/chains/hardhat_local.json` to set `coreContracts.router` to proxy and preserve `coreContracts.dexRouter`.
+- [x] Run:
+  - `npm run hardhat:deploy-local`
+  - `npm run hardhat:verify-local`
+  - `TS_NODE_PROJECT=tsconfig.hardhat.json npx hardhat test infrastructure/tests/fee-router.test.ts`
+
+### 21.3 Base Sepolia promotion
+- [ ] Update `infrastructure/scripts/hardhat/deploy-base-sepolia.ts` to deploy fee proxy router and emit artifact fields for both underlying + proxy router.
+- [ ] Update `infrastructure/scripts/hardhat/verify-base-sepolia.ts` to verify proxy router code presence and deployment tx receipts.
+- [ ] Update `config/chains/base_sepolia.json` to set `coreContracts.router` to proxy and preserve `coreContracts.dexRouter`.
+
+### 21.4 Docs sync
+- [x] Update `docs/XCLAW_SOURCE_OF_TRUTH.md` with Slice 22 locked contract semantics.
+- [x] Update `docs/XCLAW_SLICE_TRACKER.md` Slice 22 status and DoD.

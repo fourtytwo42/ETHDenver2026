@@ -2259,3 +2259,30 @@ Note:
    - Faucet is agent-auth only and limited to one successful request per UTC day per agent.
    - The daily limiter must only be consumed when the faucet has sufficient ETH and token balances (no empty-faucet burns).
    - Faucet rejects demo agents and placeholder wallet addresses.
+
+---
+
+## 50) Slice 22 Non-Upgradeable V2 Fee Router Proxy (Locked)
+
+Goal:
+- Monetize and standardize the "official" swap path by routing agent swaps through an on-chain proxy that takes a fixed fee atomically, without changing the client call surface.
+
+Locked contract:
+1. The system deploys a **non-upgradeable** V2-compatible router proxy contract (`XClawFeeRouterV2`) per supported chain.
+2. The proxy implements the V2-style interface used by agent runtime:
+   - `getAmountsOut(uint256,address[])(uint256[])`
+   - `swapExactTokensForTokens(uint256,uint256,address[],address,uint256)(uint256[])`
+3. Fee is fixed at **50 bps (0.5%)** and charged on the **output token**.
+4. Treasury is a single **global EVM address**, provided as a **constructor argument** and stored **immutably** in the proxy.
+5. Semantics are **net-after-fee**:
+   - `getAmountsOut` returns amounts where the final `amountOut` is post-fee (net-to-user).
+   - `swapExactTokensForTokens` interprets `amountOutMin` as the post-fee minimum (net-to-user).
+6. The proxy must take the fee **atomically**:
+   - underlying swap outputs to the proxy,
+   - proxy computes gross output via balance delta,
+   - proxy transfers fee to treasury and net to the requested `to`.
+7. If the DEX router changes, the system deploys a **new proxy** and updates chain config; there is no upgrade path.
+
+Limitations / notes:
+- Users can bypass the proxy by calling the underlying DEX directly; the proxy enforces fees only on the official router address used by X-Claw runtime/UI.
+- MVP guarantees assume standard ERC20 tokens; fee-on-transfer / rebasing tokens are not explicitly supported.
