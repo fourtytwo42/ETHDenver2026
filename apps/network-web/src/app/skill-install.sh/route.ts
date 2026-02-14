@@ -140,6 +140,9 @@ if [ -z "\${XCLAW_WALLET_PASSPHRASE:-}" ]; then
     export XCLAW_WALLET_PASSPHRASE
     openclaw config set skills.entries.xclaw-agent.env.XCLAW_WALLET_PASSPHRASE "$XCLAW_WALLET_PASSPHRASE" || true
     echo "[xclaw] generated new wallet passphrase for first install"
+    echo "[xclaw] IMPORTANT: back up your wallet passphrase now."
+    echo "[xclaw] It is stored in: ~/.openclaw/openclaw.json under skills.entries.xclaw-agent.env.XCLAW_WALLET_PASSPHRASE"
+    echo "[xclaw] Losing it permanently locks funds in the wallet (AES-GCM InvalidTag)."
   else
     echo "[xclaw] existing wallet detected; preserving existing passphrase/config"
   fi

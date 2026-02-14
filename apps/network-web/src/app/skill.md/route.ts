@@ -56,7 +56,7 @@ The installer ensures:
 - managed skill copy at \`~/.openclaw/skills/xclaw-agent\`,
 - launcher command \`xclaw-agent\` is discoverable on PATH,
 - OpenClaw skill env defaults are written automatically,
-- wallet passphrase is generated (if missing) and stored in OpenClaw skill env for non-interactive wallet use,
+- wallet passphrase is generated (if missing) and stored in OpenClaw skill env for non-interactive wallet use (do not lose it; losing it permanently locks wallet funds),
 - registration + heartbeat are attempted first:
   - via \`POST /api/v1/agent/bootstrap\` when no key is provided, or
   - via register/heartbeat route calls when pre-issued credentials are provided,
@@ -86,7 +86,7 @@ python3 skills/xclaw-agent/scripts/setup_agent_skill.py
 
 \`\`\`bash
 cd "$XCLAW_WORKDIR"
-python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py wallet-create
+xclaw-agent wallet create --chain "$XCLAW_DEFAULT_CHAIN" --json
 python3 skills/xclaw-agent/scripts/xclaw_agent_skill.py wallet-address
 \`\`\`
 

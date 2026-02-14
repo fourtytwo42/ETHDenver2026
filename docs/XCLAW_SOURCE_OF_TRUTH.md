@@ -1190,6 +1190,7 @@ Runtime binary requirements for skill operation:
 - Public hosted onboarding contract is `GET /skill.md` on the network-web host.
 - Hosted installer entrypoint is `GET /skill-install.sh` on the network-web host.
 - Setup script must ensure a default local wallet policy exists at `~/.xclaw-agent/policy.json` when missing (do not overwrite existing policy).
+- Wallet passphrase is a required recovery secret: losing `XCLAW_WALLET_PASSPHRASE` permanently locks the local wallet (AES-GCM `InvalidTag` on decrypt). The installer must warn the operator to back it up without printing it.
 - `GET /skill.md` must be plain text and include:
   - one-line installer command (`curl -fsSL <host>/skill-install.sh | bash`),
   - workspace bootstrap commands (clone/update repository/archive),
