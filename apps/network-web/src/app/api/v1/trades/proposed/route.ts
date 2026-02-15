@@ -7,6 +7,8 @@ import { parseJsonBody } from '@/lib/http';
 import { ensureIdempotency, storeIdempotencyResponse } from '@/lib/idempotency';
 import { makeId } from '@/lib/ids';
 import { getRequestId } from '@/lib/request-id';
+import { requireAgentChainEnabled } from '@/lib/agent-chain-policy';
+import { evaluateTradeCaps } from '@/lib/trade-caps';
 import { validatePayload } from '@/lib/validation';
 
 export const runtime = 'nodejs';
@@ -65,11 +67,27 @@ export async function POST(req: NextRequest) {
     }
 
     const tradeId = makeId('trd');
+    const projectedSpendUsd = body.amountIn;
 
     const inserted = await withTransaction(async (client) => {
       const agent = await client.query('select agent_id from agents where agent_id = $1', [body.agentId]);
       if (agent.rowCount === 0) {
         return { found: false as const };
+      }
+
+      const chainGate = await requireAgentChainEnabled(client, { agentId: body.agentId, chainKey: body.chainKey });
+      if (!chainGate.ok) {
+        return { found: true as const, blocked: chainGate.violation };
+      }
+
+      const capCheck = await evaluateTradeCaps(client, {
+        agentId: body.agentId,
+        chainKey: body.chainKey,
+        projectedSpendUsd,
+        projectedFilledTrades: 1
+      });
+      if (!capCheck.ok) {
+        return { found: true as const, blocked: capCheck.violation };
       }
 
       await client.query(
@@ -131,6 +149,19 @@ export async function POST(req: NextRequest) {
           code: 'payload_invalid',
           message: 'Trade proposal rejected because agent is not registered.',
           actionHint: 'Register agent before proposing trades.'
+        },
+        requestId
+      );
+    }
+
+    if ('blocked' in inserted && inserted.blocked) {
+      return errorResponse(
+        400,
+        {
+          code: inserted.blocked.code,
+          message: inserted.blocked.message,
+          actionHint: inserted.blocked.actionHint,
+          details: inserted.blocked.details
         },
         requestId
       );

@@ -86,7 +86,9 @@ Errors MUST be machine-parseable and human-readable:
 - `wallet-import`: requires both `XCLAW_WALLET_IMPORT_PRIVATE_KEY` and `XCLAW_WALLET_PASSPHRASE`
   Without these env vars, non-interactive calls fail with `non_interactive`.
 6. `wallet-send` fails closed when spend policy file is missing, invalid, or unsafe (`~/.xclaw-agent/policy.json`).
-7. `wallet-send` enforces policy preconditions (`paused`, `chain_enabled`, approval gate, `max_daily_native_wei`).
+7. `wallet-send` enforces policy preconditions:
+- local policy: `paused`, `chains.<chain>.chain_enabled`, approval gate, `max_daily_native_wei`
+- owner policy: `chainEnabled == true` (from `GET /api/v1/agent/transfers/policy?chainKey=...`).
 
 ## 6) Canonical Challenge Format (`wallet-sign-challenge`)
 
@@ -129,6 +131,7 @@ Current behavior in `apps/agent-runtime/xclaw_agent/cli.py`:
 7. `wallet-send` is implemented with fail-closed policy precondition checks from `~/.xclaw-agent/policy.json` before any chain spend:
    - `paused == false`
    - `chains.<chain>.chain_enabled == true`
+   - owner chain access enabled: `chainEnabled == true` from `GET /api/v1/agent/transfers/policy?chainKey=...`
    - if `spend.approval_required == true`, then `spend.approval_granted == true`
    - `spend.max_daily_native_wei` not exceeded (UTC day ledger in `state.json`)
 8. `wallet-balance` is implemented via cast-backed native balance query for wallet address and chain RPC.

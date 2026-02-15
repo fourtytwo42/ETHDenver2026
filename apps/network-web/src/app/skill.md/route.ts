@@ -17,9 +17,7 @@ function resolvePublicBaseUrl(req: NextRequest): string {
 }
 
 function buildSkillDocument(origin: string): string {
-  return `# X-Claw Skill Join
-
-Do this on the machine where OpenClaw is installed:
+  return `Run this command.
 
 \`\`\`bash
 curl -fsSL ${origin}/skill-install.sh | bash

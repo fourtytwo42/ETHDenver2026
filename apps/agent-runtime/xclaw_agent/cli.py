@@ -51,6 +51,7 @@ WALLET_STORE_FILE = APP_DIR / "wallets.json"
 POLICY_FILE = APP_DIR / "policy.json"
 LIMIT_ORDER_STORE_FILE = APP_DIR / "limit_orders.json"
 LIMIT_ORDER_OUTBOX_FILE = APP_DIR / "limit_orders_outbox.json"
+TRADE_USAGE_OUTBOX_FILE = APP_DIR / "trade_usage_outbox.json"
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 CHAIN_CONFIG_DIR = REPO_ROOT / "config" / "chains"
 
@@ -337,6 +338,24 @@ def save_limit_order_outbox(items: list[dict[str, Any]]) -> None:
     _write_json(LIMIT_ORDER_OUTBOX_FILE, {"items": items, "updatedAt": utc_now()})
 
 
+def load_trade_usage_outbox() -> list[dict[str, Any]]:
+    ensure_app_dir()
+    if not TRADE_USAGE_OUTBOX_FILE.exists():
+        return []
+    _assert_secure_permissions(TRADE_USAGE_OUTBOX_FILE, 0o600, "trade-usage outbox file")
+    payload = _read_json(TRADE_USAGE_OUTBOX_FILE)
+    if not isinstance(payload, dict):
+        raise WalletStoreError("Trade-usage outbox must be a JSON object.")
+    items = payload.get("items")
+    if not isinstance(items, list):
+        return []
+    return [entry for entry in items if isinstance(entry, dict)]
+
+
+def save_trade_usage_outbox(items: list[dict[str, Any]]) -> None:
+    _write_json(TRADE_USAGE_OUTBOX_FILE, {"items": items, "updatedAt": utc_now()})
+
+
 def is_hex_address(value: str) -> bool:
     return bool(re.fullmatch(r"0x[a-fA-F0-9]{40}", value))
 
@@ -484,7 +503,7 @@ def _load_policy_for_chain(chain: str) -> dict[str, Any]:
     return payload
 
 
-def _enforce_spend_preconditions(chain: str, amount_wei: int) -> tuple[dict[str, Any], str, int, int]:
+def _enforce_spend_preconditions(chain: str, amount_wei: int, *, enforce_native_cap: bool = True) -> tuple[dict[str, Any], str, int, int]:
     policy = _load_policy_for_chain(chain)
 
     paused = policy.get("paused")
@@ -584,7 +603,7 @@ def _enforce_spend_preconditions(chain: str, amount_wei: int) -> tuple[dict[str,
     current_spend = int(current_raw)
 
     projected = current_spend + amount_wei
-    if projected > max_daily_wei:
+    if enforce_native_cap and projected > max_daily_wei:
         raise WalletPolicyError(
             "daily_cap_exceeded",
             "Spend blocked because daily native cap would be exceeded.",
@@ -921,6 +940,7 @@ def _http_json_request(
     payload: dict[str, Any] | None = None,
     api_key: str | None = None,
     include_idempotency: bool = False,
+    idempotency_key: str | None = None,
 ) -> tuple[int, dict[str, Any]]:
     headers: dict[str, str] = {
         "Accept": "application/json",
@@ -929,7 +949,7 @@ def _http_json_request(
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     if include_idempotency:
-        headers["Idempotency-Key"] = f"rt-{secrets.token_hex(16)}"
+        headers["Idempotency-Key"] = idempotency_key or f"rt-{secrets.token_hex(16)}"
 
     raw_data: bytes | None = None
     if payload is not None:
@@ -1067,6 +1087,7 @@ def _api_request(
     path: str,
     payload: dict[str, Any] | None = None,
     include_idempotency: bool = False,
+    idempotency_key: str | None = None,
     allow_auth_recovery: bool = True,
 ) -> tuple[int, dict[str, Any]]:
     base_url = _require_api_base_url()
@@ -1082,6 +1103,7 @@ def _api_request(
         payload=payload,
         api_key=api_key,
         include_idempotency=include_idempotency,
+        idempotency_key=idempotency_key,
     )
 
     is_auth_failure = status == 401 and str(body.get("code", "")) == "auth_invalid"
@@ -1095,6 +1117,7 @@ def _api_request(
             payload=payload,
             api_key=recovered_key,
             include_idempotency=include_idempotency,
+            idempotency_key=idempotency_key,
         )
     return status, body
 
@@ -1141,8 +1164,29 @@ def _fetch_outbound_transfer_policy(chain: str) -> dict[str, Any]:
         )
 
 
+def _enforce_owner_chain_enabled(chain: str, policy_payload: dict[str, Any], *, action: str) -> None:
+    # Back-compat: if chainEnabled is missing, treat as enabled.
+    enabled = policy_payload.get("chainEnabled", True)
+    if isinstance(enabled, bool) and enabled:
+        return
+    if not isinstance(enabled, bool):
+        raise WalletPolicyError(
+            "policy_blocked",
+            "Owner chain policy payload was invalid.",
+            "Retry later; if this persists, update server/runtime schema alignment.",
+            {"chain": chain, "field": "chainEnabled", "action": action},
+        )
+    raise WalletPolicyError(
+        "chain_disabled",
+        f"{action} blocked because chain '{chain}' is disabled by owner policy.",
+        "Ask the bot owner to enable this chain on the agent management page.",
+        {"chain": chain, "chainEnabled": False, "action": action},
+    )
+
+
 def _enforce_outbound_transfer_policy(chain: str, destination: str) -> dict[str, Any]:
     policy = _fetch_outbound_transfer_policy(chain)
+    _enforce_owner_chain_enabled(chain, policy, action="Spend")
     enabled = bool(policy.get("outboundTransfersEnabled"))
     mode = str(policy.get("outboundMode") or "disabled")
     whitelist_raw = policy.get("outboundWhitelistAddresses")
@@ -1170,6 +1214,199 @@ def _enforce_outbound_transfer_policy(chain: str, destination: str) -> dict[str,
         "outboundWhitelistAddresses": sorted(list(whitelist)),
         "updatedAt": policy.get("updatedAt"),
     }
+
+
+def _to_non_negative_decimal(raw: Any) -> Decimal:
+    try:
+        value = Decimal(str(raw))
+    except Exception:
+        return Decimal("0")
+    if value < 0:
+        return Decimal("0")
+    return value
+
+
+def _decimal_text(value: Decimal) -> str:
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _to_non_negative_int(raw: Any) -> int:
+    try:
+        value = int(str(raw))
+    except Exception:
+        return 0
+    return value if value >= 0 else 0
+
+
+def _load_trade_cap_ledger(state: dict[str, Any], chain: str, day_key: str) -> tuple[Decimal, int]:
+    ledger = state.get("tradeCapLedger")
+    if not isinstance(ledger, dict):
+        return Decimal("0"), 0
+    chain_ledger = ledger.get(chain)
+    if not isinstance(chain_ledger, dict):
+        return Decimal("0"), 0
+    row = chain_ledger.get(day_key)
+    if not isinstance(row, dict):
+        return Decimal("0"), 0
+    spend = _to_non_negative_decimal(row.get("dailySpendUsd", "0"))
+    filled = _to_non_negative_int(row.get("dailyFilledTrades", 0))
+    return spend, filled
+
+
+def _record_trade_cap_ledger(state: dict[str, Any], chain: str, day_key: str, spend_usd: Decimal, filled_trades: int) -> None:
+    ledger = state.setdefault("tradeCapLedger", {})
+    if not isinstance(ledger, dict):
+        raise WalletStoreError("State field 'tradeCapLedger' must be an object.")
+    chain_ledger = ledger.setdefault(chain, {})
+    if not isinstance(chain_ledger, dict):
+        raise WalletStoreError(f"State trade cap ledger for chain '{chain}' must be an object.")
+    chain_ledger[day_key] = {
+        "dailySpendUsd": _decimal_text(spend_usd),
+        "dailyFilledTrades": int(max(0, filled_trades)),
+        "updatedAt": utc_now(),
+    }
+    save_state(state)
+
+
+def _queue_trade_usage_report(item: dict[str, Any]) -> None:
+    outbox = load_trade_usage_outbox()
+    outbox.append(item)
+    save_trade_usage_outbox(outbox)
+
+
+def _replay_trade_usage_outbox() -> tuple[int, int]:
+    queued = load_trade_usage_outbox()
+    if not queued:
+        return 0, 0
+    remaining: list[dict[str, Any]] = []
+    replayed = 0
+    for entry in queued:
+        payload = entry.get("payload")
+        idempotency_key = entry.get("idempotencyKey")
+        if not isinstance(payload, dict) or not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            continue
+        status_code, body = _api_request(
+            "POST",
+            "/agent/trade-usage",
+            payload=payload,
+            include_idempotency=True,
+            idempotency_key=idempotency_key,
+        )
+        if status_code < 200 or status_code >= 300:
+            remaining.append(entry)
+            continue
+        replayed += 1
+    save_trade_usage_outbox(remaining)
+    return replayed, len(remaining)
+
+
+def _enforce_trade_caps(chain: str, projected_spend_usd: Decimal, projected_filled_trades: int) -> tuple[dict[str, Any], str, Decimal, int, dict[str, Any]]:
+    policy_payload = _fetch_outbound_transfer_policy(chain)
+    _enforce_owner_chain_enabled(chain, policy_payload, action="Trade")
+    trade_caps = policy_payload.get("tradeCaps")
+    if not isinstance(trade_caps, dict):
+        raise WalletPolicyError(
+            "policy_blocked",
+            "Trade caps are unavailable from owner policy.",
+            "Ask the bot owner to save policy settings on the agent management page and retry.",
+            {"chain": chain},
+        )
+
+    day_key = _utc_day_key()
+    state = load_state()
+
+    usage_payload = policy_payload.get("dailyUsage")
+    server_spend = Decimal("0")
+    server_filled = 0
+    if isinstance(usage_payload, dict) and str(usage_payload.get("utcDay") or "") == day_key:
+        server_spend = _to_non_negative_decimal(usage_payload.get("dailySpendUsd", "0"))
+        server_filled = _to_non_negative_int(usage_payload.get("dailyFilledTrades", 0))
+
+    local_spend, local_filled = _load_trade_cap_ledger(state, chain, day_key)
+    current_spend = server_spend if server_spend >= local_spend else local_spend
+    current_filled = server_filled if server_filled >= local_filled else local_filled
+
+    daily_cap_usd_enabled = bool(trade_caps.get("dailyCapUsdEnabled", True))
+    daily_trade_cap_enabled = bool(trade_caps.get("dailyTradeCapEnabled", True))
+    max_daily_usd = _to_non_negative_decimal(trade_caps.get("maxDailyUsd", "0"))
+    max_daily_trade_count_raw = trade_caps.get("maxDailyTradeCount")
+    max_daily_trade_count = _to_non_negative_int(max_daily_trade_count_raw) if max_daily_trade_count_raw is not None else None
+
+    if daily_cap_usd_enabled and max_daily_usd > 0:
+        projected_total = current_spend + max(Decimal("0"), projected_spend_usd)
+        if projected_total > max_daily_usd:
+            raise WalletPolicyError(
+                "daily_usd_cap_exceeded",
+                "Trade blocked because daily USD cap would be exceeded.",
+                "Reduce amount, disable daily USD cap, or raise maxDailyUsd in owner policy.",
+                {
+                    "chain": chain,
+                    "utcDay": day_key,
+                    "currentSpendUsd": str(current_spend),
+                    "projectedSpendUsd": str(max(Decimal("0"), projected_spend_usd)),
+                    "maxDailyUsd": str(max_daily_usd),
+                    "dailyCapUsdEnabled": True,
+                },
+            )
+
+    if daily_trade_cap_enabled and max_daily_trade_count is not None:
+        projected_count = max(0, int(projected_filled_trades))
+        if (current_filled + projected_count) > max_daily_trade_count:
+            raise WalletPolicyError(
+                "daily_trade_count_cap_exceeded",
+                "Trade blocked because daily filled-trade cap would be exceeded.",
+                "Wait for next UTC day, disable trade-count cap, or raise maxDailyTradeCount in owner policy.",
+                {
+                    "chain": chain,
+                    "utcDay": day_key,
+                    "currentFilledTrades": int(current_filled),
+                    "projectedFilledTrades": int(projected_count),
+                    "maxDailyTradeCount": int(max_daily_trade_count),
+                    "dailyTradeCapEnabled": True,
+                },
+            )
+
+    return state, day_key, current_spend, current_filled, trade_caps
+
+
+def _post_trade_usage(chain: str, utc_day: str, spend_usd_delta: Decimal, filled_trades_delta: int) -> None:
+    if spend_usd_delta < 0:
+        spend_usd_delta = Decimal("0")
+    if filled_trades_delta < 0:
+        filled_trades_delta = 0
+    if spend_usd_delta == 0 and filled_trades_delta == 0:
+        return
+
+    api_key = _resolve_api_key()
+    agent_id = _resolve_agent_id(api_key)
+    if not agent_id:
+        raise WalletStoreError("Agent id could not be resolved for trade-usage reporting.")
+
+    idempotency_key = f"rt-usage-{chain}-{utc_day}-{secrets.token_hex(8)}"
+    payload = {
+        "schemaVersion": 1,
+        "agentId": agent_id,
+        "chainKey": chain,
+        "utcDay": utc_day,
+        "spendUsdDelta": _decimal_text(spend_usd_delta),
+        "filledTradesDelta": int(filled_trades_delta),
+    }
+
+    status_code, body = _api_request(
+        "POST",
+        "/agent/trade-usage",
+        payload=payload,
+        include_idempotency=True,
+        idempotency_key=idempotency_key,
+    )
+    if status_code < 200 or status_code >= 300:
+        _queue_trade_usage_report({"idempotencyKey": idempotency_key, "payload": payload, "queuedAt": utc_now()})
+        code = str(body.get("code", "api_error"))
+        message = str(body.get("message", f"trade usage report failed ({status_code})"))
+        raise WalletStoreError(f"{code}: {message}")
 
 
 def _canonical_event_for_trade_status(status: str) -> str:
@@ -1515,6 +1752,22 @@ def _resolve_token_address(chain: str, token_or_symbol: str) -> str:
     raise WalletStoreError("token must be a 0x address or a canonical token symbol for the active chain.")
 
 
+def _projected_trade_spend_usd(
+    token_in_symbol: str | None,
+    token_out_symbol: str | None,
+    amount_in_human: Decimal,
+    expected_out_human: Decimal,
+) -> Decimal:
+    stable = {"USDC", "USDT", "DAI"}
+    sym_in = (token_in_symbol or "").strip().upper()
+    sym_out = (token_out_symbol or "").strip().upper()
+    if sym_in in stable:
+        return max(Decimal("0"), amount_in_human)
+    if sym_out in stable:
+        return max(Decimal("0"), expected_out_human)
+    return max(Decimal("0"), amount_in_human)
+
+
 def _router_get_amount_out(chain: str, amount_in_units: str, token_in: str, token_out: str) -> int:
     cast_bin = _require_cast_bin()
     router = _require_chain_contract_address(chain, "router")
@@ -1540,6 +1793,7 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
     last_tx_hash: str | None = None
     last_approve_tx_hash: str | None = None
     try:
+        _replay_trade_usage_outbox()
         token_in = _resolve_token_address(chain, args.token_in)
         token_out = _resolve_token_address(chain, args.token_out)
         if token_in.lower() == token_out.lower():
@@ -1574,12 +1828,21 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
 
         amount_in_units, amount_in_mode = _parse_amount_in_units(str(args.amount_in), token_in_decimals)
         amount_in_int = int(amount_in_units)
-        state, day_key, current_spend, max_daily_wei = _enforce_spend_preconditions(chain, amount_in_int)
+        state, day_key, current_spend, max_daily_wei = _enforce_spend_preconditions(chain, amount_in_int, enforce_native_cap=False)
 
         expected_out_int = _router_get_amount_out(chain, amount_in_units, token_in, token_out)
         min_out_int = (expected_out_int * (10000 - slippage_bps)) // 10000
         if min_out_int <= 0:
             raise WalletStoreError("Computed amountOutMin is zero; reduce slippage or increase amount.")
+        amount_in_human = _to_non_negative_decimal(_format_units(int(amount_in_units), token_in_decimals))
+        expected_out_human = _to_non_negative_decimal(_format_units(int(expected_out_int), token_out_decimals))
+        projected_spend_usd = _projected_trade_spend_usd(
+            token_in_meta.get("symbol"),
+            token_out_meta.get("symbol"),
+            amount_in_human,
+            expected_out_human,
+        )
+        cap_state, _, current_spend_usd, current_filled_trades, trade_caps = _enforce_trade_caps(chain, projected_spend_usd, 1)
 
         deadline_sec = int(args.deadline_sec)
         if deadline_sec < 30 or deadline_sec > 3600:
@@ -1662,6 +1925,17 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             raise WalletStoreError(f"On-chain receipt indicates failure status '{receipt_status}'.")
 
         _record_spend(state, chain, day_key, current_spend + amount_in_int)
+        _record_trade_cap_ledger(
+            cap_state,
+            chain,
+            day_key,
+            current_spend_usd + projected_spend_usd,
+            current_filled_trades + 1,
+        )
+        try:
+            _post_trade_usage(chain, day_key, projected_spend_usd, 1)
+        except Exception:
+            pass
 
         def _parse_receipt_uint(field: str, payload: dict[str, Any]) -> int | None:
             value = payload.get(field)
@@ -1719,6 +1993,10 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             tokenOutDecimals=token_out_decimals,
             tokenInSymbol=token_in_meta.get("symbol"),
             tokenOutSymbol=token_out_meta.get("symbol"),
+            dailySpendUsd=_decimal_text(current_spend_usd + projected_spend_usd),
+            maxDailyUsd=trade_caps.get("maxDailyUsd"),
+            dailyFilledTrades=int(current_filled_trades + 1),
+            maxDailyTradeCount=trade_caps.get("maxDailyTradeCount"),
             day=day_key,
             dailySpendWei=str(current_spend + amount_in_int),
             maxDailyNativeWei=str(max_daily_wei),
@@ -2109,6 +2387,7 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
     transition_state = "init"
     previous_status = "approved"
     try:
+        _replay_trade_usage_outbox()
         trade = _read_trade_details(args.intent)
         status = str(trade.get("status"))
         if str(trade.get("chainKey")) != args.chain:
@@ -2165,7 +2444,9 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
 
         amount_wei_str = _to_wei_uint(trade.get("amountIn"))
         amount_wei = int(amount_wei_str)
-        state, day_key, current_spend, max_daily_wei = _enforce_spend_preconditions(args.chain, amount_wei)
+        state, day_key, current_spend, max_daily_wei = _enforce_spend_preconditions(args.chain, amount_wei, enforce_native_cap=False)
+        projected_spend_usd = _to_non_negative_decimal(trade.get("amountIn") or "0")
+        cap_state, _, current_spend_usd, current_filled_trades, trade_caps = _enforce_trade_caps(args.chain, projected_spend_usd, 1)
         deadline = str(int(datetime.now(timezone.utc).timestamp()) + 120)
 
         approve_data = _cast_calldata("approve(address,uint256)(bool)", [router, amount_wei_str])
@@ -2225,6 +2506,17 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
             raise WalletStoreError(f"On-chain receipt indicates failure status '{receipt_status}'.")
 
         _record_spend(state, args.chain, day_key, current_spend + amount_wei)
+        _record_trade_cap_ledger(
+            cap_state,
+            args.chain,
+            day_key,
+            current_spend_usd + projected_spend_usd,
+            current_filled_trades + 1,
+        )
+        try:
+            _post_trade_usage(args.chain, day_key, projected_spend_usd, 1)
+        except Exception:
+            pass
         _post_trade_status(args.intent, "verifying", "filled", {"txHash": tx_hash})
         report_result = {
             "ok": False,
@@ -2240,6 +2532,10 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
             status="filled",
             txHash=tx_hash,
             day=day_key,
+            dailySpendUsd=_decimal_text(current_spend_usd + projected_spend_usd),
+            maxDailyUsd=trade_caps.get("maxDailyUsd"),
+            dailyFilledTrades=int(current_filled_trades + 1),
+            maxDailyTradeCount=trade_caps.get("maxDailyTradeCount"),
             dailySpendWei=str(current_spend + amount_wei),
             maxDailyNativeWei=str(max_daily_wei),
             report=report_result,
@@ -2532,6 +2828,49 @@ def cmd_management_link(args: argparse.Namespace) -> int:
         return fail("management_link_failed", str(exc), "Verify API env/auth and retry.", exit_code=1)
     except Exception as exc:
         return fail("management_link_failed", str(exc), "Inspect runtime management-link path and retry.", exit_code=1)
+
+
+def cmd_stepup_code(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    try:
+        api_key = _resolve_api_key()
+        agent_id = _resolve_agent_id(api_key)
+        if not agent_id:
+            return fail(
+                "auth_invalid",
+                "Agent id could not be resolved for stepup-code command.",
+                "Set XCLAW_AGENT_ID or use signed agent token format.",
+                exit_code=1,
+            )
+        payload = {
+            "agentId": agent_id,
+            "issuedFor": str(args.issued_for),
+        }
+        status_code, body = _api_request("POST", "/agent/stepup/challenge", payload=payload, include_idempotency=True)
+        if status_code < 200 or status_code >= 300:
+            return fail(
+                str(body.get("code", "api_error")),
+                str(body.get("message", f"stepup-code failed ({status_code})")),
+                str(body.get("actionHint", "Verify runtime auth and retry.")),
+                {"status": status_code},
+                exit_code=1,
+            )
+        return ok(
+            "SENSITIVE: Step-up code generated. Share only with authorized owner.",
+            agentId=agent_id,
+            issuedFor=body.get("issuedFor", str(args.issued_for)),
+            challengeId=body.get("challengeId"),
+            code=body.get("code"),
+            expiresAt=body.get("expiresAt"),
+            sensitive=True,
+            sensitiveFields=["code"],
+        )
+    except WalletStoreError as exc:
+        return fail("stepup_code_failed", str(exc), "Verify API env/auth and retry.", exit_code=1)
+    except Exception as exc:
+        return fail("stepup_code_failed", str(exc), "Inspect runtime stepup-code path and retry.", exit_code=1)
 
 
 def cmd_faucet_request(args: argparse.Namespace) -> int:
@@ -2861,7 +3200,9 @@ def _execute_limit_order_real(order: dict[str, Any], chain: str) -> str:
 
     amount_wei_str = _to_wei_uint(str(order.get("amountIn") or "0"))
     amount_wei = int(amount_wei_str)
-    state, day_key, current_spend, _ = _enforce_spend_preconditions(chain, amount_wei)
+    state, day_key, current_spend, _ = _enforce_spend_preconditions(chain, amount_wei, enforce_native_cap=False)
+    projected_spend_usd = _to_non_negative_decimal(order.get("amountIn") or "0")
+    cap_state, _, current_spend_usd, current_filled_trades, _ = _enforce_trade_caps(chain, projected_spend_usd, 1)
     deadline = str(int(datetime.now(timezone.utc).timestamp()) + 120)
 
     approve_data = _cast_calldata("approve(address,uint256)(bool)", [router, amount_wei_str])
@@ -2913,6 +3254,17 @@ def _execute_limit_order_real(order: dict[str, Any], chain: str) -> str:
         raise WalletStoreError(f"On-chain receipt indicates failure status '{receipt_status}'.")
 
     _record_spend(state, chain, day_key, current_spend + amount_wei)
+    _record_trade_cap_ledger(
+        cap_state,
+        chain,
+        day_key,
+        current_spend_usd + projected_spend_usd,
+        current_filled_trades + 1,
+    )
+    try:
+        _post_trade_usage(chain, day_key, projected_spend_usd, 1)
+    except Exception:
+        pass
     return tx_hash
 
 
@@ -3058,6 +3410,7 @@ def cmd_limit_orders_run_once(args: argparse.Namespace) -> int:
 
     def _limit_orders_run_once_result(chain: str, sync: bool) -> dict[str, Any]:
         replayed, remaining = _replay_limit_order_outbox()
+        trade_usage_replayed, trade_usage_remaining = _replay_trade_usage_outbox()
         synced = False
         if sync:
             _sync_limit_orders(chain)
@@ -3138,6 +3491,8 @@ def cmd_limit_orders_run_once(args: argparse.Namespace) -> int:
             "synced": synced,
             "replayed": replayed,
             "outboxRemaining": remaining,
+            "tradeUsageReplayed": trade_usage_replayed,
+            "tradeUsageOutboxRemaining": trade_usage_remaining,
             "executed": executed,
             "skipped": skipped,
         }
@@ -3914,6 +4269,15 @@ def build_parser() -> argparse.ArgumentParser:
     management_link.add_argument("--ttl-seconds", default=600)
     management_link.add_argument("--json", action="store_true")
     management_link.set_defaults(func=cmd_management_link)
+
+    stepup_code = sub.add_parser("stepup-code")
+    stepup_code.add_argument(
+        "--issued-for",
+        default="sensitive_action",
+        choices=["withdraw", "approval_scope_change", "sensitive_action"],
+    )
+    stepup_code.add_argument("--json", action="store_true")
+    stepup_code.set_defaults(func=cmd_stepup_code)
 
     faucet_request = sub.add_parser("faucet-request")
     faucet_request.add_argument("--chain", required=True)

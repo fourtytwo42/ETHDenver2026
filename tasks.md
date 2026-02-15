@@ -198,3 +198,85 @@ Issue mapping: `#24`
 - [x] Mark Slice 29 tracker/roadmap DoD complete.
 - [x] Commit + push Slice 29.
 - [x] Post verification evidence + commit hash(es) to issue #24.
+
+---
+
+# Slice 32 Tasks: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)
+
+Active slice: `Slice 32: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)`
+
+## Checklist
+- [x] Docs sync first:
+  - [x] `docs/XCLAW_SLICE_TRACKER.md`
+  - [x] `docs/XCLAW_BUILD_ROADMAP.md`
+  - [x] `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - [x] `docs/api/openapi.v1.yaml`
+  - [x] `docs/api/WALLET_COMMAND_CONTRACT.md`
+  - [x] `docs/CONTEXT_PACK.md`
+  - [x] `spec.md`
+  - [x] `tasks.md`
+  - [x] `acceptance.md`
+- [x] Migration:
+  - [x] add `infrastructure/migrations/0009_slice32_agent_chain_enable.sql` (`agent_chain_policies`)
+- [x] API:
+  - [x] add `POST /api/v1/management/chains/update`
+  - [x] extend `GET /api/v1/management/agent-state` with optional `chainKey` and `chainPolicy` response
+  - [x] extend `GET /api/v1/agent/transfers/policy` with `chainEnabled` fields
+- [x] Server enforcement:
+  - [x] block `POST /api/v1/trades/proposed` when chain disabled
+  - [x] block `POST /api/v1/trades/:tradeId/status` execution transitions when chain disabled
+  - [x] block `POST /api/v1/limit-orders` create when chain disabled
+  - [x] block limit-order status `triggered|filled` when chain disabled
+- [x] Runtime enforcement:
+  - [x] block trade and `wallet-send` when owner chain access is disabled (`chainEnabled == false`)
+  - [x] add unit tests for owner chain disabled enforcement
+- [x] UI:
+  - [x] `/agents/:id` shows “Chain Access” toggle for active chain context; enabling requires step-up
+- [x] Gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+  - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+---
+
+# Slice 30 Tasks: Owner-Managed Daily Trade Caps + Usage Visibility (Trades Only)
+
+Active slice: `Slice 30: Owner-Managed Daily Trade Caps + Usage Visibility (Trades Only)`
+
+## Checklist
+- [x] Add Slice 30 tracker + roadmap entries.
+- [x] Add migration: policy cap fields + `agent_daily_trade_usage` table.
+- [x] Extend management policy schema with cap toggles/count.
+- [x] Add agent trade usage request schema.
+- [x] Implement `POST /api/v1/agent/trade-usage` (agent auth + idempotency).
+- [x] Extend `GET /api/v1/agent/transfers/policy` with trade caps + UTC-day usage.
+- [x] Extend `GET /api/v1/management/agent-state` with trade caps + UTC-day usage.
+- [x] Persist cap fields in `POST /api/v1/management/policy/update`.
+- [x] Add server-side cap checks for proposed/create/filled trade write paths.
+- [x] Add runtime cap checks for spot/execute/limit-order-fill trade actions.
+- [x] Add runtime usage report queue/replay path.
+- [x] Update `/agents/:id` management rail with cap toggles/values + usage progress.
+- [x] Sync source-of-truth/openapi/context/spec/tasks/acceptance artifacts.
+- [x] Run required gates and capture evidence in `acceptance.md`.
+
+---
+
+# Slice 31 Tasks: Agents + Agent Management UX Refinement (Operational Clean)
+
+Active slice: `Slice 31: Agents + Agent Management UX Refinement (Operational Clean)`
+
+## Checklist
+- [x] Add Slice 31 tracker + roadmap entries.
+- [x] Update source-of-truth with Slice 31 locked UX/API refinements.
+- [x] Extend `GET /api/v1/public/agents` with optional `includeMetrics` response enrichment.
+- [x] Extend `GET /api/v1/public/activity` with optional `agentId` filter.
+- [x] Refine `/agents` to card-first layout with KPI summaries and optional desktop table.
+- [x] Refine `/agents/:id` public sections (overview/trades/activity readability and copy).
+- [x] Re-group `/agents/:id` management rail into operational order.
+- [x] Add progressive disclosure for advanced management sections.
+- [x] Preserve Slice 30 cap controls/usage visibility and existing management actions.
+- [x] Sync openapi/context/spec/tasks/acceptance artifacts.
+- [x] Run required gates and capture evidence in `acceptance.md`.

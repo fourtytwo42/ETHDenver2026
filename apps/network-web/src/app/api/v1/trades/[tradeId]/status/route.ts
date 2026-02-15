@@ -7,6 +7,7 @@ import { parseJsonBody } from '@/lib/http';
 import { ensureIdempotency, storeIdempotencyResponse } from '@/lib/idempotency';
 import { makeId } from '@/lib/ids';
 import { getRequestId } from '@/lib/request-id';
+import { requireAgentChainEnabled } from '@/lib/agent-chain-policy';
 import { eventTypeForTradeStatus, isAllowedTransition } from '@/lib/trade-state';
 import { validatePayload } from '@/lib/validation';
 import { generateCopyIntentsForLeaderFill, syncCopyIntentFromTradeStatus } from '@/lib/copy-lifecycle';
@@ -85,8 +86,9 @@ export async function POST(
     const updateResult = await withTransaction(async (client) => {
       const trade = await client.query<{
         agent_id: string;
+        chain_key: string;
         status: string;
-      }>('select agent_id, status from trades where trade_id = $1', [pathTradeId]);
+      }>('select agent_id, chain_key, status from trades where trade_id = $1', [pathTradeId]);
 
       if (trade.rowCount === 0) {
         return { ok: false as const, kind: 'missing_trade' as const };
@@ -96,6 +98,14 @@ export async function POST(
 
       if (row.agent_id !== auth.agentId) {
         return { ok: false as const, kind: 'auth_mismatch' as const };
+      }
+
+      // Prevent execution-related transitions when owner has disabled this chain for the agent.
+      if (['executing', 'verifying', 'filled'].includes(body.toStatus)) {
+        const chainGate = await requireAgentChainEnabled(client, { agentId: row.agent_id, chainKey: row.chain_key });
+        if (!chainGate.ok) {
+          return { ok: false as const, kind: 'chain_disabled' as const, violation: chainGate.violation };
+        }
       }
 
       if (row.status !== body.fromStatus) {
@@ -208,6 +218,19 @@ export async function POST(
             code: 'auth_invalid',
             message: 'Authenticated agent is not allowed to update this trade.',
             actionHint: 'Use the bearer token for the trade owner agent.'
+          },
+          requestId
+        );
+      }
+
+      if (updateResult.kind === 'chain_disabled') {
+        return errorResponse(
+          400,
+          {
+            code: updateResult.violation.code,
+            message: updateResult.violation.message,
+            actionHint: updateResult.violation.actionHint,
+            details: updateResult.violation.details
           },
           requestId
         );

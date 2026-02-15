@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import Image from 'next/image';
 
+import { ChainHeaderControl } from '@/components/chain-header-control';
 import { ManagementHeaderControls } from '@/components/management-header-controls';
 import { ThemeToggle } from '@/components/theme-toggle';
 
@@ -8,7 +10,9 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
     <div className="app-shell">
       <header className="app-header">
         <div className="header-left">
-          <div className="brand">X-Claw</div>
+          <Link href="/" className="brand" aria-label="X-Claw home">
+            <Image src="/X-Claw-Logo.png" alt="X-Claw" width={900} height={280} className="brand-logo" priority />
+          </Link>
           <nav className="main-nav" aria-label="Primary">
             <Link href="/">Dashboard</Link>
             <Link href="/agents">Agents</Link>
@@ -17,6 +21,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="header-right">
           <div className="header-controls">
+            <ChainHeaderControl />
             <ManagementHeaderControls />
             <ThemeToggle />
           </div>

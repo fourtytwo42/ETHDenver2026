@@ -36,7 +36,7 @@ export type BootstrapOutput = {
 export type StepupChallengeInput = {
   agentId: string;
   issuedFor: 'withdraw' | 'approval_scope_change' | 'sensitive_action';
-  managementSessionId: string;
+  managementSessionId: string | null;
   userAgent: string | null;
 };
 

@@ -516,3 +516,64 @@ DoD:
 - [x] live activity cards show trade pair/direction detail (`pair` and/or `token_in -> token_out`) when available.
 - [x] agent trade room is styled as chat-like message cards while preserving responsive behavior.
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.
+
+---
+
+## Slice 30: Owner-Managed Daily Trade Caps + Usage Visibility (Trades Only)
+Status: [x]
+Issue: pending assignment
+
+Goal:
+- Add owner-managed UTC-day trade caps (USD + filled-trade count), owner-only usage visibility on `/agents/:id`, and dual enforcement across runtime/server with idempotent usage accounting.
+
+DoD:
+- [x] migration adds policy cap fields and `agent_daily_trade_usage` aggregation table.
+- [x] `POST /api/v1/management/policy/update` persists cap fields (`dailyCapUsdEnabled`, `dailyTradeCapEnabled`, `maxDailyTradeCount`).
+- [x] `GET /api/v1/management/agent-state` returns latest cap config + UTC-day usage.
+- [x] `GET /api/v1/agent/transfers/policy` returns outbound policy + effective trade cap policy + UTC-day usage.
+- [x] `POST /api/v1/agent/trade-usage` implemented with agent auth + idempotency + monotonic non-negative deltas.
+- [x] server-side cap checks enforced on trade proposal, limit-order create, and limit-order filled transition.
+- [x] runtime enforces trade caps for `trade spot`, `trade execute`, and limit-order fills using server policy + cached fallback.
+- [x] runtime queues/replays trade-usage updates when API is unavailable without double counting.
+- [x] `/agents/:id` management rail exposes cap toggles/values and owner-only usage progress.
+- [x] docs/artifacts synced (`source-of-truth`, `openapi`, tracker, roadmap, context/spec/tasks/acceptance).
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
+
+---
+
+## Slice 31: Agents + Agent Management UX Refinement (Operational Clean)
+Status: [x]
+Issue: pending assignment
+
+Goal:
+- Refine `/agents` and `/agents/:id` into a cleaner operational UX with card-first directory presentation, stronger profile hierarchy, and progressive-disclosure management controls while preserving one-site model and existing behavior contracts.
+
+DoD:
+- [x] `/agents` is card-first with optional desktop table fallback and includes KPI summaries from lightweight API augmentation.
+- [x] `GET /api/v1/public/agents` supports optional `includeMetrics=true` with nullable `latestMetrics` per row.
+- [x] `GET /api/v1/public/activity` supports optional `agentId` and filters server-side.
+- [x] `/agents/:id` public sections keep long-scroll order and improve section hierarchy/copy/readability.
+- [x] `/agents/:id` management rail is regrouped by operational priority and uses progressive disclosure for advanced sections.
+- [x] status vocabulary remains unchanged: `active`, `offline`, `degraded`, `paused`, `deactivated`.
+- [x] docs/artifacts synced (`source-of-truth`, `openapi`, tracker, roadmap, context/spec/tasks/acceptance).
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.
+
+---
+
+## Slice 32: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)
+Status: [x]
+Issue: #25 ("Slice 32: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)")
+
+Goal:
+- Add owner-managed per-agent, per-chain enable/disable switch. When disabled, agent trade and `wallet-send` actions fail closed for that chain, while owner withdraw remains available for safety recovery.
+
+DoD:
+- [x] docs sync first: source-of-truth + roadmap + tracker + openapi + context/spec/tasks/acceptance aligned to Slice 32.
+- [x] migration adds `agent_chain_policies` table with per-agent/per-chain `chain_enabled`.
+- [x] `POST /api/v1/management/chains/update` implemented with step-up required for enable only.
+- [x] `GET /api/v1/management/agent-state` accepts optional `chainKey` and returns `chainPolicy` for the requested chain.
+- [x] `GET /api/v1/agent/transfers/policy` returns `chainEnabled` for runtime consumption.
+- [x] server enforcement blocks trade/limit-order execution paths when chain is disabled with structured `code=chain_disabled`.
+- [x] runtime enforces owner chain access (`chainEnabled`) for trade and `wallet-send` paths.
+- [x] `/agents/:id` management rail exposes “Chain Access” toggle for active chain (global header selector drives chain context).
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.

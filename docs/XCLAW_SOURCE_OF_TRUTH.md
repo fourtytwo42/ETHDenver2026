@@ -450,10 +450,10 @@ All agent write endpoints require:
 
 ## 8.3 Public Read Endpoints
 1. `GET /api/v1/public/leaderboard?window=7d&mode=mock&chain=all`
-2. `GET /api/v1/public/agents?query=<text>&mode=all&chain=all&page=1`
+2. `GET /api/v1/public/agents?query=<text>&mode=all&chain=all&page=1&includeMetrics=<boolean>`
 3. `GET /api/v1/public/agents/:agentId`
 4. `GET /api/v1/public/agents/:agentId/trades?limit=50`
-5. `GET /api/v1/public/activity?limit=100`
+5. `GET /api/v1/public/activity?limit=100&agentId=<optional>`
 - Returns trading lifecycle events only (`trade_*`), excludes heartbeat noise.
 
 ## 8.4 Copy Endpoints
@@ -926,7 +926,7 @@ This section supersedes any earlier conflicting statements in this file.
 - Sensitive management writes rate limit is 10 req/min per agent/session.
 - `/api/health` and `/api/status` are both available.
 - Compatibility aliases `/api/v1/health` and `/api/v1/status` are available; canonical routes remain unversioned `/api/health` and `/api/status`.
-- `/api/status` is public and exposes provider names + health flags (no raw RPC URLs).
+- `/api/status` is public and exposes provider names + health flags (no raw RPC URLs) for launch-active public chain(s) only (current scope: `base_sepolia`; exclude local dev chains like `hardhat_local`).
 - API versioning uses `/api/v1/...`.
 - Migrations are explicit runbook step only (not auto-run on startup).
 - Seed/demo data must be explicitly tagged and separated from runtime data.
@@ -1245,12 +1245,15 @@ Runtime binary requirements for skill operation:
 7. Secret handling priority:
 - OS credential store (Keychain/Credential Manager/Secret Service),
 - fallback interactive unlock/session-only memory.
-8. Skill wrapper must enforce policy checks before spend actions (chain enabled, approvals, limits, pause state).
+8. Skill wrapper must enforce policy checks before spend actions:
+- local chain enablement (`~/.xclaw-agent/policy.json` `chains.<chain>.chain_enabled == true`)
+- owner chain access enablement (server policy `chainEnabled == true` from `GET /api/v1/agent/transfers/policy?chainKey=...`)
+- approvals, limits, pause state.
 9. Skill output must stay human-readable and machine-parseable (`code`, `message`, optional `actionHint`, optional `details`).
 10. Wallet command semantics and validation rules are canonicalized in `docs/api/WALLET_COMMAND_CONTRACT.md`.
 11. Implementation status baseline: create/import/address/health/sign-challenge/send/balance/token-balance/remove are implemented in runtime.
 12. Slice 11 baseline: runtime commands `intents poll`, `approvals check`, `trade execute`, and `report send` are implemented for hardhat-local trade-path validation.
-13. Slice 06 policy cap model is temporarily native-denominated (`max_daily_native_wei` in local policy) until USD-cap pipeline slices finalize canonical spend accounting.
+13. Wallet send commands continue to enforce local native-denominated cap (`max_daily_native_wei`), while trade actions enforce owner-managed UTC-day USD/trade-count caps fetched from server policy with cached fail-closed fallback.
 
 ---
 
@@ -2391,3 +2394,79 @@ Limitations / notes:
    - optional tags,
    - UTC timestamp.
 5. Responsive requirements from Slice 27 remain in force for all dashboard changes.
+
+---
+
+## 54) Slice 30 Owner-Managed Daily Trade Caps + Usage Contract (Locked)
+
+1. Owner policy includes per-agent, per-chain trade caps:
+   - `dailyCapUsdEnabled` + `maxDailyUsd`,
+   - `dailyTradeCapEnabled` + `maxDailyTradeCount`.
+2. Caps are independently toggleable; disabled cap fields do not block execution.
+3. Usage window is UTC day and is tracked per `agent_id + chain_key + utc_day`.
+4. Cap scope is trade actions only:
+   - `trade spot`,
+   - `trade execute`,
+   - limit-order fills.
+   Outbound transfer commands (`wallet-send`, `wallet-send-token`) are out of scope for Slice 30 cap accounting.
+5. Visibility:
+   - cap settings and usage are owner-only in `/agents/:id` management rail,
+   - public profile does not expose cap values/usage.
+6. Enforcement model is dual:
+   - runtime enforces fail-closed using server policy and cached fallback,
+   - server enforces cap checks on trade-proposal/order create/filled transitions.
+7. Runtime usage reporting:
+   - runtime posts idempotent usage deltas to `POST /api/v1/agent/trade-usage`,
+   - failed sends are queued and replayed later without double counting.
+
+---
+
+## 55) Slice 31 Agents + Agent Management UX Refinement Contract (Locked)
+
+1. One-site model remains unchanged:
+   - `/agents` is the public directory,
+   - `/agents/:id` is public profile plus auth-gated management.
+2. `/agents` is card-first with optional desktop table fallback and keeps existing filters/search/pagination.
+3. `GET /api/v1/public/agents` supports optional `includeMetrics=true`:
+   - when enabled, each row may include `latestMetrics` (`pnl_usd`, `return_pct`, `volume_usd`, `trades_count`, `followers_count`, `as_of`),
+   - when disabled, behavior remains backward-compatible and `latestMetrics` may be null.
+4. `/agents/:id` stays long-scroll with anchored section order:
+   - Overview,
+   - Trades,
+   - Activity,
+   - Management (authorized only).
+5. Management rail remains sticky on desktop and stacked on smaller viewports, and now uses progressive disclosure defaults:
+   - expanded by default: session/step-up, safety, policy, usage, approvals,
+   - collapsed by default: withdraw controls and audit details.
+6. `GET /api/v1/public/activity` supports optional `agentId` and filters server-side when provided.
+7. Status vocabulary is unchanged and exact: `active`, `offline`, `degraded`, `paused`, `deactivated`.
+8. Owner management UI does not expose manual controls for:
+   - creating limit orders,
+   - generating owner links,
+   - requesting step-up challenge codes,
+   - manually opening standalone step-up verify flows.
+9. Step-up UX is event-driven:
+   - protected write action attempts return step-up requirement and trigger UI prompt,
+   - owner is instructed to request step-up code from the agent runtime,
+   - owner enters code in contextual prompt and retries action.
+10. Agent runtime retrieval path:
+   - `POST /api/v1/agent/stepup/challenge` (agent-auth) issues one-time code for owner-mediated protected actions.
+
+---
+
+## 56) Slice 32 Per-Agent Chain Enable/Disable Contract (Locked)
+
+1. Owner-managed chain access is per-agent and per-chain.
+2. Default behavior is enabled:
+   - if no explicit row exists for `(agent_id, chain_key)`, `chainEnabled == true`.
+3. When a chain is disabled for an agent (`chainEnabled == false`):
+   - agent runtime must block trade actions and outbound `wallet-send` on that chain with structured `code=chain_disabled`,
+   - server must reject trade proposal / limit-order execution paths for that chain with structured `code=chain_disabled`,
+   - owner withdraw remains available for safety recovery.
+4. Enabling chain access is a protected action:
+   - enabling requires an active step-up session,
+   - disabling does not require step-up.
+5. Canonical endpoints:
+   - `POST /api/v1/management/chains/update` upserts per-agent chain access.
+   - `GET /api/v1/management/agent-state?agentId=...&chainKey=...` returns `chainPolicy` for active chain context.
+   - `GET /api/v1/agent/transfers/policy?chainKey=...` returns `chainEnabled` for runtime enforcement.

@@ -203,7 +203,7 @@ export async function requireStepupSession(
         {
           code: 'stepup_required',
           message: 'Step-up authentication is required for this action.',
-          actionHint: 'Request and verify a step-up challenge before retrying.'
+          actionHint: 'Ask the agent runtime for a step-up code, then verify it in the management prompt.'
         },
         requestId
       )
@@ -234,7 +234,7 @@ export async function requireStepupSession(
         {
           code: 'stepup_invalid',
           message: 'Step-up session is invalid.',
-          actionHint: 'Verify a new step-up challenge and retry.'
+          actionHint: 'Ask the agent for a fresh step-up code, verify it in the management prompt, and retry.'
         },
         requestId
       )
@@ -250,7 +250,7 @@ export async function requireStepupSession(
         {
           code: 'stepup_expired',
           message: 'Step-up session is expired or revoked.',
-          actionHint: 'Request and verify a new step-up challenge.'
+          actionHint: 'Ask the agent for a fresh step-up code and verify it in the management prompt.'
         },
         requestId
       )

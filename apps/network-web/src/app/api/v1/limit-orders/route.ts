@@ -6,6 +6,8 @@ import { errorResponse, internalErrorResponse, successResponse } from '@/lib/err
 import { parseIntQuery, parseJsonBody } from '@/lib/http';
 import { makeId } from '@/lib/ids';
 import { getRequestId } from '@/lib/request-id';
+import { requireAgentChainEnabled } from '@/lib/agent-chain-policy';
+import { evaluateTradeCaps } from '@/lib/trade-caps';
 import { validatePayload } from '@/lib/validation';
 
 export const runtime = 'nodejs';
@@ -71,6 +73,21 @@ export async function POST(req: NextRequest) {
         return { kind: 'auth_invalid' as const };
       }
 
+      const chainGate = await requireAgentChainEnabled(client, { agentId: body.agentId, chainKey: body.chainKey });
+      if (!chainGate.ok) {
+        return { kind: 'blocked' as const, violation: chainGate.violation };
+      }
+
+      const capCheck = await evaluateTradeCaps(client, {
+        agentId: body.agentId,
+        chainKey: body.chainKey,
+        projectedSpendUsd: body.amountIn,
+        projectedFilledTrades: 1
+      });
+      if (!capCheck.ok) {
+        return { kind: 'blocked' as const, violation: capCheck.violation };
+      }
+
       const counts = await client.query<{ total: string }>(
         `
         select count(*)::text as total
@@ -126,6 +143,19 @@ export async function POST(req: NextRequest) {
             openOrders: createResult.total,
             cap: MAX_OPEN_PER_CHAIN
           }
+        },
+        requestId
+      );
+    }
+
+    if (createResult.kind === 'blocked') {
+      return errorResponse(
+        400,
+        {
+          code: createResult.violation.code,
+          message: createResult.violation.message,
+          actionHint: createResult.violation.actionHint,
+          details: createResult.violation.details
         },
         requestId
       );

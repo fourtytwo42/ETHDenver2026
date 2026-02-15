@@ -944,3 +944,146 @@ Use this every work session:
   - [x] `npm run seed:load`
   - [x] `npm run seed:verify`
   - [x] `npm run build`
+
+---
+
+## 30) Slice 30: Owner-Managed Daily Trade Caps + Usage Visibility (Trades Only)
+
+### 30.1 Canonical/doc sync (must happen before implementation)
+- [x] Add Slice 30 goal/DoD + issue mapping to `docs/XCLAW_SLICE_TRACKER.md`.
+- [x] Add Slice 30 roadmap checklist (this section).
+- [x] Update `docs/XCLAW_SOURCE_OF_TRUTH.md` with locked Slice 30 cap model.
+- [x] Update `docs/api/openapi.v1.yaml` for trade-cap fields and usage endpoint.
+- [x] Update handoff/process artifacts:
+  - [x] `docs/CONTEXT_PACK.md`
+  - [x] `spec.md`
+  - [x] `tasks.md`
+  - [x] `acceptance.md`
+
+### 30.2 Data model
+- [x] Add migration for:
+  - [x] `agent_policy_snapshots.daily_cap_usd_enabled`
+  - [x] `agent_policy_snapshots.daily_trade_cap_enabled`
+  - [x] `agent_policy_snapshots.max_daily_trade_count`
+  - [x] `agent_daily_trade_usage` aggregation table + unique key/indexes.
+
+### 30.3 API/schema updates
+- [x] Extend `management-policy-update-request` schema with:
+  - [x] `dailyCapUsdEnabled`
+  - [x] `dailyTradeCapEnabled`
+  - [x] `maxDailyTradeCount`
+- [x] Add `agent-trade-usage-request.schema.json`.
+- [x] Implement `POST /api/v1/agent/trade-usage` (agent auth + idempotency).
+- [x] Extend `GET /api/v1/agent/transfers/policy` with effective trade caps + usage.
+- [x] Extend `GET /api/v1/management/agent-state` with effective trade caps + usage.
+
+### 30.4 Enforcement
+- [x] Server-side cap checks on:
+  - [x] `POST /api/v1/trades/proposed`
+  - [x] `POST /api/v1/limit-orders`
+  - [x] `POST /api/v1/limit-orders/{orderId}/status` when transitioning to `filled`
+- [x] Runtime cap checks on:
+  - [x] `trade spot`
+  - [x] `trade execute`
+  - [x] limit-order real fill path
+- [x] Runtime usage report queue/replay path added.
+
+### 30.5 Owner UI
+- [x] `/agents/:id` management rail includes:
+  - [x] daily USD cap enabled toggle
+  - [x] daily trade-count cap enabled toggle
+  - [x] max daily USD input
+  - [x] max daily trades input
+  - [x] owner-only UTC-day usage progress display
+
+### 30.6 Validation + evidence
+- [x] Run required gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+  - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+---
+
+## 31) Slice 31: Agents + Agent Management UX Refinement (Operational Clean)
+
+### 31.1 Canonical/doc sync (must happen before implementation)
+- [x] Add Slice 31 goal/DoD + issue mapping to `docs/XCLAW_SLICE_TRACKER.md`.
+- [x] Add Slice 31 roadmap checklist (this section).
+- [x] Update `docs/XCLAW_SOURCE_OF_TRUTH.md` with locked Slice 31 UX contract.
+- [x] Update `docs/api/openapi.v1.yaml` for new optional query parameters and response shape notes.
+- [x] Update handoff/process artifacts:
+  - [x] `docs/CONTEXT_PACK.md`
+  - [x] `spec.md`
+  - [x] `tasks.md`
+  - [x] `acceptance.md`
+
+### 31.2 Public API refinements
+- [x] `GET /api/v1/public/agents` adds optional `includeMetrics=true` and nullable `latestMetrics` payload block.
+- [x] `GET /api/v1/public/activity` adds optional `agentId` server-side filter.
+
+### 31.3 `/agents` UX
+- [x] Card-first directory layout with optional desktop table fallback.
+- [x] Existing search/filter/sort/pagination controls preserved.
+- [x] Agent cards include status, runtime, last activity + idle indicator, and KPI summaries.
+
+### 31.4 `/agents/:id` public UX
+- [x] Long-scroll structure preserved (overview, trades, activity, management).
+- [x] Trades and activity sections improved with clearer labels and event context.
+- [x] Empty/loading/error copy improved for clarity.
+
+### 31.5 `/agents/:id` management UX
+- [x] Management cards reordered by operational priority.
+- [x] Progressive disclosure defaults applied to advanced sections.
+- [x] CTA labels standardized to action-first wording.
+- [x] Slice 30 trade-cap controls and usage visibility remain available and functional.
+
+### 31.6 Validation + evidence
+- [x] Run required gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+
+---
+
+## 32) Slice 32: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)
+
+### 32.1 Canonical/doc sync (must happen before implementation)
+- [x] Add Slice 32 goal/DoD + issue mapping to `docs/XCLAW_SLICE_TRACKER.md`.
+- [x] Add Slice 32 roadmap checklist (this section).
+- [x] Update `docs/XCLAW_SOURCE_OF_TRUTH.md` with locked chain access semantics.
+- [x] Update `docs/api/openapi.v1.yaml` for the new management endpoint and chain-scoped agent-state reads.
+- [x] Update handoff/process artifacts:
+  - [x] `docs/CONTEXT_PACK.md`
+  - [x] `spec.md`
+  - [x] `tasks.md`
+  - [x] `acceptance.md`
+
+### 32.2 Data model
+- [x] Migration adds `agent_chain_policies` with unique `(agent_id, chain_key)`.
+
+### 32.3 API + server enforcement
+- [x] `POST /api/v1/management/chains/update` upserts chain access with step-up required for enable only.
+- [x] `GET /api/v1/management/agent-state` accepts optional `chainKey` and returns `chainPolicy`.
+- [x] `GET /api/v1/agent/transfers/policy` returns `chainEnabled` and `chainEnabledUpdatedAt`.
+- [x] Trade + limit-order endpoints block when chain is disabled with structured `code=chain_disabled`.
+
+### 32.4 Runtime enforcement
+- [x] Runtime blocks trade and `wallet-send` when owner chain access is disabled (`chainEnabled == false`).
+- [x] Read-only wallet commands remain available.
+
+### 32.5 Owner UI
+- [x] `/agents/:id` management rail exposes chain access toggle for the active chain selector context.
+
+### 32.6 Validation + evidence
+- [x] Run required gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+  - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`

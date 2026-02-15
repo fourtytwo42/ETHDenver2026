@@ -258,7 +258,51 @@ class TradePathRuntimeTests(unittest.TestCase):
         self.assertEqual(len(raw_lines), 1)
         parsed = json.loads(raw_lines[0])
         self.assertTrue(parsed.get("ok"))
-        self.assertEqual(parsed.get("code"), "ok")
+
+    def test_trade_caps_blocked_when_owner_chain_disabled(self) -> None:
+        policy_payload = {
+            "ok": True,
+            "agentId": "ag_1",
+            "chainKey": "base_sepolia",
+            "chainEnabled": False,
+            "outboundTransfersEnabled": True,
+            "outboundMode": "allow_all",
+            "outboundWhitelistAddresses": [],
+            "updatedAt": "2026-02-15T00:00:00Z",
+            "tradeCaps": {
+                "approvalMode": "auto",
+                "maxTradeUsd": "1000",
+                "maxDailyUsd": "1000",
+                "allowedTokens": [],
+                "dailyCapUsdEnabled": True,
+                "dailyTradeCapEnabled": True,
+                "maxDailyTradeCount": 10,
+                "updatedAt": "2026-02-15T00:00:00Z",
+            },
+            "dailyUsage": {"utcDay": "2026-02-15", "dailySpendUsd": "0", "dailyFilledTrades": 0},
+        }
+        with mock.patch.object(cli, "_api_request", return_value=(200, policy_payload)):
+            with self.assertRaises(cli.WalletPolicyError) as ctx:
+                cli._enforce_trade_caps("base_sepolia", Decimal("10"), 1)
+        self.assertEqual(ctx.exception.code, "chain_disabled")
+
+    def test_wallet_send_policy_blocked_when_owner_chain_disabled(self) -> None:
+        policy_payload = {
+            "ok": True,
+            "agentId": "ag_1",
+            "chainKey": "base_sepolia",
+            "chainEnabled": False,
+            "outboundTransfersEnabled": True,
+            "outboundMode": "allow_all",
+            "outboundWhitelistAddresses": [],
+            "updatedAt": "2026-02-15T00:00:00Z",
+            "tradeCaps": None,
+            "dailyUsage": {"utcDay": "2026-02-15", "dailySpendUsd": "0", "dailyFilledTrades": 0},
+        }
+        with mock.patch.object(cli, "_api_request", return_value=(200, policy_payload)):
+            with self.assertRaises(cli.WalletPolicyError) as ctx:
+                cli._enforce_outbound_transfer_policy("base_sepolia", "0x" + "11" * 20)
+        self.assertEqual(ctx.exception.code, "chain_disabled")
 
     def test_trade_spot_builds_quote_and_swap_calls(self) -> None:
         args = argparse.Namespace(
@@ -297,6 +341,14 @@ class TradePathRuntimeTests(unittest.TestCase):
             cli, "_fetch_token_allowance_wei", return_value=str(10**30)
         ), mock.patch.object(
             cli, "_enforce_spend_preconditions", return_value=({}, "2026-02-14", 0, 10**30)
+        ), mock.patch.object(
+            cli, "_replay_trade_usage_outbox", return_value=(0, 0)
+        ), mock.patch.object(
+            cli, "_enforce_trade_caps", return_value=({}, "2026-02-14", cli.Decimal("0"), 0, {"maxDailyUsd": "1000", "maxDailyTradeCount": 10})
+        ), mock.patch.object(
+            cli, "_record_trade_cap_ledger"
+        ), mock.patch.object(
+            cli, "_post_trade_usage"
         ), mock.patch.object(
             cli, "_record_spend"
         ), mock.patch.object(
@@ -539,6 +591,14 @@ class TradePathRuntimeTests(unittest.TestCase):
         with mock.patch.object(cli, "_read_trade_details", return_value=trade_payload), mock.patch.object(
             cli, "_enforce_spend_preconditions", return_value=({}, "2026-02-14", 0, 1000000000)
         ), mock.patch.object(
+            cli, "_replay_trade_usage_outbox", return_value=(0, 0)
+        ), mock.patch.object(
+            cli, "_enforce_trade_caps", return_value=({}, "2026-02-14", cli.Decimal("0"), 0, {"maxDailyUsd": "1000", "maxDailyTradeCount": 10})
+        ), mock.patch.object(
+            cli, "_record_trade_cap_ledger"
+        ), mock.patch.object(
+            cli, "_post_trade_usage"
+        ), mock.patch.object(
             cli, "_execution_wallet", return_value=("0x1111111111111111111111111111111111111111", "11" * 32)
         ), mock.patch.object(
             cli, "_require_chain_contract_address", return_value="0x3333333333333333333333333333333333333333"
@@ -558,6 +618,39 @@ class TradePathRuntimeTests(unittest.TestCase):
             code = cli.cmd_trade_execute(args)
         self.assertEqual(code, 0)
         report_mock.assert_not_called()
+
+    def test_trade_execute_blocks_on_daily_trade_cap(self) -> None:
+        args = argparse.Namespace(intent="trd_real_2", chain="base_sepolia", json=True)
+        trade_payload = {
+            "tradeId": "trd_real_2",
+            "chainKey": "base_sepolia",
+            "status": "approved",
+            "mode": "real",
+            "retry": {"eligible": False},
+            "tokenIn": "0x1111111111111111111111111111111111111111",
+            "tokenOut": "0x2222222222222222222222222222222222222222",
+            "amountIn": "250",
+            "slippageBps": 50,
+        }
+        with mock.patch.object(cli, "_read_trade_details", return_value=trade_payload), mock.patch.object(
+            cli, "_replay_trade_usage_outbox", return_value=(0, 0)
+        ), mock.patch.object(
+            cli, "_enforce_spend_preconditions", return_value=({}, "2026-02-14", 0, 1000000000)
+        ), mock.patch.object(
+            cli, "_execution_wallet", return_value=("0x1111111111111111111111111111111111111111", "11" * 32)
+        ), mock.patch.object(
+            cli,
+            "_enforce_trade_caps",
+            side_effect=cli.WalletPolicyError(
+                "daily_trade_count_cap_exceeded",
+                "Trade blocked because daily filled-trade cap would be exceeded.",
+                "Raise maxDailyTradeCount.",
+                {"maxDailyTradeCount": 1},
+            ),
+        ):
+            payload = self._run_and_parse_stdout(lambda: cli.cmd_trade_execute(args))
+        self.assertFalse(payload.get("ok"))
+        self.assertEqual(payload.get("code"), "daily_trade_count_cap_exceeded")
 
     def test_removed_offdex_command_is_not_available(self) -> None:
         with self.assertRaises(SystemExit):

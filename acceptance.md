@@ -2330,3 +2330,175 @@ Issue mapping: `#24`
 1. Revert Slice 29 touched files only.
 2. Re-run required gate commands.
 3. Re-verify dashboard feed rendering contract (single-chain presentation + activity detail + chat style).
+
+## Slice 30 Acceptance Evidence
+
+Date (UTC): 2026-02-15
+Active slice: `Slice 30: Owner-Managed Daily Trade Caps + Usage Visibility (Trades Only)`
+Issue mapping: `pending assignment`
+
+### Objective + scope lock
+- Objective: implement owner-managed UTC-day trade caps (USD + filled trade count), owner-only usage visibility, and runtime/server enforcement with idempotent usage accounting.
+- Scope guard honored: trade actions only (`trade spot`, `trade execute`, limit-order fill). No cap accounting added to `wallet-send` / `wallet-send-token`.
+
+### File-level evidence
+- Runtime:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_trade_path.py`
+- Web/API:
+  - `apps/network-web/src/app/api/v1/management/policy/update/route.ts`
+  - `apps/network-web/src/app/api/v1/management/agent-state/route.ts`
+  - `apps/network-web/src/app/api/v1/agent/transfers/policy/route.ts`
+  - `apps/network-web/src/app/api/v1/agent/trade-usage/route.ts`
+  - `apps/network-web/src/app/api/v1/trades/proposed/route.ts`
+  - `apps/network-web/src/app/api/v1/limit-orders/route.ts`
+  - `apps/network-web/src/app/api/v1/limit-orders/[orderId]/status/route.ts`
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+  - `apps/network-web/src/lib/trade-caps.ts`
+  - `apps/network-web/src/lib/errors.ts`
+- Data/schema/contracts:
+  - `infrastructure/migrations/0008_slice30_trade_caps_usage.sql`
+  - `packages/shared-schemas/json/management-policy-update-request.schema.json`
+  - `packages/shared-schemas/json/agent-trade-usage-request.schema.json`
+  - `docs/api/openapi.v1.yaml`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+
+### Required gate evidence
+- `npm run db:parity` -> PASS (`ok: true`; migration list includes `0008_slice30_trade_caps_usage.sql`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`ok: true`)
+- `npm run build` -> PASS (Next.js build completed; includes `/api/v1/agent/trade-usage` route)
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS (`Ran 36 tests`, `OK`)
+
+### Behavioral evidence
+- Policy contract expanded with independent toggles and trade-count cap:
+  - `dailyCapUsdEnabled`, `dailyTradeCapEnabled`, `maxDailyTradeCount` persisted in policy snapshot writes.
+- Agent policy read path now includes effective trade-cap block + UTC-day usage.
+- Owner management state now includes trade-cap config + UTC-day usage for display on `/agents/:id`.
+- New agent-auth usage reporting endpoint accepts idempotent non-negative deltas and aggregates by `agent_id + chain_key + utc_day`.
+- Server write-path enforcement blocks projected cap violations with structured errors:
+  - `daily_usd_cap_exceeded`
+  - `daily_trade_count_cap_exceeded`
+- Runtime trade paths enforce caps pre-execution and report usage post-fill; outage path queues/replays usage updates.
+- Runtime regression coverage includes cap-denial path (`test_trade_execute_blocks_on_daily_trade_cap`).
+
+### Rollback plan
+1. Revert Slice 30 touched files only.
+2. Re-run required gates and runtime test file.
+3. Re-check owner management rail behavior and trade write-path cap enforcement responses.
+
+## Slice 31 Acceptance Evidence
+
+Date (UTC): 2026-02-15
+Active slice: `Slice 31: Agents + Agent Management UX Refinement (Operational Clean)`
+Issue mapping: `pending assignment`
+
+### Objective + scope lock
+- Objective: refine `/agents` and `/agents/:id` UX hierarchy/readability with operational-clean presentation and progressive-disclosure management controls.
+- Scope guard honored: no auth model changes, no route split, no DB migration/schema changes.
+
+### File-level evidence
+- Web/API:
+  - `apps/network-web/src/app/api/v1/public/agents/route.ts`
+  - `apps/network-web/src/app/api/v1/public/activity/route.ts`
+  - `apps/network-web/src/app/agents/page.tsx`
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+  - `apps/network-web/src/app/globals.css`
+- Canonical/process artifacts:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/api/openapi.v1.yaml`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+
+### Required gate evidence
+- `npm run db:parity` -> PASS (`ok: true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS (`ok: true`)
+- `npm run build` -> PASS
+
+### API behavior evidence
+- `GET /api/v1/public/agents?page=1&pageSize=2` -> PASS (legacy-compatible payload).
+- `GET /api/v1/public/agents?page=1&pageSize=2&includeMetrics=true` -> PASS (`includeMetrics: true`; each row includes nullable `latestMetrics`).
+- `GET /api/v1/public/activity?limit=10&agentId=ag_a123e3bc428c12675f93` -> PASS (`agentId` echoed and server-side filtered response).
+- `GET /api/v1/public/activity?limit=10&agentId=bad id` -> PASS (400 `payload_invalid`).
+
+### UX behavior evidence
+- `/agents` now renders card-first directory presentation with KPI strip and optional desktop table fallback.
+- `/agents/:id` keeps long-scroll section order and improves trades/activity readability.
+- Authorized management rail is regrouped to operational order and uses progressive disclosure (`details/summary`) for advanced sections.
+- Action labels normalized (`Save Policy`, `Save Transfer Policy`, `Approve Trade`, `Reject Trade`, `Request Withdraw`).
+
+### Rollback plan
+1. Revert Slice 31 touched files only.
+2. Re-run required gates.
+3. Re-verify `/agents` and `/agents/:id` behavior against pre-Slice-31 baseline.
+
+---
+
+## Slice 32 Acceptance Evidence
+
+Date (UTC): 2026-02-15
+Active slice: `Slice 32: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)`
+
+### Objective + scope lock
+- Objective: allow owners to enable/disable chain access per agent and enforce it across server + runtime for trade and `wallet-send`.
+- Scope: chain access only; no dependency additions; no auth model changes.
+
+### File-level evidence (Slice 32)
+- DB:
+  - `infrastructure/migrations/0009_slice32_agent_chain_enable.sql`
+- Server/API:
+  - `apps/network-web/src/app/api/v1/management/chains/update/route.ts`
+  - `apps/network-web/src/app/api/v1/management/agent-state/route.ts`
+  - `apps/network-web/src/app/api/v1/agent/transfers/policy/route.ts`
+  - `apps/network-web/src/app/api/v1/trades/proposed/route.ts`
+  - `apps/network-web/src/app/api/v1/trades/[tradeId]/status/route.ts`
+  - `apps/network-web/src/app/api/v1/limit-orders/route.ts`
+  - `apps/network-web/src/app/api/v1/limit-orders/[orderId]/status/route.ts`
+  - `apps/network-web/src/lib/agent-chain-policy.ts`
+- Runtime:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_trade_path.py`
+- Contracts/docs:
+  - `packages/shared-schemas/json/management-chain-update-request.schema.json`
+  - `docs/api/openapi.v1.yaml`
+  - `docs/api/WALLET_COMMAND_CONTRACT.md`
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+
+### Verification commands and outcomes
+Required global gates:
+- `npm run db:parity` -> PASS
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+- `npm run build` -> PASS
+
+Runtime tests:
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS
+
+### Scenario checks (manual)
+- Disable chain via `/agents/:id` -> trade propose + limit-order execution paths return `code=chain_disabled`.
+- Enable chain requires step-up -> UI prompts for step-up only on enable attempt; disable does not prompt.
+
+### Rollback plan
+1. Revert Slice 32 touched files only.
+2. Re-run required gates.
+3. Confirm chain access toggle and enforcement paths are removed/restored as expected.

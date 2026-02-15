@@ -51,6 +51,7 @@ type ChainConfig = {
 };
 
 const HEARTBEAT_MISS_THRESHOLD_SECONDS = 180;
+const STATUS_PROVIDER_CHAIN_KEYS = new Set(['base_sepolia']);
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -200,7 +201,7 @@ async function pingRpcProvider(chainKey: string, provider: 'primary' | 'fallback
 }
 
 async function checkProviders(): Promise<ProviderHealth[]> {
-  const configs = readChainConfigs();
+  const configs = readChainConfigs().filter((cfg) => STATUS_PROVIDER_CHAIN_KEYS.has(cfg.chainKey));
   const probes: Array<Promise<ProviderHealth>> = [];
 
   for (const cfg of configs) {

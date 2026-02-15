@@ -118,6 +118,12 @@ Username update action:
 python3 {baseDir}/scripts/xclaw_agent_skill.py username-set "harvey-ops"
 ```
 
+Step-up code retrieval (for protected owner actions):
+
+```bash
+python3 {baseDir}/scripts/xclaw_agent_skill.py stepup-code
+```
+
 Owner management link action (for human owner controls):
 
 ```bash

@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 
 import { rememberManagedAgent } from '@/components/management-header-controls';
 import { PublicStatusBadge } from '@/components/public-status-badge';
+import { useActiveChainKey } from '@/lib/active-chain';
 import { formatNumber, formatPercent, formatUsd, formatUtc, isStale, shortenAddress } from '@/lib/public-format';
 import { isPublicStatus } from '@/lib/public-types';
 
@@ -83,6 +84,10 @@ type ActivityPayload = {
     event_id: string;
     agent_id: string;
     event_type: string;
+    chain_key: string;
+    pair_display: string | null;
+    token_in_symbol: string | null;
+    token_out_symbol: string | null;
     created_at: string;
   }>;
 };
@@ -93,6 +98,11 @@ type ManagementStatePayload = {
     agentId: string;
     publicStatus: string;
     metadata: Record<string, unknown>;
+  };
+  chainPolicy: {
+    chainKey: string;
+    chainEnabled: boolean;
+    updatedAt: string | null;
   };
   approvalsQueue: Array<{
     trade_id: string;
@@ -109,9 +119,22 @@ type ManagementStatePayload = {
     approval_mode: 'per_trade' | 'auto';
     max_trade_usd: string | null;
     max_daily_usd: string | null;
+    max_daily_trade_count: string | null;
+    daily_cap_usd_enabled: boolean;
+    daily_trade_cap_enabled: boolean;
     allowed_tokens: string[];
     created_at: string;
   } | null;
+  tradeCaps: {
+    dailyCapUsdEnabled: boolean;
+    dailyTradeCapEnabled: boolean;
+    maxDailyTradeCount: number | null;
+  };
+  dailyUsage: {
+    utcDay: string;
+    dailySpendUsd: string;
+    dailyFilledTrades: number;
+  };
   outboundTransfersPolicy: {
     outboundTransfersEnabled: boolean;
     outboundMode: 'disabled' | 'allow_all' | 'whitelist';
@@ -190,6 +213,45 @@ type LimitOrderItem = {
 
 const HEARTBEAT_STALE_THRESHOLD_SECONDS = 180;
 
+function formatActivityTitle(eventType: string): string {
+  if (eventType === 'trade_filled') {
+    return 'Trade filled';
+  }
+  if (eventType === 'trade_failed') {
+    return 'Trade failed';
+  }
+  if (eventType === 'trade_executing') {
+    return 'Trade executing';
+  }
+  if (eventType === 'trade_approval_pending') {
+    return 'Awaiting approval';
+  }
+  if (eventType.startsWith('trade_')) {
+    return eventType.replace(/^trade_/, '').replace(/_/g, ' ');
+  }
+  return eventType.replace(/_/g, ' ');
+}
+
+function usagePercent(current: number, maxRaw: string, enabled: boolean): number {
+  if (!enabled) {
+    return 0;
+  }
+  const max = Number(maxRaw);
+  if (!Number.isFinite(max) || max <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, (current / max) * 100));
+}
+
+function CopyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <rect x="4" y="4" width="11" height="11" rx="2" />
+    </svg>
+  );
+}
+
 async function bootstrapSession(
   agentId: string,
   token: string
@@ -257,9 +319,16 @@ async function managementPost(path: string, payload: Record<string, unknown>) {
     body: JSON.stringify(payload)
   });
 
-  const json = (await response.json().catch(() => null)) as { message?: string } | null;
+  const json = (await response.json().catch(() => null)) as { message?: string; code?: string; actionHint?: string } | null;
   if (!response.ok) {
-    throw new Error(json?.message ?? 'Management request failed.');
+    const error = new Error(json?.message ?? 'Management request failed.') as Error & { code?: string; actionHint?: string };
+    if (json?.code) {
+      error.code = json.code;
+    }
+    if (json?.actionHint) {
+      error.actionHint = json.actionHint;
+    }
+    throw error;
   }
   return json;
 }
@@ -289,6 +358,7 @@ export default function AgentPublicProfilePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const agentId = params.agentId;
+  const [activeChainKey, , activeChainLabel] = useActiveChainKey();
 
   const [bootstrapState, setBootstrapState] = useState<BootstrapState>({ phase: 'ready' });
   const [profile, setProfile] = useState<AgentProfilePayload | null>(null);
@@ -298,22 +368,32 @@ export default function AgentPublicProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [managementNotice, setManagementNotice] = useState<string | null>(null);
   const [managementError, setManagementError] = useState<string | null>(null);
-  const [stepupCode, setStepupCode] = useState('');
+  const [stepupPromptOpen, setStepupPromptOpen] = useState(false);
+  const [stepupPromptCode, setStepupPromptCode] = useState('');
+  const [stepupPromptIssuedFor, setStepupPromptIssuedFor] = useState<'withdraw' | 'approval_scope_change' | 'sensitive_action'>(
+    'sensitive_action'
+  );
   const [withdrawDestination, setWithdrawDestination] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('0.1');
+  const [depositCopied, setDepositCopied] = useState(false);
   const [depositData, setDepositData] = useState<DepositPayload | null>(null);
   const [limitOrders, setLimitOrders] = useState<LimitOrderItem[]>([]);
-  const [orderChainKey, setOrderChainKey] = useState('base_sepolia');
-  const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy');
-  const [orderTokenIn, setOrderTokenIn] = useState('0x4200000000000000000000000000000000000006');
-  const [orderTokenOut, setOrderTokenOut] = useState('0x036CbD53842c5426634e7929541eC2318f3dCF7e');
-  const [orderAmountIn, setOrderAmountIn] = useState('0.01');
-  const [orderLimitPrice, setOrderLimitPrice] = useState('2500');
-  const [orderSlippageBps, setOrderSlippageBps] = useState('50');
-  const [ownerLink, setOwnerLink] = useState<{ managementUrl: string; expiresAt: string } | null>(null);
+  const pendingStepupActionRef = useRef<{
+    action: () => Promise<void>;
+    successMessage: string;
+    issuedFor: 'withdraw' | 'approval_scope_change' | 'sensitive_action';
+  } | null>(null);
   const [outboundTransfersEnabled, setOutboundTransfersEnabled] = useState(false);
   const [outboundMode, setOutboundMode] = useState<'disabled' | 'allow_all' | 'whitelist'>('disabled');
   const [outboundWhitelistInput, setOutboundWhitelistInput] = useState('');
+  const [policyApprovalMode, setPolicyApprovalMode] = useState<'per_trade' | 'auto'>('per_trade');
+  const [policyMaxTradeUsd, setPolicyMaxTradeUsd] = useState('50');
+  const [policyMaxDailyUsd, setPolicyMaxDailyUsd] = useState('250');
+  const [policyDailyCapUsdEnabled, setPolicyDailyCapUsdEnabled] = useState(true);
+  const [policyDailyTradeCapEnabled, setPolicyDailyTradeCapEnabled] = useState(true);
+  const [policyMaxDailyTradeCount, setPolicyMaxDailyTradeCount] = useState('0');
+  const [policyAllowedTokensInput, setPolicyAllowedTokensInput] = useState('');
+  const [chainUpdatePending, setChainUpdatePending] = useState(false);
 
   useEffect(() => {
     if (!agentId) {
@@ -359,7 +439,7 @@ export default function AgentPublicProfilePage() {
         const [profileRes, tradesRes, activityRes] = await Promise.all([
           fetch(`/api/v1/public/agents/${agentId}`, { cache: 'no-store' }),
           fetch(`/api/v1/public/agents/${agentId}/trades?limit=20`, { cache: 'no-store' }),
-          fetch('/api/v1/public/activity?limit=100', { cache: 'no-store' })
+          fetch(`/api/v1/public/activity?limit=20&agentId=${encodeURIComponent(agentId)}`, { cache: 'no-store' })
         ]);
 
         if (!profileRes.ok || !tradesRes.ok || !activityRes.ok) {
@@ -373,7 +453,7 @@ export default function AgentPublicProfilePage() {
         if (!cancelled) {
           setProfile(profilePayload);
           setTrades(tradesPayload.items);
-          setActivity(activityPayload.items.filter((event) => event.agent_id === agentId).slice(0, 12));
+          setActivity(activityPayload.items.slice(0, 12));
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -383,10 +463,13 @@ export default function AgentPublicProfilePage() {
 
       try {
         setManagement({ phase: 'loading' });
-        const managementRes = await fetch(`/api/v1/management/agent-state?agentId=${encodeURIComponent(agentId)}`, {
+        const managementRes = await fetch(
+          `/api/v1/management/agent-state?agentId=${encodeURIComponent(agentId)}&chainKey=${encodeURIComponent(activeChainKey)}`,
+          {
           cache: 'no-store',
           credentials: 'same-origin'
-        });
+          }
+        );
 
         if (managementRes.status === 401) {
           if (!cancelled) {
@@ -406,17 +489,33 @@ export default function AgentPublicProfilePage() {
           setOutboundTransfersEnabled(payload.outboundTransfersPolicy.outboundTransfersEnabled);
           setOutboundMode(payload.outboundTransfersPolicy.outboundMode);
           setOutboundWhitelistInput(payload.outboundTransfersPolicy.outboundWhitelistAddresses.join(','));
+          setPolicyApprovalMode(payload.latestPolicy?.approval_mode ?? 'per_trade');
+          setPolicyMaxTradeUsd(payload.latestPolicy?.max_trade_usd ?? '50');
+          setPolicyMaxDailyUsd(payload.latestPolicy?.max_daily_usd ?? '250');
+          setPolicyDailyCapUsdEnabled(payload.tradeCaps?.dailyCapUsdEnabled ?? payload.latestPolicy?.daily_cap_usd_enabled ?? true);
+          setPolicyDailyTradeCapEnabled(payload.tradeCaps?.dailyTradeCapEnabled ?? payload.latestPolicy?.daily_trade_cap_enabled ?? true);
+          setPolicyMaxDailyTradeCount(
+            payload.tradeCaps?.maxDailyTradeCount !== null && payload.tradeCaps?.maxDailyTradeCount !== undefined
+              ? String(payload.tradeCaps.maxDailyTradeCount)
+              : (payload.latestPolicy?.max_daily_trade_count ?? '0')
+          );
+          setPolicyAllowedTokensInput((payload.latestPolicy?.allowed_tokens ?? []).join(','));
           rememberManagedAgent(agentId);
 
           const savedDestination =
             (payload.agent?.metadata as { management?: { withdrawDestinations?: Record<string, string> } } | undefined)?.management
-              ?.withdrawDestinations?.base_sepolia ?? '';
+              ?.withdrawDestinations?.[activeChainKey] ??
+            (payload.agent?.metadata as { management?: { withdrawDestinations?: Record<string, string> } } | undefined)?.management
+              ?.withdrawDestinations?.base_sepolia ??
+            '';
           if (savedDestination) {
             setWithdrawDestination(savedDestination);
           }
 
           const [depositPayload, limitOrderPayload] = await Promise.all([
-            managementGet(`/api/v1/management/deposit?agentId=${encodeURIComponent(agentId)}`),
+            managementGet(
+              `/api/v1/management/deposit?agentId=${encodeURIComponent(agentId)}&chainKey=${encodeURIComponent(activeChainKey)}`
+            ),
             managementGet(`/api/v1/management/limit-orders?agentId=${encodeURIComponent(agentId)}&limit=50`)
           ]);
           setDepositData(depositPayload as DepositPayload);
@@ -437,7 +536,7 @@ export default function AgentPublicProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [agentId, bootstrapState.phase]);
+  }, [agentId, bootstrapState.phase, activeChainKey]);
 
   const stepupRemaining = useMemo(() => {
     if (management.phase !== 'ready' || !management.data.stepup.expiresAt || !management.data.stepup.active) {
@@ -460,10 +559,13 @@ export default function AgentPublicProfilePage() {
     }
 
     try {
-      const managementRes = await fetch(`/api/v1/management/agent-state?agentId=${encodeURIComponent(agentId)}`, {
-        cache: 'no-store',
-        credentials: 'same-origin'
-      });
+      const managementRes = await fetch(
+        `/api/v1/management/agent-state?agentId=${encodeURIComponent(agentId)}&chainKey=${encodeURIComponent(activeChainKey)}`,
+        {
+          cache: 'no-store',
+          credentials: 'same-origin'
+        }
+      );
 
       if (managementRes.status === 401) {
         setManagement({ phase: 'unauthorized' });
@@ -480,8 +582,19 @@ export default function AgentPublicProfilePage() {
       setOutboundTransfersEnabled(payload.outboundTransfersPolicy.outboundTransfersEnabled);
       setOutboundMode(payload.outboundTransfersPolicy.outboundMode);
       setOutboundWhitelistInput(payload.outboundTransfersPolicy.outboundWhitelistAddresses.join(','));
+      setPolicyApprovalMode(payload.latestPolicy?.approval_mode ?? 'per_trade');
+      setPolicyMaxTradeUsd(payload.latestPolicy?.max_trade_usd ?? '50');
+      setPolicyMaxDailyUsd(payload.latestPolicy?.max_daily_usd ?? '250');
+      setPolicyDailyCapUsdEnabled(payload.tradeCaps?.dailyCapUsdEnabled ?? payload.latestPolicy?.daily_cap_usd_enabled ?? true);
+      setPolicyDailyTradeCapEnabled(payload.tradeCaps?.dailyTradeCapEnabled ?? payload.latestPolicy?.daily_trade_cap_enabled ?? true);
+      setPolicyMaxDailyTradeCount(
+        payload.tradeCaps?.maxDailyTradeCount !== null && payload.tradeCaps?.maxDailyTradeCount !== undefined
+          ? String(payload.tradeCaps.maxDailyTradeCount)
+          : (payload.latestPolicy?.max_daily_trade_count ?? '0')
+      );
+      setPolicyAllowedTokensInput((payload.latestPolicy?.allowed_tokens ?? []).join(','));
       const [depositPayload, limitOrderPayload] = await Promise.all([
-        managementGet(`/api/v1/management/deposit?agentId=${encodeURIComponent(agentId)}`),
+        managementGet(`/api/v1/management/deposit?agentId=${encodeURIComponent(agentId)}&chainKey=${encodeURIComponent(activeChainKey)}`),
         managementGet(`/api/v1/management/limit-orders?agentId=${encodeURIComponent(agentId)}&limit=50`)
       ]);
       setDepositData(depositPayload as DepositPayload);
@@ -491,15 +604,61 @@ export default function AgentPublicProfilePage() {
     }
   }
 
-  async function runManagementAction(action: () => Promise<void>, successMessage: string) {
+  async function runManagementAction(
+    action: () => Promise<void>,
+    successMessage: string,
+    issuedFor: 'withdraw' | 'approval_scope_change' | 'sensitive_action' = 'sensitive_action'
+  ) {
     setManagementError(null);
     setManagementNotice(null);
     try {
       await action();
       setManagementNotice(successMessage);
       await refreshManagementState();
+      pendingStepupActionRef.current = null;
+      setStepupPromptOpen(false);
+      setStepupPromptCode('');
     } catch (actionError) {
+      const coded = actionError as Error & { code?: string; actionHint?: string };
+      if (coded?.code === 'stepup_required' || coded?.code === 'stepup_expired' || coded?.code === 'stepup_invalid') {
+        pendingStepupActionRef.current = { action, successMessage, issuedFor };
+        setStepupPromptIssuedFor(issuedFor);
+        setStepupPromptOpen(true);
+        setManagementError('Step-up required. Ask your agent for a step-up code using `stepup-code`, then enter it below.');
+        return;
+      }
       setManagementError(actionError instanceof Error ? actionError.message : 'Management action failed.');
+      try {
+        await refreshManagementState();
+      } catch {
+        // ignore refresh failures on error path
+      }
+    }
+  }
+
+  async function submitStepupPrompt() {
+    if (!agentId) {
+      return;
+    }
+    const queued = pendingStepupActionRef.current;
+    if (!queued) {
+      setManagementError('No pending protected action to retry.');
+      return;
+    }
+    if (!stepupPromptCode.trim()) {
+      setManagementError('Enter a step-up code from your agent to continue.');
+      return;
+    }
+
+    setManagementError(null);
+    setManagementNotice(null);
+    try {
+      await managementPost('/api/v1/management/stepup/verify', { agentId, code: stepupPromptCode.trim() });
+      setStepupPromptCode('');
+      setStepupPromptOpen(false);
+      await runManagementAction(queued.action, queued.successMessage, queued.issuedFor);
+    } catch (error) {
+      setManagementError(error instanceof Error ? error.message : 'Step-up verification failed.');
     }
   }
 
@@ -524,7 +683,7 @@ export default function AgentPublicProfilePage() {
         {error ? <p className="warning-banner">{error}</p> : null}
 
         <section className="panel" id="overview">
-          <h1 className="section-title">Agent Profile</h1>
+          <h1 className="section-title">Agent Overview</h1>
           {!profile ? <p className="muted">Loading agent profile...</p> : null}
 
           {profile ? (
@@ -536,6 +695,7 @@ export default function AgentPublicProfilePage() {
                 <span className="muted">{profile.agent.runtime_platform}</span>
                 <span className="muted">Last activity: {formatUtc(profile.agent.last_activity_at)} UTC</span>
               </div>
+              <p className="network-context">Network context: {activeChainLabel}</p>
               {isStale(profile.agent.last_heartbeat_at, HEARTBEAT_STALE_THRESHOLD_SECONDS) ? (
                 <p className="stale">Agent is idle.</p>
               ) : (
@@ -577,6 +737,7 @@ export default function AgentPublicProfilePage() {
 
         <section className="panel" id="trades">
           <h2 className="section-title">Trades</h2>
+          <p className="muted">Recent network trades for this agent. Timestamps are UTC.</p>
           {!trades ? <p className="muted">Loading trades...</p> : null}
           {trades && trades.length === 0 ? <p className="muted">No trades found for this agent.</p> : null}
           {trades && trades.length > 0 ? (
@@ -599,7 +760,9 @@ export default function AgentPublicProfilePage() {
                         <tr key={trade.trade_id}>
                           <td>{trade.source_label ?? (trade.source_trade_id ? 'copied' : 'self')}</td>
                           <td>{trade.pair}</td>
-                          <td>{trade.status}</td>
+                          <td>
+                            <span className="status-chip">{trade.status}</span>
+                          </td>
                           <td className="hard-wrap">{trade.tx_hash ?? '-'}</td>
                           <td>{trade.reason_code ?? trade.reason_message ?? trade.reason ?? '-'}</td>
                           <td>{formatUtc(trade.created_at)}</td>
@@ -617,7 +780,7 @@ export default function AgentPublicProfilePage() {
                         <strong>{trade.pair}</strong>
                       </div>
                       <div className="toolbar" style={{ marginBottom: 0 }}>
-                        <span>{trade.status}</span>
+                        <span className="status-chip">{trade.status}</span>
                       </div>
                       <div className="data-pairs">
                         <div>
@@ -659,16 +822,22 @@ export default function AgentPublicProfilePage() {
 
         <section className="panel" id="activity">
           <h2 className="section-title">Activity Timeline</h2>
+          <p className="muted">Live trade-related events for this agent.</p>
           {!activity ? <p className="muted">Loading activity...</p> : null}
-          {activity && activity.length === 0 ? <p className="muted">No activity events yet.</p> : null}
+          {activity && activity.length === 0 ? <p className="muted">No activity yet on Base Sepolia.</p> : null}
           {activity && activity.length > 0 ? (
             <div className="activity-list">
               {activity.map((event) => (
                 <article className="activity-item" key={event.event_id}>
                   <div>
-                    <strong>{event.event_type}</strong>
+                    <strong>{formatActivityTitle(event.event_type)}</strong>
+                    <div className="muted">
+                      {event.pair_display ?? `${event.token_in_symbol ?? 'token'} -> ${event.token_out_symbol ?? 'token'}`}
+                    </div>
                   </div>
-                  <div className="muted">{formatUtc(event.created_at)} UTC</div>
+                  <div className="muted">
+                    {event.chain_key} • {formatUtc(event.created_at)} UTC
+                  </div>
                 </article>
               ))}
             </div>
@@ -695,7 +864,7 @@ export default function AgentPublicProfilePage() {
           {management.phase === 'unauthorized' ? (
             <div className="muted">
               <p>Unauthorized: management controls require a bootstrap token session on this host.</p>
-              <p>Owner links are one-time use. If one was already used elsewhere, generate a fresh link.</p>
+              <p>Owner links are one-time use. If one was already used elsewhere, ask the agent to generate a fresh link.</p>
               <p>Open the fresh link directly on https://xclaw.trade.</p>
             </div>
           ) : null}
@@ -704,40 +873,205 @@ export default function AgentPublicProfilePage() {
           {management.phase === 'ready' ? (
             <div className="management-stack">
               <article className="management-card">
-                <h3>Deposit</h3>
-                {!depositData ? <p className="muted">Loading deposit state...</p> : null}
-                {(depositData?.chains ?? []).map((chain) => (
-                  <div key={chain.chainKey} className="queue-item">
-                    <div>
-                      <strong>{chain.chainKey}</strong>
-                      <div className="muted">Address: {chain.depositAddress}</div>
-                      <div className="muted">
-                        Sync: {chain.syncStatus} {chain.syncDetail ? `(${chain.syncDetail})` : ''}
-                      </div>
-                      <div className="muted">Last sync: {formatUtc(chain.lastSyncedAt)} UTC</div>
-                      <div className="muted">Min confirmations: {chain.minConfirmations}</div>
+                <h3>Session and Step-up</h3>
+                <p className="muted">Session expires at {formatUtc(management.data.managementSession.expiresAt)} UTC.</p>
+                <p>
+                  Step-up: <strong>{management.data.stepup.active ? 'Active' : 'Inactive'}</strong>
+                  {stepupRemaining ? ` (${stepupRemaining} remaining)` : ''}
+                </p>
+                <p className="muted">
+                  Step-up codes are not generated manually here. If a protected action requires step-up, you will be prompted and must ask the
+                  agent for a code (`stepup-code`).
+                </p>
+                {stepupPromptOpen ? (
+                  <div className="queue-item">
+                    <div className="muted">Protected action blocked. Ask your agent for a step-up code, then verify to continue.</div>
+                    <div className="toolbar">
+                      <input
+                        value={stepupPromptCode}
+                        onChange={(event) => setStepupPromptCode(event.target.value)}
+                        placeholder={`Step-up code (${stepupPromptIssuedFor})`}
+                      />
+                      <button className="theme-toggle" type="button" onClick={() => void submitStepupPrompt()}>
+                        Verify and Continue
+                      </button>
                     </div>
                   </div>
-                ))}
-                {(depositData?.chains ?? []).flatMap((chain) => chain.recentDeposits).length === 0 ? (
-                  <p className="muted">No confirmed deposit events yet.</p>
                 ) : null}
               </article>
 
               <article className="management-card">
-                <h3>Limit Orders</h3>
+                <h3>Safety Controls</h3>
+                <p className="muted">Control runtime safety and outbound transfer restrictions.</p>
                 <div className="toolbar">
-                  <input value={orderChainKey} onChange={(event) => setOrderChainKey(event.target.value)} placeholder="Chain key" />
-                  <input value={orderSide} onChange={(event) => setOrderSide(event.target.value === 'sell' ? 'sell' : 'buy')} placeholder="Side" />
+                  <button
+                    type="button"
+                    className="theme-toggle"
+                    onClick={() =>
+                      void runManagementAction(
+                        () => managementPost('/api/v1/management/pause', { agentId }).then(() => Promise.resolve()),
+                        'Agent paused.'
+                      )
+                    }
+                  >
+                    Pause Agent
+                  </button>
+                  <button
+                    type="button"
+                    className="theme-toggle"
+                    onClick={() =>
+                      void runManagementAction(
+                        () => managementPost('/api/v1/management/resume', { agentId }).then(() => Promise.resolve()),
+                        'Agent resumed.'
+                      )
+                    }
+                  >
+                    Resume Agent
+                  </button>
                 </div>
                 <div className="toolbar">
-                  <input value={orderTokenIn} onChange={(event) => setOrderTokenIn(event.target.value)} placeholder="Token In" />
-                  <input value={orderTokenOut} onChange={(event) => setOrderTokenOut(event.target.value)} placeholder="Token Out" />
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={outboundTransfersEnabled}
+                      onChange={(event) => setOutboundTransfersEnabled(event.target.checked)}
+                    />{' '}
+                    Outbound transfers enabled
+                  </label>
+                  <select
+                    value={outboundMode}
+                    onChange={(event) => setOutboundMode((event.target.value as 'disabled' | 'allow_all' | 'whitelist') ?? 'disabled')}
+                  >
+                    <option value="disabled">disabled</option>
+                    <option value="allow_all">allow_all</option>
+                    <option value="whitelist">whitelist</option>
+                  </select>
                 </div>
                 <div className="toolbar">
-                  <input value={orderAmountIn} onChange={(event) => setOrderAmountIn(event.target.value)} placeholder="Amount In" />
-                  <input value={orderLimitPrice} onChange={(event) => setOrderLimitPrice(event.target.value)} placeholder="Limit Price" />
-                  <input value={orderSlippageBps} onChange={(event) => setOrderSlippageBps(event.target.value)} placeholder="Slippage Bps" />
+                  <input
+                    value={outboundWhitelistInput}
+                    onChange={(event) => setOutboundWhitelistInput(event.target.value)}
+                    placeholder="Comma-separated whitelist addresses"
+                  />
+                </div>
+                <div className="toolbar">
+                  <button
+                    className="theme-toggle"
+                    type="button"
+                    onClick={() =>
+                      void runManagementAction(
+                        () =>
+                          managementPost('/api/v1/management/policy/update', {
+                            agentId,
+                            mode: 'real',
+                            approvalMode: policyApprovalMode,
+                            maxTradeUsd: policyMaxTradeUsd,
+                            maxDailyUsd: policyMaxDailyUsd,
+                            dailyCapUsdEnabled: policyDailyCapUsdEnabled,
+                            dailyTradeCapEnabled: policyDailyTradeCapEnabled,
+                            maxDailyTradeCount: policyDailyTradeCapEnabled ? Number(policyMaxDailyTradeCount || '0') : null,
+                            allowedTokens: policyAllowedTokensInput
+                              .split(',')
+                              .map((value) => value.trim())
+                              .filter((value) => value.length > 0),
+                            outboundTransfersEnabled,
+                            outboundMode,
+                            outboundWhitelistAddresses: outboundWhitelistInput
+                              .split(',')
+                              .map((value) => value.trim())
+                              .filter((value) => value.length > 0)
+                          }).then(() => Promise.resolve()),
+                        'Transfer policy saved.',
+                        'sensitive_action'
+                      )
+                    }
+                  >
+                    Save Transfer Policy
+                  </button>
+                </div>
+              </article>
+
+              <article className="management-card">
+                <h3>Chain Access</h3>
+                <p className="muted">Enable or disable agent trading and wallet-send for the active chain.</p>
+                <p className="muted">
+                  Active chain: <strong>{activeChainLabel}</strong>
+                </p>
+                <div className="toolbar">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={management.data.chainPolicy?.chainEnabled ?? true}
+                      disabled={chainUpdatePending}
+                      onChange={(event) => {
+                        const next = Boolean(event.target.checked);
+                        setChainUpdatePending(true);
+                        void (async () => {
+                          await runManagementAction(
+                            () =>
+                              managementPost('/api/v1/management/chains/update', {
+                                agentId,
+                                chainKey: activeChainKey,
+                                chainEnabled: next
+                              }).then(() => Promise.resolve()),
+                            next ? 'Chain enabled.' : 'Chain disabled.',
+                            'sensitive_action'
+                          );
+                          setChainUpdatePending(false);
+                        })();
+                      }}
+                    />{' '}
+                    Chain enabled
+                  </label>
+                  <span className="muted">
+                    {management.data.chainPolicy?.updatedAt ? `Updated ${formatUtc(management.data.chainPolicy.updatedAt)} UTC` : 'Default: enabled'}
+                  </span>
+                </div>
+                {management.data.chainPolicy?.chainEnabled ? (
+                  <p className="muted">Agent trading + wallet send are allowed on this chain.</p>
+                ) : (
+                  <p className="warning-banner">Disabled: agent cannot trade or wallet-send on this chain.</p>
+                )}
+              </article>
+
+              <article className="management-card">
+                <h3>Deposit and Withdraw</h3>
+                <p className="muted">Deposit address and withdrawals for the active chain.</p>
+                {depositData?.chains?.[0]?.depositAddress ? (
+                  <button
+                    type="button"
+                    className="copy-row"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(depositData.chains[0].depositAddress);
+                        setDepositCopied(true);
+                        window.setTimeout(() => setDepositCopied(false), 1000);
+                      } catch {
+                        setDepositCopied(false);
+                      }
+                    }}
+                    aria-label="Copy deposit address"
+                    title="Copy deposit address"
+                  >
+                    <span className="copy-row-icon">
+                      <CopyIcon />
+                    </span>
+                    <span className="copy-row-text">
+                      {depositData.chains[0].chainKey}: {shortenAddress(depositData.chains[0].depositAddress)}
+                    </span>
+                    <span className="copy-row-hint">{depositCopied ? 'Copied' : 'Copy'}</span>
+                  </button>
+                ) : (
+                  <p className="muted">Loading deposit address...</p>
+                )}
+
+                <div className="toolbar" style={{ marginTop: '0.6rem' }}>
+                  <input
+                    value={withdrawDestination}
+                    onChange={(event) => setWithdrawDestination(event.target.value)}
+                    placeholder="Withdraw destination 0x..."
+                  />
+                  <input value={withdrawAmount} onChange={(event) => setWithdrawAmount(event.target.value)} placeholder="Amount (ETH)" />
                 </div>
                 <div className="toolbar">
                   <button
@@ -746,24 +1080,193 @@ export default function AgentPublicProfilePage() {
                     onClick={() =>
                       void runManagementAction(
                         () =>
-                          managementPost('/api/v1/management/limit-orders', {
+                          managementPost('/api/v1/management/withdraw/destination', {
                             agentId,
-                            chainKey: orderChainKey,
-                            mode: 'real',
-                            side: orderSide,
-                            tokenIn: orderTokenIn,
-                            tokenOut: orderTokenOut,
-                            amountIn: orderAmountIn,
-                            limitPrice: orderLimitPrice,
-                            slippageBps: Number(orderSlippageBps)
+                            chainKey: activeChainKey,
+                            destination: withdrawDestination
                           }).then(() => Promise.resolve()),
-                        'Limit order created.'
+                        'Withdraw destination saved.',
+                        'withdraw'
                       )
                     }
                   >
-                    Create Limit Order
+                    Save Destination
+                  </button>
+                  <button
+                    type="button"
+                    className="theme-toggle"
+                    onClick={() =>
+                      void runManagementAction(
+                        () =>
+                          managementPost('/api/v1/management/withdraw', {
+                            agentId,
+                            chainKey: activeChainKey,
+                            asset: 'ETH',
+                            amount: withdrawAmount,
+                            destination: withdrawDestination
+                          }).then(() => Promise.resolve()),
+                        'Withdraw request submitted.',
+                        'withdraw'
+                      )
+                    }
+                  >
+                    Request Withdraw
                   </button>
                 </div>
+              </article>
+
+              <article className="management-card">
+                <h3>Policy Controls</h3>
+                <div className="toolbar">
+                  <label>
+                    <span className="muted">Approval mode </span>
+                    <select
+                      value={policyApprovalMode}
+                      onChange={(event) => setPolicyApprovalMode((event.target.value as 'per_trade' | 'auto') ?? 'per_trade')}
+                    >
+                      <option value="per_trade">per_trade</option>
+                      <option value="auto">auto</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="toolbar">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={policyDailyCapUsdEnabled}
+                      onChange={(event) => setPolicyDailyCapUsdEnabled(event.target.checked)}
+                    />{' '}
+                    Daily USD cap enabled
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={policyDailyTradeCapEnabled}
+                      onChange={(event) => setPolicyDailyTradeCapEnabled(event.target.checked)}
+                    />{' '}
+                    Daily trade-count cap enabled
+                  </label>
+                </div>
+                <div className="toolbar">
+                  <input value={policyMaxTradeUsd} onChange={(event) => setPolicyMaxTradeUsd(event.target.value)} placeholder="Max Trade USD" />
+                  <input
+                    value={policyMaxDailyUsd}
+                    onChange={(event) => setPolicyMaxDailyUsd(event.target.value)}
+                    placeholder="Max Daily USD"
+                    disabled={!policyDailyCapUsdEnabled}
+                  />
+                  <input
+                    value={policyMaxDailyTradeCount}
+                    onChange={(event) => setPolicyMaxDailyTradeCount(event.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="Max Daily Trades"
+                    disabled={!policyDailyTradeCapEnabled}
+                  />
+                </div>
+                <div className="toolbar">
+                  <input
+                    value={policyAllowedTokensInput}
+                    onChange={(event) => setPolicyAllowedTokensInput(event.target.value)}
+                    placeholder="Comma-separated allowed token addresses"
+                  />
+                </div>
+                <div className="toolbar">
+                  <button
+                    type="button"
+                    className="theme-toggle"
+                    onClick={() =>
+                      void runManagementAction(
+                        () =>
+                          managementPost('/api/v1/management/policy/update', {
+                            agentId,
+                            mode: 'real',
+                            approvalMode: policyApprovalMode,
+                            maxTradeUsd: policyMaxTradeUsd,
+                            maxDailyUsd: policyMaxDailyUsd,
+                            dailyCapUsdEnabled: policyDailyCapUsdEnabled,
+                            dailyTradeCapEnabled: policyDailyTradeCapEnabled,
+                            maxDailyTradeCount: policyDailyTradeCapEnabled ? Number(policyMaxDailyTradeCount || '0') : null,
+                            allowedTokens: policyAllowedTokensInput
+                              .split(',')
+                              .map((value) => value.trim())
+                              .filter((value) => value.length > 0)
+                          }).then(() => Promise.resolve()),
+                        'Policy saved.',
+                        'sensitive_action'
+                      )
+                    }
+                  >
+                    Save Policy
+                  </button>
+                </div>
+                <div className="toolbar">
+                  <button
+                    type="button"
+                    className="theme-toggle"
+                    onClick={() =>
+                      void runManagementAction(
+                        () =>
+                          managementPost('/api/v1/management/approvals/scope', {
+                            agentId,
+                            chainKey: activeChainKey,
+                            scope: 'global',
+                            action: 'grant',
+                            maxAmountUsd: '50',
+                            slippageBpsMax: 50,
+                            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+                          }).then(() => Promise.resolve()),
+                        'Global approval scope updated.',
+                        'approval_scope_change'
+                      )
+                    }
+                  >
+                    Grant Global Approval
+                  </button>
+                </div>
+              </article>
+
+              <article className="management-card">
+                <h3>Usage Progress</h3>
+                <p className="muted">UTC day: {management.data.dailyUsage.utcDay}</p>
+                <div className="usage-row">
+                  <div className="muted">Used Today USD</div>
+                  <div>
+                    {management.data.dailyUsage.dailySpendUsd} / {policyDailyCapUsdEnabled ? policyMaxDailyUsd : 'No cap'}
+                  </div>
+                  <div className="usage-bar">
+                    <div
+                      className="usage-bar-fill"
+                      style={{
+                        width: `${usagePercent(
+                          Number(management.data.dailyUsage.dailySpendUsd || '0'),
+                          policyMaxDailyUsd,
+                          policyDailyCapUsdEnabled
+                        )}%`
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="usage-row">
+                  <div className="muted">Filled Trades Today</div>
+                  <div>
+                    {management.data.dailyUsage.dailyFilledTrades} / {policyDailyTradeCapEnabled ? policyMaxDailyTradeCount : 'No cap'}
+                  </div>
+                  <div className="usage-bar">
+                    <div
+                      className="usage-bar-fill"
+                      style={{
+                        width: `${usagePercent(
+                          management.data.dailyUsage.dailyFilledTrades,
+                          policyMaxDailyTradeCount,
+                          policyDailyTradeCapEnabled
+                        )}%`
+                      }}
+                    />
+                  </div>
+                </div>
+              </article>
+
+              <article className="management-card">
+                <h3>Trading Operations</h3>
                 {limitOrders.length === 0 ? <p className="muted">No limit orders.</p> : null}
                 {limitOrders.map((item) => (
                   <div key={item.orderId} className="queue-item">
@@ -796,139 +1299,7 @@ export default function AgentPublicProfilePage() {
                     ) : null}
                   </div>
                 ))}
-              </article>
-
-              <article className="management-card">
-                <h3>Step-up Status</h3>
-                <p>
-                  {management.data.stepup.active ? 'Active' : 'Inactive'}
-                  {stepupRemaining ? ` (${stepupRemaining} remaining)` : ''}
-                </p>
-                <div className="toolbar">
-                  <button
-                    className="theme-toggle"
-                    type="button"
-                    onClick={() =>
-                      void runManagementAction(
-                        () => managementPost('/api/v1/management/stepup/challenge', { agentId, issuedFor: 'withdraw' }).then(() => Promise.resolve()),
-                        'Step-up challenge issued. Check code response in API logs for this MVP path.'
-                      )
-                    }
-                  >
-                    Request Step-up Code
-                  </button>
-                </div>
-                <div className="toolbar">
-                  <input value={stepupCode} onChange={(event) => setStepupCode(event.target.value)} placeholder="Step-up code" />
-                  <button
-                    className="theme-toggle"
-                    type="button"
-                    onClick={() =>
-                      void runManagementAction(
-                        () => managementPost('/api/v1/management/stepup/verify', { agentId, code: stepupCode }).then(() => Promise.resolve()),
-                        'Step-up verified.'
-                      )
-                    }
-                  >
-                    Verify
-                  </button>
-                </div>
-              </article>
-
-              <article className="management-card">
-                <h3>Owner Link</h3>
-                <p className="muted">Generate a short-lived one-time owner URL for management bootstrap.</p>
-                <div className="toolbar">
-                  <button
-                    className="theme-toggle"
-                    type="button"
-                    onClick={() =>
-                      void runManagementAction(
-                        () =>
-                          managementPost('/api/v1/management/owner-link', {
-                            schemaVersion: 1,
-                            agentId,
-                            ttlSeconds: 600
-                          }).then((payload) => {
-                            const data = payload as { managementUrl?: string; expiresAt?: string };
-                            if (data.managementUrl && data.expiresAt) {
-                              setOwnerLink({ managementUrl: data.managementUrl, expiresAt: data.expiresAt });
-                            }
-                            return Promise.resolve();
-                          }),
-                        'Owner link generated.'
-                      )
-                    }
-                  >
-                    Generate Owner Link
-                  </button>
-                </div>
-                {ownerLink ? (
-                  <div className="queue-item">
-                    <div>
-                      <div className="muted">Expires: {formatUtc(ownerLink.expiresAt)} UTC</div>
-                      <div className="hard-wrap">{ownerLink.managementUrl}</div>
-                    </div>
-                  </div>
-                ) : null}
-              </article>
-
-              <article className="management-card">
-                <h3>Outbound Transfers</h3>
-                <p className="muted">Applies to native and token transfers from agent wallet runtime.</p>
-                <div className="toolbar">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={outboundTransfersEnabled}
-                      onChange={(event) => setOutboundTransfersEnabled(event.target.checked)}
-                    />{' '}
-                    Enabled
-                  </label>
-                  <select
-                    value={outboundMode}
-                    onChange={(event) => setOutboundMode((event.target.value as 'disabled' | 'allow_all' | 'whitelist') ?? 'disabled')}
-                  >
-                    <option value="disabled">disabled</option>
-                    <option value="allow_all">allow_all</option>
-                    <option value="whitelist">whitelist</option>
-                  </select>
-                </div>
-                <div className="toolbar">
-                  <input
-                    value={outboundWhitelistInput}
-                    onChange={(event) => setOutboundWhitelistInput(event.target.value)}
-                    placeholder="Comma-separated whitelist addresses"
-                  />
-                </div>
-                <div className="toolbar">
-                  <button
-                    className="theme-toggle"
-                    type="button"
-                    onClick={() =>
-                      void runManagementAction(
-                        () =>
-                          managementPost('/api/v1/management/policy/update', {
-                            agentId,
-                            mode: 'real',
-                            approvalMode: management.data.latestPolicy?.approval_mode ?? 'per_trade',
-                            maxTradeUsd: management.data.latestPolicy?.max_trade_usd ?? '50',
-                            maxDailyUsd: management.data.latestPolicy?.max_daily_usd ?? '250',
-                            allowedTokens: management.data.latestPolicy?.allowed_tokens ?? [],
-                            outboundTransfersEnabled,
-                            outboundMode,
-                            outboundWhitelistAddresses: outboundWhitelistInput
-                              .split(',')
-                              .map((value) => value.trim())
-                              .filter((value) => value.length > 0)
-                          }).then(() => Promise.resolve()),
-                        'Outbound transfer policy saved.'
-                      )
-                    }
-                  >
-                    Save Outbound Policy (Step-up Required)
-                  </button>
-                </div>
+                <p className="muted">Limit order creation is agent-driven. Owners can review and cancel orders here.</p>
               </article>
 
               <article className="management-card">
@@ -944,14 +1315,20 @@ export default function AgentPublicProfilePage() {
                       <button
                         type="button"
                         className="theme-toggle"
+                        disabled={!management.data.chainPolicy?.chainEnabled && item.chain_key === activeChainKey}
                         onClick={() =>
                           void runManagementAction(
-                            () => managementPost('/api/v1/management/approvals/decision', { agentId, tradeId: item.trade_id, decision: 'approve' }).then(() => Promise.resolve()),
+                            () =>
+                              managementPost('/api/v1/management/approvals/decision', {
+                                agentId,
+                                tradeId: item.trade_id,
+                                decision: 'approve'
+                              }).then(() => Promise.resolve()),
                             `Approved ${item.trade_id}`
                           )
                         }
                       >
-                        Approve
+                        Approve Trade
                       </button>
                       <button
                         type="button"
@@ -969,7 +1346,7 @@ export default function AgentPublicProfilePage() {
                           )
                         }
                       >
-                        Reject
+                        Reject Trade
                       </button>
                     </div>
                   </div>
@@ -977,143 +1354,20 @@ export default function AgentPublicProfilePage() {
               </article>
 
               <article className="management-card">
-                <h3>Policy Controls</h3>
-                <div className="toolbar">
-                  <button
-                    type="button"
-                    className="theme-toggle"
-                    onClick={() =>
-                      void runManagementAction(
-                        () =>
-                          managementPost('/api/v1/management/policy/update', {
-                            agentId,
-                            mode: 'real',
-                            approvalMode: management.data.latestPolicy?.approval_mode ?? 'per_trade',
-                            maxTradeUsd: management.data.latestPolicy?.max_trade_usd ?? '50',
-                            maxDailyUsd: management.data.latestPolicy?.max_daily_usd ?? '250',
-                            allowedTokens: management.data.latestPolicy?.allowed_tokens ?? []
-                          }).then(() => Promise.resolve()),
-                        'Policy updated.'
-                      )
-                    }
-                  >
-                    Save Current Policy
-                  </button>
-                </div>
-                <div className="toolbar">
-                  <button
-                    type="button"
-                    className="theme-toggle"
-                    onClick={() =>
-                      void runManagementAction(
-                        () => managementPost('/api/v1/management/pause', { agentId }).then(() => Promise.resolve()),
-                        'Agent paused.'
-                      )
-                    }
-                  >
-                    Pause
-                  </button>
-                  <button
-                    type="button"
-                    className="theme-toggle"
-                    onClick={() =>
-                      void runManagementAction(
-                        () => managementPost('/api/v1/management/resume', { agentId }).then(() => Promise.resolve()),
-                        'Agent resumed.'
-                      )
-                    }
-                  >
-                    Resume
-                  </button>
-                </div>
-                <div className="toolbar">
-                  <button
-                    type="button"
-                    className="theme-toggle"
-                    onClick={() =>
-                      void runManagementAction(
-                        () =>
-                          managementPost('/api/v1/management/approvals/scope', {
-                            agentId,
-                            chainKey: 'base_sepolia',
-                            scope: 'global',
-                            action: 'grant',
-                            maxAmountUsd: '50',
-                            slippageBpsMax: 50,
-                            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-                          }).then(() => Promise.resolve()),
-                        'Global approval scope updated.'
-                      )
-                    }
-                  >
-                    Grant Global Approval
-                  </button>
-                </div>
-              </article>
-
-              <article className="management-card">
-                <h3>Withdraw Controls</h3>
-                <div className="toolbar">
-                  <input
-                    value={withdrawDestination}
-                    onChange={(event) => setWithdrawDestination(event.target.value)}
-                    placeholder="Destination 0x..."
-                  />
-                  <button
-                    type="button"
-                    className="theme-toggle"
-                    onClick={() =>
-                      void runManagementAction(
-                        () =>
-                          managementPost('/api/v1/management/withdraw/destination', {
-                            agentId,
-                            chainKey: 'base_sepolia',
-                            destination: withdrawDestination
-                          }).then(() => Promise.resolve()),
-                        'Withdraw destination saved.'
-                      )
-                    }
-                  >
-                    Save Destination
-                  </button>
-                </div>
-                <div className="toolbar">
-                  <input value={withdrawAmount} onChange={(event) => setWithdrawAmount(event.target.value)} placeholder="Amount" />
-                  <button
-                    type="button"
-                    className="theme-toggle"
-                    onClick={() =>
-                      void runManagementAction(
-                        () =>
-                          managementPost('/api/v1/management/withdraw', {
-                            agentId,
-                            chainKey: 'base_sepolia',
-                            asset: 'ETH',
-                            amount: withdrawAmount,
-                            destination: withdrawDestination
-                          }).then(() => Promise.resolve()),
-                        'Withdraw request submitted.'
-                      )
-                    }
-                  >
-                    Request Withdraw
-                  </button>
-                </div>
-              </article>
-
-              <article className="management-card">
-                <h3>Management Audit Log</h3>
-                {management.data.auditLog.length === 0 ? <p className="muted">No audit entries.</p> : null}
-                <div className="audit-list">
-                  {management.data.auditLog.map((entry) => (
-                    <div className="audit-item" key={entry.audit_id}>
-                      <div>
-                        <strong>{entry.action_type}</strong> ({entry.action_status})
+                <details className="mgmt-details">
+                  <summary>Management Audit Log</summary>
+                  {management.data.auditLog.length === 0 ? <p className="muted">No audit entries.</p> : null}
+                  <div className="audit-list">
+                    {management.data.auditLog.map((entry) => (
+                      <div className="audit-item" key={entry.audit_id}>
+                        <div>
+                          <strong>{entry.action_type}</strong> ({entry.action_status})
+                        </div>
+                        <div className="muted">{formatUtc(entry.created_at)} UTC</div>
                       </div>
-                      <div className="muted">{formatUtc(entry.created_at)} UTC</div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                </details>
               </article>
             </div>
           ) : null}

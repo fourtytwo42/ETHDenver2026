@@ -122,9 +122,34 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
+  /api/v1/agent/stepup/challenge:
+    post:
+      summary: Issue a one-time step-up code for the authenticated agent to share with authorized owner.
+      security:
+        - agentBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agentId]
+              properties:
+                agentId:
+                  type: string
+                issuedFor:
+                  type: string
+                  enum: [withdraw, approval_scope_change, sensitive_action]
+      responses:
+        '200':
+          description: Step-up challenge created.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/agent/transfers/policy:
     get:
-      summary: Read effective outbound transfer policy for authenticated agent.
+      summary: Read effective outbound transfer policy and trade-cap policy for authenticated agent.
       security:
         - agentBearer: []
       parameters:
@@ -136,8 +161,28 @@ paths:
             default: base_sepolia
       responses:
         '200':
-          description: Outbound transfer policy payload.
+          description: Outbound transfer policy payload including chain access, effective trade caps, and UTC-day usage.
         '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/agent/trade-usage:
+    post:
+      summary: Report UTC-day trade usage deltas for authenticated agent (idempotent).
+      security:
+        - agentBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentTradeUsageRequest'
+      responses:
+        '200':
+          description: Usage delta accepted and aggregated.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/agent/faucet/request:
     post:
@@ -571,7 +616,7 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/management/agent-state:
     get:
-      summary: Read authorized management state for one agent.
+      summary: Read authorized management state for one agent, including chain access, trade caps, and UTC-day usage.
       security:
         - managementCookie: []
       parameters:
@@ -580,9 +625,36 @@ paths:
           required: true
           schema:
             type: string
+        - name: chainKey
+          in: query
+          required: false
+          schema:
+            type: string
+            default: base_sepolia
       responses:
         '200':
           description: Management state payload.
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/management/chains/update:
+    post:
+      summary: Enable or disable chain access for an agent (per-chain).
+      description: Disabling is allowed without step-up. Enabling requires an active step-up session and may return `stepup_required`.
+      security:
+        - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementChainUpdateRequest'
+      responses:
+        '200':
+          description: Chain access updated.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/management/audit:
@@ -894,6 +966,12 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: includeMetrics
+          in: query
+          description: Include latest nullable 7d real/all metrics object on each agent row.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Leaderboard results.
@@ -998,9 +1076,14 @@ paths:
             minimum: 1
             maximum: 500
             default: 100
+        - name: agentId
+          in: query
+          required: false
+          schema:
+            type: string
       responses:
         '200':
-          description: Public activity list (items may include `chain_key`, `pair`, `token_in`, and `token_out` when available).
+          description: Public activity list (items may include `chain_key`, `pair`, `token_in`, and `token_out` when available). When `agentId` is provided, results are filtered server-side.
         '429':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/chat/messages:
@@ -1540,6 +1623,17 @@ components:
           type: string
         reasonMessage:
           type: string
+    ManagementChainUpdateRequest:
+      type: object
+      required: [agentId, chainKey, chainEnabled]
+      properties:
+        agentId:
+          type: string
+        chainKey:
+          type: string
+          description: Chain key (e.g. `base_sepolia`).
+        chainEnabled:
+          type: boolean
     ManagementPolicyUpdateRequest:
       type: object
       required: [agentId, mode, approvalMode, maxTradeUsd, maxDailyUsd, allowedTokens]
@@ -1557,6 +1651,13 @@ components:
           type: string
         maxDailyUsd:
           type: string
+        dailyCapUsdEnabled:
+          type: boolean
+        dailyTradeCapEnabled:
+          type: boolean
+        maxDailyTradeCount:
+          type: integer
+          nullable: true
         allowedTokens:
           type: array
           items:
@@ -1571,6 +1672,25 @@ components:
           items:
             type: string
             pattern: '^0x[a-fA-F0-9]{40}$'
+    AgentTradeUsageRequest:
+      type: object
+      required: [schemaVersion, agentId, chainKey, utcDay, spendUsdDelta, filledTradesDelta]
+      properties:
+        schemaVersion:
+          type: integer
+          enum: [1]
+        agentId:
+          type: string
+        chainKey:
+          type: string
+        utcDay:
+          type: string
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        spendUsdDelta:
+          type: string
+        filledTradesDelta:
+          type: integer
+          minimum: 0
     ManagementApprovalScopeRequest:
       type: object
       required: [agentId, chainKey, scope, action]

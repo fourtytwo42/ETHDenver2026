@@ -119,6 +119,43 @@ Harden the agent runtime/skill command surface to prevent hangs, improve identit
   - no changes to one-time owner-link semantics,
   - no relaxation of host-scoped cookie/session security model.
 
+---
+
+# Slice 32 Spec: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)
+
+## Goal
+Add an owner-managed per-agent, per-chain enable/disable switch. If a chain is disabled:
+- agent runtime blocks trade and `wallet-send` on that chain with structured `code=chain_disabled`
+- server rejects trade/limit-order execution paths on that chain with a policy-style error
+- owner withdraw remains available for safety recovery
+- enabling chain access requires step-up; disabling does not
+
+## Success Criteria
+1. DB has `agent_chain_policies` with unique `(agent_id, chain_key)` and audited `updated_by_management_session_id`.
+2. API:
+   - `POST /api/v1/management/chains/update` upserts chain access.
+   - `GET /api/v1/management/agent-state` accepts optional `chainKey` and returns `chainPolicy`.
+   - `GET /api/v1/agent/transfers/policy` returns `chainEnabled` fields.
+3. Enforcement:
+   - Server blocks trades/limit-orders when chain disabled (`code=chain_disabled`).
+   - Runtime blocks `trade` and `wallet-send` when owner chain access disabled.
+4. UI:
+   - `/agents/:id` management rail shows “Chain Access” toggle for the active chain selector context.
+   - Enabling prompts step-up only when required (event-driven).
+5. Docs/artifacts are synced (source-of-truth, openapi, schemas, tracker/roadmap, context/spec/tasks/acceptance).
+
+## Non-Goals
+1. Auto-cancelling open limit orders on disable (orders are frozen; owner can cancel manually).
+2. Blocking owner withdraw when chain is disabled.
+
+## Acceptance Checks
+- `npm run db:parity`
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:verify`
+- `npm run build`
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
 ## Management Incident Follow-up (2026-02-14, gate hardening)
 - Objective: make static-asset verification executable as an explicit release-gate command and re-confirm production mismatch evidence.
 - In scope:
@@ -238,6 +275,72 @@ Refine dashboard clarity for the current network-only release by removing redund
 1. Preserve canonical status vocabulary (`active`, `offline`, `degraded`, `paused`, `deactivated`).
 2. Preserve API route compatibility; payload additions are optional/append-only.
 3. Keep dark/light theme support and responsive requirements from Slice 27.
+
+## Acceptance Checks
+- `npm run db:parity`
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:verify`
+- `npm run build`
+
+---
+
+# Slice 30 Spec: Owner-Managed Daily Trade Caps + Usage Visibility (Trades Only)
+
+## Goal
+Add owner-managed per-agent, per-chain UTC-day trade caps (USD + filled-trade count), expose owner-only usage progress on `/agents/:id`, and enforce these caps in both runtime and server trade paths.
+
+## Success Criteria
+1. Owner policy supports `dailyCapUsdEnabled`, `dailyTradeCapEnabled`, and `maxDailyTradeCount` in addition to existing fields.
+2. Runtime enforces trade caps for `trade spot`, `trade execute`, and limit-order real fills, with cached fail-closed behavior.
+3. Server enforces cap checks on `POST /api/v1/trades/proposed`, `POST /api/v1/limit-orders`, and `POST /api/v1/limit-orders/{orderId}/status` (filled path).
+4. Runtime reports usage via idempotent `POST /api/v1/agent/trade-usage`, with queue/replay on outage.
+5. `/agents/:id` management rail shows cap toggles/values and UTC-day usage (owner-only).
+6. Canonical docs and schemas remain synchronized.
+
+## Non-Goals
+1. No cap accounting changes for `wallet-send` / `wallet-send-token`.
+2. No public exposure of owner cap values/usage.
+3. No dependency additions.
+
+## Constraints / Safety
+1. UTC day is canonical reset boundary.
+2. Cap accounting is scoped to `agent + chain + utc_day`.
+3. If cap is disabled, that cap does not block execution even if a value is present.
+
+## Acceptance Checks
+- `npm run db:parity`
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:verify`
+- `npm run build`
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+---
+
+# Slice 31 Spec: Agents + Agent Management UX Refinement (Operational Clean)
+
+## Goal
+Refine `/agents` and `/agents/:id` into a production-quality operations surface while preserving the one-site model, existing management behavior, and responsive constraints.
+
+## Success Criteria
+1. `/agents` renders card-first directory UX with KPI summaries and optional desktop table fallback.
+2. `GET /api/v1/public/agents` supports optional `includeMetrics=true` and returns nullable `latestMetrics` per row.
+3. `GET /api/v1/public/activity` supports optional `agentId` for server-side filtering.
+4. `/agents/:id` keeps long-scroll structure and improves public trades/activity readability.
+5. `/agents/:id` management rail is regrouped by operational priority and uses progressive disclosure for advanced sections.
+6. Existing management actions continue to work without contract regressions.
+
+## Non-Goals
+1. No route split/tabs architecture change for profile management.
+2. No auth/session model changes.
+3. No DB schema/migration changes.
+4. No dependency additions.
+
+## Constraints / Safety
+1. Preserve exact status vocabulary (`active`, `offline`, `degraded`, `paused`, `deactivated`).
+2. Keep management controls authorized-only under existing session guard.
+3. Preserve sticky management rail desktop behavior and stacked mobile behavior.
 
 ## Acceptance Checks
 - `npm run db:parity`

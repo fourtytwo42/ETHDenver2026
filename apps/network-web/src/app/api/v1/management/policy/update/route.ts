@@ -17,6 +17,9 @@ type PolicyUpdateRequest = {
   maxTradeUsd: string;
   maxDailyUsd: string;
   allowedTokens: string[];
+  dailyCapUsdEnabled?: boolean;
+  dailyTradeCapEnabled?: boolean;
+  maxDailyTradeCount?: number | null;
   outboundTransfersEnabled?: boolean;
   outboundMode?: 'disabled' | 'allow_all' | 'whitelist';
   outboundWhitelistAddresses?: string[];
@@ -78,6 +81,9 @@ export async function POST(req: NextRequest) {
     }
 
     const snapshotId = makeId('pol');
+    const dailyCapUsdEnabled = body.dailyCapUsdEnabled ?? true;
+    const dailyTradeCapEnabled = body.dailyTradeCapEnabled ?? true;
+    const maxDailyTradeCount = body.maxDailyTradeCount ?? null;
     const outboundTransfersEnabled = body.outboundTransfersEnabled ?? false;
     const outboundMode = body.outboundMode ?? (outboundTransfersEnabled ? 'allow_all' : 'disabled');
     const outboundWhitelistAddresses = normalizeWhitelist(body.outboundWhitelistAddresses);
@@ -86,10 +92,22 @@ export async function POST(req: NextRequest) {
       await client.query(
         `
         insert into agent_policy_snapshots (
-          snapshot_id, agent_id, mode, approval_mode, max_trade_usd, max_daily_usd, allowed_tokens, created_at
-        ) values ($1, $2, $3::policy_mode, $4::policy_approval_mode, $5::numeric, $6::numeric, $7::jsonb, now())
+          snapshot_id, agent_id, mode, approval_mode, max_trade_usd, max_daily_usd, allowed_tokens,
+          daily_cap_usd_enabled, daily_trade_cap_enabled, max_daily_trade_count, created_at
+        ) values ($1, $2, $3::policy_mode, $4::policy_approval_mode, $5::numeric, $6::numeric, $7::jsonb, $8, $9, $10, now())
         `,
-        [snapshotId, body.agentId, body.mode, body.approvalMode, body.maxTradeUsd, body.maxDailyUsd, JSON.stringify(body.allowedTokens)]
+        [
+          snapshotId,
+          body.agentId,
+          body.mode,
+          body.approvalMode,
+          body.maxTradeUsd,
+          body.maxDailyUsd,
+          JSON.stringify(body.allowedTokens),
+          dailyCapUsdEnabled,
+          dailyTradeCapEnabled,
+          maxDailyTradeCount
+        ]
       );
 
       await client.query(
@@ -137,6 +155,9 @@ export async function POST(req: NextRequest) {
             maxTradeUsd: body.maxTradeUsd,
             maxDailyUsd: body.maxDailyUsd,
             allowedTokens: body.allowedTokens,
+            dailyCapUsdEnabled,
+            dailyTradeCapEnabled,
+            maxDailyTradeCount,
             outboundTransfersEnabled,
             outboundMode
           })
@@ -159,6 +180,9 @@ export async function POST(req: NextRequest) {
             maxTradeUsd: body.maxTradeUsd,
             maxDailyUsd: body.maxDailyUsd,
             allowedTokens: body.allowedTokens,
+            dailyCapUsdEnabled,
+            dailyTradeCapEnabled,
+            maxDailyTradeCount,
             outboundTransfersEnabled,
             outboundMode,
             outboundWhitelistAddresses,

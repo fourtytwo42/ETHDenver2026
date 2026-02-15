@@ -1,69 +1,78 @@
 # X-Claw Context Pack
 
-## 1) Goal (Active: Slice 29)
-- Primary objective: complete `Slice 29: Dashboard Chain-Scoped UX + Activity Detail + Chat-Style Room`.
+## 1) Goal (Active: Slice 32)
+- Primary objective: complete `Slice 32: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)`.
 - Success criteria:
-  - dashboard removes redundant chain-name text for single-chain release context
-  - dashboard trade room and live activity render active-chain entries only (`base_sepolia`)
-  - live activity shows traded pair/direction detail where metadata exists
-  - trade room renders chat-style cards while staying responsive/mobile-safe
-  - docs/artifacts remain synchronized (source-of-truth + tracker + roadmap + context/spec/tasks/acceptance)
+  - owner can enable/disable chain access per agent + per chain from `/agents/:id`
+  - when disabled, agent runtime blocks trade and `wallet-send` actions with `code=chain_disabled`
+  - server rejects trade/limit-order execution paths on disabled chains with structured policy errors
+  - enabling chain requires step-up; disabling does not
+  - source-of-truth + canonical docs remain synchronized (schemas/openapi/tracker/roadmap)
   - required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`
 
 ## 2) Constraints
 - Canonical authority: `docs/XCLAW_SOURCE_OF_TRUTH.md`.
-- Strict slice order: continue sequentially after Slice 28.
-- Runtime boundary: Node/Next.js for web/API, Python-first for agent/OpenClaw runtime.
-- No new dependencies without explicit justification.
-- No API contract breakage for existing public routes.
+- Strict slice order: Slice 32 follows completed Slice 31.
+- One-site model remains fixed (`/agents/:id` public + auth-gated management).
+- No dependency additions.
+- Migration is required for this slice (`agent_chain_policies`).
 
 ## 3) Contract Impact
-- Dashboard behavior contract updates:
-  - single-chain UI context on `/` (no redundant chain chip text in dashboard controls),
-  - chain-scoped feed rendering for trade room/live activity.
-- Public activity payload extension:
-  - includes optional `pair`, `token_in`, `token_out`, and `chain_key` to support richer event cards.
+- Management write addition:
+  - `POST /api/v1/management/chains/update`
+- Management read change (backward compatible):
+  - `GET /api/v1/management/agent-state` adds optional `chainKey`
+- Agent policy read change:
+  - `GET /api/v1/agent/transfers/policy` adds `chainEnabled` fields
+- No auth model changes.
 
-## 4) Files and Boundaries (Slice 29 allowlist)
-- Source-of-truth + process:
+## 4) Files and Boundaries (Slice 32 allowlist)
+- Web/API/UI:
+  - `apps/network-web/src/app/api/v1/management/chains/update/route.ts`
+  - `apps/network-web/src/app/api/v1/management/agent-state/route.ts`
+  - `apps/network-web/src/app/api/v1/agent/transfers/policy/route.ts`
+  - `apps/network-web/src/app/api/v1/trades/proposed/route.ts`
+  - `apps/network-web/src/app/api/v1/trades/[tradeId]/status/route.ts`
+  - `apps/network-web/src/app/api/v1/limit-orders/route.ts`
+  - `apps/network-web/src/app/api/v1/limit-orders/[orderId]/status/route.ts`
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+- Canonical docs/process:
   - `docs/XCLAW_SOURCE_OF_TRUTH.md`
   - `docs/XCLAW_SLICE_TRACKER.md`
   - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/api/openapi.v1.yaml`
+  - `docs/api/WALLET_COMMAND_CONTRACT.md`
   - `docs/CONTEXT_PACK.md`
-- Handoff artifacts:
   - `spec.md`
   - `tasks.md`
   - `acceptance.md`
-- Web UI/public API:
-  - `apps/network-web/src/app/api/v1/public/activity/route.ts`
-  - `apps/network-web/src/app/page.tsx`
-  - `apps/network-web/src/app/globals.css`
+- Data model:
+  - `infrastructure/migrations/0009_slice32_agent_chain_enable.sql`
+- Shared schemas:
+  - `packages/shared-schemas/json/management-chain-update-request.schema.json`
 
 ## 5) Invariants
-- Error contract remains `code`, `message`, optional `actionHint`, optional `details`, and preserves `requestId` where provided.
-- Canonical status vocabulary remains exactly `active`, `offline`, `degraded`, `paused`, `deactivated`.
-- Agent key custody remains local-only.
+- Status vocabulary remains exactly: `active`, `offline`, `degraded`, `paused`, `deactivated`.
+- Authorized management controls remain owner/session-gated only.
+- Dark/light themes remain supported with dark default.
+- Existing management functionality remains available (pause/resume, policy, approvals, limit orders, withdraw, audit).
 
 ## 6) Verification Plan
-- Global gates:
+- Required gates:
   - `npm run db:parity`
   - `npm run seed:reset`
   - `npm run seed:load`
   - `npm run seed:verify`
   - `npm run build`
-- Dashboard behavior verification:
-  - confirm no dashboard chain chip text in toolbar
-  - confirm trade room + live activity only show `base_sepolia` rows
-  - confirm live activity cards include pair or token direction details
+- Feature checks:
+  - `/agents/:id` chain access toggle persists per chain and defaults to enabled when unset
+  - trade propose is rejected when chain is disabled (`code=chain_disabled`)
+  - limit-order create/fill is rejected when chain is disabled
+  - runtime rejects trade + wallet-send when `chainEnabled == false` in policy payload
 
 ## 7) Evidence + Rollback
-- Capture outputs and command evidence in `acceptance.md` (Slice 28 section).
+- Capture command outputs and UX evidence in `acceptance.md`.
 - Rollback plan:
-  1. revert Slice 28 touched files only,
-  2. rerun required gates + runtime tests,
-  3. re-verify network-only UI/skill behavior and compatibility query handling.
-
----
-
-## Archive (Prior Context Packs)
-- Slice 17 context pack content was superseded by later slices and is intentionally removed from the active section above.
+  1. revert Slice 32 touched files only,
+  2. rerun required gates,
+  3. confirm chain access toggle disappears and trade paths no longer consult owner chain policy.

@@ -6,6 +6,8 @@ import { errorResponse, internalErrorResponse, successResponse } from '@/lib/err
 import { parseJsonBody } from '@/lib/http';
 import { makeId } from '@/lib/ids';
 import { getRequestId } from '@/lib/request-id';
+import { requireAgentChainEnabled } from '@/lib/agent-chain-policy';
+import { evaluateTradeCaps } from '@/lib/trade-caps';
 import { validatePayload } from '@/lib/validation';
 
 export const runtime = 'nodejs';
@@ -78,6 +80,25 @@ export async function POST(req: NextRequest, context: { params: Promise<{ orderI
       const row = order.rows[0];
       if (row.agent_id !== auth.agentId) {
         return { kind: 'forbidden' as const };
+      }
+
+      if (body.status === 'triggered' || body.status === 'filled') {
+        const chainGate = await requireAgentChainEnabled(client, { agentId: row.agent_id, chainKey: row.chain_key });
+        if (!chainGate.ok) {
+          return { kind: 'blocked' as const, violation: chainGate.violation };
+        }
+      }
+
+      if (body.status === 'filled') {
+        const capCheck = await evaluateTradeCaps(client, {
+          agentId: row.agent_id,
+          chainKey: row.chain_key,
+          projectedSpendUsd: row.amount_in,
+          projectedFilledTrades: 1
+        });
+        if (!capCheck.ok) {
+          return { kind: 'blocked' as const, violation: capCheck.violation };
+        }
       }
 
       await client.query(
@@ -180,6 +201,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ orderI
           code: 'auth_invalid',
           message: 'Agent is not authorized to update this order.',
           actionHint: 'Use matching agent API key for the order owner.'
+        },
+        requestId
+      );
+    }
+
+    if (result.kind === 'blocked') {
+      return errorResponse(
+        400,
+        {
+          code: result.violation.code,
+          message: result.violation.message,
+          actionHint: result.violation.actionHint,
+          details: result.violation.details
         },
         requestId
       );

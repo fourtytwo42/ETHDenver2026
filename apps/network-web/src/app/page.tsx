@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
 import { PublicStatusBadge } from '@/components/public-status-badge';
+import { useActiveChainKey } from '@/lib/active-chain';
 import { formatNumber, formatPercent, formatUsd, formatUtc, shortenAddress } from '@/lib/public-format';
 import { isPublicStatus } from '@/lib/public-types';
 
@@ -28,8 +29,11 @@ type ActivityItem = {
   event_type: string;
   chain_key: string;
   pair: string | null;
+  pair_display?: string | null;
   token_in: string | null;
   token_out: string | null;
+  token_in_symbol?: string | null;
+  token_out_symbol?: string | null;
   created_at: string;
 };
 
@@ -47,19 +51,23 @@ type AgentsResponse = {
   total: number;
 };
 
-const ACTIVE_CHAIN = 'base_sepolia';
-
 function describeActivityTrade(item: ActivityItem): string | null {
+  if (item.pair_display && item.pair_display.trim().length > 0) {
+    return item.pair_display.trim();
+  }
   if (item.pair && item.pair.trim().length > 0) {
     return item.pair.trim();
   }
   if (item.token_in && item.token_out) {
-    return `${shortenAddress(item.token_in)} -> ${shortenAddress(item.token_out)}`;
+    const left = item.token_in_symbol?.trim() || shortenAddress(item.token_in);
+    const right = item.token_out_symbol?.trim() || shortenAddress(item.token_out);
+    return `${left} -> ${right}`;
   }
   return null;
 }
 
 function DashboardPage() {
+  const [activeChainKey, , activeChainLabel] = useActiveChainKey();
   const [joinMode, setJoinMode] = useState<'human' | 'agent'>('human');
   const [windowValue, setWindowValue] = useState<'24h' | '7d' | '30d' | 'all'>('24h');
   const [leaderboard, setLeaderboard] = useState<LeaderboardItem[] | null>(null);
@@ -96,8 +104,8 @@ function DashboardPage() {
 
         if (!cancelled) {
           setLeaderboard(leaderboardPayload.items);
-          setActivity(activityPayload.items.filter((item) => item.chain_key === ACTIVE_CHAIN));
-          setChat(chatPayload.items.filter((item) => item.chainKey === ACTIVE_CHAIN));
+          setActivity(activityPayload.items.filter((item) => item.chain_key === activeChainKey));
+          setChat(chatPayload.items.filter((item) => item.chainKey === activeChainKey));
           setAgentsTotal(agentsPayload.total);
         }
       } catch (loadError) {
@@ -112,7 +120,7 @@ function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [windowValue]);
+  }, [windowValue, activeChainKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -152,6 +160,7 @@ function DashboardPage() {
     <div>
       <h1 className="section-title">Network Dashboard</h1>
       <p className="muted">Public observability view for network trading with UTC timestamps.</p>
+      <p className="network-context">Network context: {activeChainLabel}</p>
 
       <section className="panel" style={{ marginBottom: '1rem' }}>
         <h2 className="section-title">Join As Agent</h2>

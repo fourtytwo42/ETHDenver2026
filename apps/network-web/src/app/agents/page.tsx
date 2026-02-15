@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
 import { PublicStatusBadge } from '@/components/public-status-badge';
-import { formatUtc, isStale } from '@/lib/public-format';
+import { useActiveChainKey } from '@/lib/active-chain';
+import { formatNumber, formatPercent, formatUsd, formatUtc, isStale, shortenAddress } from '@/lib/public-format';
 import { PUBLIC_STATUSES, isPublicStatus, type PublicStatus } from '@/lib/public-types';
 
 type AgentRow = {
@@ -15,6 +16,17 @@ type AgentRow = {
   created_at: string;
   last_activity_at: string | null;
   last_heartbeat_at: string | null;
+  wallet: { chain_key: string; address: string } | null;
+  latestMetrics:
+    | {
+        pnl_usd: string | null;
+        return_pct: string | null;
+        volume_usd: string | null;
+        trades_count: number | null;
+        followers_count: number | null;
+        as_of: string | null;
+      }
+    | null;
 };
 
 const HEARTBEAT_STALE_THRESHOLD_SECONDS = 180;
@@ -27,13 +39,24 @@ type AgentsPayload = {
   items: AgentRow[];
 };
 
+function CopyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <rect x="4" y="4" width="11" height="11" rx="2" />
+    </svg>
+  );
+}
+
 export default function AgentsDirectoryPage() {
+  const [activeChainKey, , activeChainLabel] = useActiveChainKey();
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [status, setStatus] = useState<'all' | PublicStatus>('all');
   const [sort, setSort] = useState<'registration' | 'agent_name' | 'last_activity'>('last_activity');
   const [includeDeactivated, setIncludeDeactivated] = useState(false);
   const [page, setPage] = useState(1);
+  const [copiedWallet, setCopiedWallet] = useState<string | null>(null);
 
   const [payload, setPayload] = useState<AgentsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,11 +80,12 @@ export default function AgentsDirectoryPage() {
       const params = new URLSearchParams({
         query: debouncedQuery,
         mode: 'real',
-        chain: 'all',
+        chain: activeChainKey,
         page: String(page),
         pageSize: '20',
         sort,
-        includeDeactivated: String(includeDeactivated)
+        includeDeactivated: String(includeDeactivated),
+        includeMetrics: 'true'
       });
 
       if (status !== 'all') {
@@ -90,7 +114,7 @@ export default function AgentsDirectoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedQuery, page, sort, status, includeDeactivated]);
+  }, [debouncedQuery, page, sort, status, includeDeactivated, activeChainKey]);
 
   const totalPages = useMemo(() => {
     if (!payload) {
@@ -102,8 +126,9 @@ export default function AgentsDirectoryPage() {
 
   return (
     <div>
-      <h1 className="section-title">Agents Directory</h1>
-      <p className="muted">Search by name, agent id, or wallet substring. Timestamps are UTC.</p>
+      <h1 className="section-title">Agents</h1>
+      <p className="muted">Find agents by name, id, or wallet. All timestamps are UTC.</p>
+      <p className="network-context">Network context: {activeChainLabel}</p>
 
       <div className="toolbar">
         <input
@@ -142,15 +167,92 @@ export default function AgentsDirectoryPage() {
       </div>
 
       <div className="panel">
-        <div className="muted" style={{ marginBottom: '0.7rem' }}>Network: Base Sepolia</div>
-
         {error ? <p className="warning-banner">{error}</p> : null}
         {!payload ? <p className="muted">Loading agents...</p> : null}
         {payload && payload.items.length === 0 ? <p className="muted">No agents match the current filters.</p> : null}
 
         {payload && payload.items.length > 0 ? (
           <>
-            <div className="table-desktop">
+            <div className="agent-directory-grid">
+              {payload.items.map((item) => {
+                const idle = isStale(item.last_heartbeat_at, HEARTBEAT_STALE_THRESHOLD_SECONDS);
+                const walletLabel = item.wallet?.address ? shortenAddress(item.wallet.address) : '-';
+                return (
+                  <article className="agent-directory-card" key={item.agent_id}>
+                    <div className="agent-directory-header">
+                      <div>
+                        <h2 className="agent-directory-title">
+                          <Link href={`/agents/${item.agent_id}`}>{item.agent_name}</Link>
+                        </h2>
+                        <div className="muted">{item.agent_id}</div>
+                      </div>
+                      <div>{isPublicStatus(item.public_status) ? <PublicStatusBadge status={item.public_status} /> : item.public_status}</div>
+                    </div>
+
+                    <div className="agent-directory-meta">
+                      <span className="chain-chip">{item.runtime_platform}</span>
+                      <span className="muted">Last activity: {formatUtc(item.last_activity_at)} UTC</span>
+                      <span className={idle ? 'stale' : 'muted'}>{idle ? 'idle' : 'heartbeat healthy'}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="copy-row"
+                      disabled={!item.wallet?.address}
+                      onClick={async () => {
+                        if (!item.wallet?.address) {
+                          return;
+                        }
+                        try {
+                          await navigator.clipboard.writeText(item.wallet.address);
+                          setCopiedWallet(item.agent_id);
+                          window.setTimeout(() => setCopiedWallet((current) => (current === item.agent_id ? null : current)), 1000);
+                        } catch {
+                          setCopiedWallet(null);
+                        }
+                      }}
+                      aria-label={item.wallet?.address ? `Copy ${item.wallet.chain_key} wallet address` : 'Wallet address unavailable'}
+                      title={item.wallet?.address ? 'Copy wallet address' : 'Wallet address unavailable'}
+                    >
+                      <span className="copy-row-icon">
+                        <CopyIcon />
+                      </span>
+                      <span className="copy-row-text">
+                        {item.wallet?.chain_key ?? activeChainKey}: {walletLabel}
+                      </span>
+                      <span className="copy-row-hint">{copiedWallet === item.agent_id ? 'Copied' : 'Copy'}</span>
+                    </button>
+
+                    <div className="agent-card-kpis">
+                      <div>
+                        <div className="data-label">PnL</div>
+                        <div className="kpi-value-small">{formatUsd(item.latestMetrics?.pnl_usd ?? null)}</div>
+                      </div>
+                      <div>
+                        <div className="data-label">Return</div>
+                        <div className="kpi-value-small">{formatPercent(item.latestMetrics?.return_pct ?? null)}</div>
+                      </div>
+                      <div>
+                        <div className="data-label">Volume</div>
+                        <div className="kpi-value-small">{formatUsd(item.latestMetrics?.volume_usd ?? null)}</div>
+                      </div>
+                      <div>
+                        <div className="data-label">Trades</div>
+                        <div className="kpi-value-small">{formatNumber(item.latestMetrics?.trades_count ?? null)}</div>
+                      </div>
+                    </div>
+
+                    <div className="agent-directory-actions">
+                      <Link href={`/agents/${item.agent_id}`} className="theme-toggle">
+                        View Agent
+                      </Link>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+
+            <div className="table-desktop directory-table-optional">
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -164,60 +266,18 @@ export default function AgentsDirectoryPage() {
                   </thead>
                   <tbody>
                     {payload.items.map((item) => (
-                      <tr key={item.agent_id}>
+                      <tr key={`${item.agent_id}:table`}>
                         <td>
                           <Link href={`/agents/${item.agent_id}`}>{item.agent_name}</Link>
                         </td>
                         <td>{isPublicStatus(item.public_status) ? <PublicStatusBadge status={item.public_status} /> : item.public_status}</td>
                         <td>{item.runtime_platform}</td>
-                        <td>
-                          {formatUtc(item.last_activity_at)}
-                          {isStale(item.last_heartbeat_at, HEARTBEAT_STALE_THRESHOLD_SECONDS) ? (
-                            <div className="stale">idle</div>
-                          ) : (
-                            <div className="muted">idle</div>
-                          )}
-                        </td>
+                        <td>{formatUtc(item.last_activity_at)}</td>
                         <td>{formatUtc(item.created_at)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-            <div className="cards-mobile">
-              <div className="cards-mobile-grid">
-                {payload.items.map((item) => (
-                  <article className="data-card" key={`${item.agent_id}:mobile`}>
-                    <div>
-                      <strong>
-                        <Link href={`/agents/${item.agent_id}`}>{item.agent_name}</Link>
-                      </strong>
-                    </div>
-                    <div className="toolbar" style={{ marginBottom: 0 }}>
-                      {isPublicStatus(item.public_status) ? <PublicStatusBadge status={item.public_status} /> : item.public_status}
-                    </div>
-                    <div className="data-pairs">
-                      <div>
-                        <div className="data-label">Platform</div>
-                        <div className="data-value">{item.runtime_platform}</div>
-                      </div>
-                      <div>
-                        <div className="data-label">Last Activity (UTC)</div>
-                        <div className="data-value">{formatUtc(item.last_activity_at)}</div>
-                        {isStale(item.last_heartbeat_at, HEARTBEAT_STALE_THRESHOLD_SECONDS) ? (
-                          <div className="stale">idle</div>
-                        ) : (
-                          <div className="muted">idle</div>
-                        )}
-                      </div>
-                      <div>
-                        <div className="data-label">Registered (UTC)</div>
-                        <div className="data-value">{formatUtc(item.created_at)}</div>
-                      </div>
-                    </div>
-                  </article>
-                ))}
               </div>
             </div>
           </>

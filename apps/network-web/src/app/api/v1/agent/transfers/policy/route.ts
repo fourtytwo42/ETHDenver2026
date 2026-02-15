@@ -50,20 +50,100 @@ export async function GET(req: NextRequest) {
       [auth.agentId, chainKey]
     );
 
+    const latestCaps = await dbQuery<{
+      approval_mode: 'per_trade' | 'auto';
+      max_trade_usd: string | null;
+      max_daily_usd: string | null;
+      allowed_tokens: unknown;
+      daily_cap_usd_enabled: boolean;
+      daily_trade_cap_enabled: boolean;
+      max_daily_trade_count: string | null;
+      created_at: string;
+    }>(
+      `
+      select
+        approval_mode,
+        max_trade_usd::text,
+        max_daily_usd::text,
+        allowed_tokens,
+        daily_cap_usd_enabled,
+        daily_trade_cap_enabled,
+        max_daily_trade_count::text,
+        created_at::text
+      from agent_policy_snapshots
+      where agent_id = $1
+      order by created_at desc
+      limit 1
+      `,
+      [auth.agentId]
+    );
+
     const row = policy.rows[0];
     const outboundMode = row?.outbound_mode ?? 'disabled';
     const outboundTransfersEnabled = row?.outbound_transfers_enabled ?? false;
     const outboundWhitelistAddresses = normalizeAddresses(row?.outbound_whitelist_addresses ?? []);
+    const capsRow = latestCaps.rows[0];
+    const usageRow = await dbQuery<{ utc_day: string; daily_spend_usd: string; daily_filled_trades: string }>(
+      `
+      select utc_day::text, daily_spend_usd::text, daily_filled_trades::text
+      from agent_daily_trade_usage
+      where agent_id = $1
+        and chain_key = $2
+        and utc_day = (now() at time zone 'utc')::date
+      limit 1
+      `,
+      [auth.agentId, chainKey]
+    );
+
+    const chainPolicyRow = await dbQuery<{ chain_enabled: boolean; updated_at: string }>(
+      `
+      select chain_enabled, updated_at::text
+      from agent_chain_policies
+      where agent_id = $1
+        and chain_key = $2
+      limit 1
+      `,
+      [auth.agentId, chainKey]
+    );
+    const chainEnabled = (chainPolicyRow.rowCount ?? 0) > 0 ? Boolean(chainPolicyRow.rows[0].chain_enabled) : true;
+    const chainEnabledUpdatedAt = (chainPolicyRow.rowCount ?? 0) > 0 ? chainPolicyRow.rows[0].updated_at ?? null : null;
 
     return successResponse(
       {
         ok: true,
         agentId: auth.agentId,
         chainKey,
+        chainEnabled,
+        chainEnabledUpdatedAt,
         outboundTransfersEnabled,
         outboundMode,
         outboundWhitelistAddresses,
-        updatedAt: row?.updated_at ?? null
+        updatedAt: row?.updated_at ?? null,
+        tradeCaps: capsRow
+          ? {
+              approvalMode: capsRow.approval_mode,
+              maxTradeUsd: capsRow.max_trade_usd,
+              maxDailyUsd: capsRow.max_daily_usd,
+              allowedTokens: Array.isArray(capsRow.allowed_tokens) ? capsRow.allowed_tokens : [],
+              dailyCapUsdEnabled: capsRow.daily_cap_usd_enabled,
+              dailyTradeCapEnabled: capsRow.daily_trade_cap_enabled,
+              maxDailyTradeCount:
+                capsRow.max_daily_trade_count === null ? null : Number.parseInt(capsRow.max_daily_trade_count, 10),
+              updatedAt: capsRow.created_at
+            }
+          : null,
+        dailyUsage:
+          (usageRow.rowCount ?? 0) > 0
+            ? {
+                utcDay: usageRow.rows[0].utc_day,
+                dailySpendUsd: usageRow.rows[0].daily_spend_usd,
+                dailyFilledTrades: Number.parseInt(usageRow.rows[0].daily_filled_trades, 10)
+              }
+            : {
+                utcDay: new Date().toISOString().slice(0, 10),
+                dailySpendUsd: '0',
+                dailyFilledTrades: 0
+              }
       },
       200,
       requestId
@@ -72,4 +152,3 @@ export async function GET(req: NextRequest) {
     return internalErrorResponse(requestId);
   }
 }
-
