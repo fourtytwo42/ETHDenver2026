@@ -66,6 +66,8 @@ CHALLENGE_REQUIRED_KEYS = {"domain", "chain", "nonce", "timestamp", "action"}
 CHALLENGE_ALLOWED_DOMAINS = {"xclaw.trade", "localhost", "127.0.0.1", "::1", "staging.xclaw.trade"}
 RETRY_WINDOW_SEC = 600
 MAX_TRADE_RETRIES = 3
+APPROVAL_WAIT_TIMEOUT_SEC = 900
+APPROVAL_WAIT_POLL_SEC = 3
 DEFAULT_TX_GAS_PRICE_GWEI = 5
 DEFAULT_TX_SEND_MAX_ATTEMPTS = 5
 TX_GAS_PRICE_BUMP_GWEI = 5
@@ -1425,6 +1427,96 @@ def _canonical_event_for_trade_status(status: str) -> str:
     return mapping.get(status, "trade_failed")
 
 
+def _post_trade_proposed(
+    chain: str,
+    token_in: str,
+    token_out: str,
+    amount_in_human: str,
+    slippage_bps: int,
+    amount_out_human: str | None = None,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    api_key = _resolve_api_key()
+    agent_id = _resolve_agent_id(api_key)
+    if not agent_id:
+        raise WalletStoreError("Agent id could not be resolved for trade proposal.")
+
+    payload: dict[str, Any] = {
+        "schemaVersion": 1,
+        "agentId": agent_id,
+        "chainKey": chain,
+        "mode": "real",
+        "tokenIn": token_in,
+        "tokenOut": token_out,
+        "amountIn": str(amount_in_human),
+        "slippageBps": int(slippage_bps),
+    }
+    if amount_out_human is not None:
+        payload["amountOut"] = str(amount_out_human)
+    if reason:
+        payload["reason"] = str(reason)[:140]
+
+    idempotency_key = f"rt-propose-{chain}-{secrets.token_hex(8)}"
+    status_code, body = _api_request(
+        "POST",
+        "/trades/proposed",
+        payload=payload,
+        include_idempotency=True,
+        idempotency_key=idempotency_key,
+    )
+    if status_code < 200 or status_code >= 300:
+        code = str(body.get("code", "api_error"))
+        message = str(body.get("message", f"trade proposed failed ({status_code})"))
+        raise WalletStoreError(f"{code}: {message}")
+    if not isinstance(body, dict) or not body.get("tradeId"):
+        raise WalletStoreError("Trade proposed response is missing tradeId.")
+    return body
+
+
+def _wait_for_trade_approval(trade_id: str, chain: str) -> dict[str, Any]:
+    deadline_ms = int(time.time() * 1000) + (APPROVAL_WAIT_TIMEOUT_SEC * 1000)
+    last_status: str | None = None
+    while int(time.time() * 1000) <= deadline_ms:
+        trade = _read_trade_details(trade_id)
+        status = str(trade.get("status") or "")
+        last_status = status
+        if status == "approved":
+            return trade
+        if status == "approval_pending":
+            time.sleep(APPROVAL_WAIT_POLL_SEC)
+            continue
+        if status == "rejected":
+            reason_code = trade.get("reasonCode")
+            reason_message = trade.get("reasonMessage")
+            raise WalletPolicyError(
+                "approval_rejected",
+                "Trade approval was rejected.",
+                "Review rejection reason and create a new trade if needed.",
+                {"tradeId": trade_id, "chain": chain, "reasonCode": reason_code, "reasonMessage": reason_message},
+            )
+        if status == "expired":
+            raise WalletPolicyError(
+                "approval_expired",
+                "Trade approval has expired.",
+                "Re-propose trade and request approval again.",
+                {"tradeId": trade_id, "chain": chain},
+            )
+        # Any other status is not actionable for approval gating; fail closed.
+        raise WalletPolicyError(
+            "policy_denied",
+            f"Trade is not executable from status '{status}'.",
+            "Poll intents and execute only actionable trades.",
+            {"tradeId": trade_id, "chain": chain, "status": status},
+        )
+
+    raise WalletPolicyError(
+        "approval_required",
+        "Trade is waiting for management approval.",
+        "Approve trade from authorized management view, then retry.",
+        {"tradeId": trade_id, "chain": chain, "lastStatus": last_status},
+    )
+
+
 def _post_trade_status(trade_id: str, from_status: str, to_status: str, extra: dict[str, Any] | None = None) -> None:
     payload: dict[str, Any] = {
         "tradeId": trade_id,
@@ -1790,6 +1882,8 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
         return chk
 
     chain = args.chain
+    trade_id: str | None = None
+    transition_state = "init"
     last_tx_hash: str | None = None
     last_approve_tx_hash: str | None = None
     try:
@@ -1843,6 +1937,26 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             expected_out_human,
         )
         cap_state, _, current_spend_usd, current_filled_trades, trade_caps = _enforce_trade_caps(chain, projected_spend_usd, 1)
+
+        # Slice 33: server-first trade-spot. Propose before any on-chain tx so owner policy can gate approvals.
+        amount_in_for_server = str(args.amount_in).strip()
+        if amount_in_mode == "base_units":
+            amount_in_for_server = _format_units(int(amount_in_units), token_in_decimals)
+        proposed = _post_trade_proposed(
+            chain,
+            str(token_in_meta.get("symbol") or token_in),
+            str(token_out_meta.get("symbol") or token_out),
+            amount_in_for_server,
+            slippage_bps,
+            amount_out_human=_decimal_text(expected_out_human),
+            reason="trade_spot",
+        )
+        trade_id = str(proposed.get("tradeId") or "")
+        if not trade_id:
+            raise WalletStoreError("Trade proposal did not return a tradeId.")
+        proposed_status = str(proposed.get("status") or "")
+        if proposed_status != "approved":
+            _wait_for_trade_approval(trade_id, chain)
 
         deadline_sec = int(args.deadline_sec)
         if deadline_sec < 30 or deadline_sec > 3600:
@@ -1909,6 +2023,10 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             private_key_hex,
         )
         last_tx_hash = tx_hash
+        _post_trade_status(trade_id, "approved", "executing", {"txHash": tx_hash})
+        transition_state = "executing"
+        _post_trade_status(trade_id, "executing", "verifying", {"txHash": tx_hash})
+        transition_state = "verifying"
 
         receipt_proc = _run_subprocess(
             [cast_bin, "receipt", "--json", "--rpc-url", rpc_url, tx_hash],
@@ -1936,6 +2054,7 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             _post_trade_usage(chain, day_key, projected_spend_usd, 1)
         except Exception:
             pass
+        _post_trade_status(trade_id, "verifying", "filled", {"txHash": tx_hash})
 
         def _parse_receipt_uint(field: str, payload: dict[str, Any]) -> int | None:
             value = payload.get(field)
@@ -2017,6 +2136,12 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             details["txHash"] = last_tx_hash
         if last_approve_tx_hash:
             details["approveTxHash"] = last_approve_tx_hash
+        if trade_id and transition_state in {"executing", "verifying"}:
+            try:
+                from_status = "executing" if transition_state == "executing" else "verifying"
+                _post_trade_status(trade_id, from_status, "failed", {"reasonCode": "verification_timeout", "reasonMessage": str(exc), "txHash": last_tx_hash})
+            except Exception:
+                pass
         if exc.kind == "cast_receipt":
             return fail(
                 "tx_receipt_timeout",
@@ -2033,6 +2158,12 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             exit_code=1,
         )
     except WalletPolicyError as exc:
+        if trade_id and transition_state in {"executing", "verifying"}:
+            try:
+                from_status = "executing" if transition_state == "executing" else "verifying"
+                _post_trade_status(trade_id, from_status, "failed", {"reasonCode": "policy_denied", "reasonMessage": str(exc), "txHash": last_tx_hash})
+            except Exception:
+                pass
         return fail(exc.code, str(exc), exc.action_hint, exc.details, exit_code=1)
     except WalletSecurityError as exc:
         return fail("unsafe_permissions", str(exc), "Restrict permissions to owner-only (0700/0600) and retry.", {"chain": chain}, exit_code=1)
@@ -2044,6 +2175,12 @@ def cmd_trade_spot(args: argparse.Namespace) -> int:
             return fail("missing_dependency", msg, "Install Foundry and ensure `cast` is on PATH.", {"dependency": "cast"}, exit_code=1)
         if "Chain config" in msg:
             return fail("chain_config_invalid", msg, "Repair config/chains/<chain>.json and retry.", {"chain": chain}, exit_code=1)
+        if trade_id and transition_state in {"executing", "verifying"}:
+            try:
+                from_status = "executing" if transition_state == "executing" else "verifying"
+                _post_trade_status(trade_id, from_status, "failed", {"reasonCode": "rpc_unavailable", "reasonMessage": msg, "txHash": last_tx_hash})
+            except Exception:
+                pass
         return fail("trade_spot_failed", msg, "Verify wallet, RPC, token addresses, and retry.", {"chain": chain}, exit_code=1)
     except Exception as exc:
         msg = (str(exc) or "").strip()

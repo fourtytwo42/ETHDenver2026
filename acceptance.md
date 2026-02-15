@@ -2502,3 +2502,60 @@ Runtime tests:
 1. Revert Slice 32 touched files only.
 2. Re-run required gates.
 3. Confirm chain access toggle and enforcement paths are removed/restored as expected.
+
+---
+
+## Slice 33 Acceptance Evidence
+
+Date (UTC): 2026-02-15
+Active slice: `Slice 33: MetaMask-Like Agent Wallet UX + Simplified Approvals (Global + Per-Token)`
+Issue mapping: `pending assignment`
+
+### Objective + scope lock
+- Objective: redesign `/agents/:id` into a wallet-first MetaMask-like surface and simplify approvals to global + per-token (tokenIn-only), removing pair approvals from the active product surface.
+- Scope guard honored: no new auth model, no DB migration, no dependency additions.
+
+### File-level evidence (Slice 33)
+- Server/API:
+  - `apps/network-web/src/app/api/v1/trades/proposed/route.ts`
+  - `apps/network-web/src/app/api/v1/management/approvals/scope/route.ts`
+  - `apps/network-web/src/lib/copy-lifecycle.ts`
+- UI:
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+  - `apps/network-web/src/app/globals.css`
+- Runtime:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_trade_path.py`
+- Docs/contracts:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/api/openapi.v1.yaml`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+
+### Required gate evidence
+- `npm run db:parity` -> PASS (exit 0)
+- `npm run seed:reset` -> PASS (exit 0)
+- `npm run seed:load` -> PASS (exit 0)
+- `npm run seed:verify` -> PASS (exit 0)
+- `npm run build` -> PASS (exit 0)
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS (exit 0)
+
+### Scenario evidence (manual)
+- Trade propose initial status:
+  - Global Approval ON -> `status=approved`
+  - Global Approval OFF + tokenIn not preapproved -> `status=approval_pending`
+- Management approval decision:
+  - Approve -> trade becomes actionable for runtime (`/trades/pending`)
+  - Reject with `reasonMessage` -> runtime surfaces `approval_rejected` with reason.
+- Runtime `trade spot` server-first:
+  - no on-chain tx when approval is pending
+  - executes only after approval.
+
+### Rollback plan
+1. Revert Slice 33 touched files only.
+2. Re-run required gates.
+3. Confirm `/agents/:id` returns to pre-slice layout and `trade spot` returns to direct on-chain mode.

@@ -305,7 +305,22 @@ paths:
               $ref: '#/components/schemas/TradeProposedRequest'
       responses:
         '200':
-          description: Proposed trade accepted.
+          description: Proposed trade accepted. Initial status is `approved` or `approval_pending` based on owner policy (global approval or tokenIn preapproval).
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ok, tradeId, status]
+                properties:
+                  ok:
+                    type: boolean
+                    enum: [true]
+                  tradeId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [approved, approval_pending, proposed]
         '401':
           $ref: '#/components/responses/ErrorResponse'
         '400':
@@ -722,7 +737,8 @@ paths:
           description: Policy snapshot created.
   /api/v1/management/approvals/scope:
     post:
-      summary: Grant or revoke pair/global approval scopes.
+      summary: Deprecated. Grant or revoke legacy pair/global approval scopes.
+      deprecated: true
       security:
         - managementCookie: []
         - stepupCookie: []

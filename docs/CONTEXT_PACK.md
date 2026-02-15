@@ -1,40 +1,39 @@
 # X-Claw Context Pack
 
-## 1) Goal (Active: Slice 32)
-- Primary objective: complete `Slice 32: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)`.
+## 1) Goal (Active: Slice 33)
+- Primary objective: complete `Slice 33: MetaMask-Like Agent Wallet UX + Simplified Approvals (Global + Per-Token)`.
 - Success criteria:
-  - owner can enable/disable chain access per agent + per chain from `/agents/:id`
-  - when disabled, agent runtime blocks trade and `wallet-send` actions with `code=chain_disabled`
-  - server rejects trade/limit-order execution paths on disabled chains with structured policy errors
-  - enabling chain requires step-up; disabling does not
+  - `/agents/:id` is wallet-first (MetaMask-like header + assets + unified activity feed)
+  - approvals are simplified:
+    - Global Approval toggle (`approval_mode=auto|per_trade`)
+    - per-token preapproval toggles stored in `allowed_tokens` and evaluated on `tokenIn` only
+    - pair approvals removed from UI and active product behavior
+  - `POST /api/v1/trades/proposed` sets initial status to `approved|approval_pending` using global/tokenIn preapproval policy
+  - runtime `trade spot` is server-first (propose -> wait if pending -> execute only if approved; denial surfaces reason)
   - source-of-truth + canonical docs remain synchronized (schemas/openapi/tracker/roadmap)
   - required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`
 
 ## 2) Constraints
 - Canonical authority: `docs/XCLAW_SOURCE_OF_TRUTH.md`.
-- Strict slice order: Slice 32 follows completed Slice 31.
+- Strict slice order: Slice 33 follows completed Slice 32.
 - One-site model remains fixed (`/agents/:id` public + auth-gated management).
 - No dependency additions.
-- Migration is required for this slice (`agent_chain_policies`).
+- No DB migration required for this slice (reuse policy snapshot fields).
 
 ## 3) Contract Impact
-- Management write addition:
-  - `POST /api/v1/management/chains/update`
-- Management read change (backward compatible):
-  - `GET /api/v1/management/agent-state` adds optional `chainKey`
-- Agent policy read change:
-  - `GET /api/v1/agent/transfers/policy` adds `chainEnabled` fields
+- Trade write change:
+  - `POST /api/v1/trades/proposed` returns initial status `approved|approval_pending` and persists that status.
+- Management behavior change:
+  - `POST /api/v1/management/approvals/scope` is deprecated and must not be used by UI (pair/global scopes removed from product surface).
+- Runtime behavior change:
+  - `trade spot` becomes server-first with propose->approve->execute behavior.
 - No auth model changes.
 
-## 4) Files and Boundaries (Slice 32 allowlist)
+## 4) Files and Boundaries (Slice 33 allowlist)
 - Web/API/UI:
-  - `apps/network-web/src/app/api/v1/management/chains/update/route.ts`
-  - `apps/network-web/src/app/api/v1/management/agent-state/route.ts`
-  - `apps/network-web/src/app/api/v1/agent/transfers/policy/route.ts`
   - `apps/network-web/src/app/api/v1/trades/proposed/route.ts`
-  - `apps/network-web/src/app/api/v1/trades/[tradeId]/status/route.ts`
-  - `apps/network-web/src/app/api/v1/limit-orders/route.ts`
-  - `apps/network-web/src/app/api/v1/limit-orders/[orderId]/status/route.ts`
+  - `apps/network-web/src/lib/copy-lifecycle.ts`
+  - `apps/network-web/src/app/api/v1/management/approvals/scope/route.ts`
   - `apps/network-web/src/app/agents/[agentId]/page.tsx`
 - Canonical docs/process:
   - `docs/XCLAW_SOURCE_OF_TRUTH.md`
@@ -46,10 +45,10 @@
   - `spec.md`
   - `tasks.md`
   - `acceptance.md`
-- Data model:
-  - `infrastructure/migrations/0009_slice32_agent_chain_enable.sql`
-- Shared schemas:
-  - `packages/shared-schemas/json/management-chain-update-request.schema.json`
+- Runtime:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+- Shared schemas (docs-only adjustments expected):
+  - `packages/shared-schemas/json/management-policy-update-request.schema.json`
 
 ## 5) Invariants
 - Status vocabulary remains exactly: `active`, `offline`, `degraded`, `paused`, `deactivated`.
@@ -65,14 +64,15 @@
   - `npm run seed:verify`
   - `npm run build`
 - Feature checks:
-  - `/agents/:id` chain access toggle persists per chain and defaults to enabled when unset
-  - trade propose is rejected when chain is disabled (`code=chain_disabled`)
-  - limit-order create/fill is rejected when chain is disabled
-  - runtime rejects trade + wallet-send when `chainEnabled == false` in policy payload
+  - `POST /api/v1/trades/proposed` returns `status=approved` when Global Approval is ON
+  - `POST /api/v1/trades/proposed` returns `status=approval_pending` when Global OFF and tokenIn is not preapproved
+  - `/agents/:id` shows approvals queue and can approve/reject with a rejection reason message
+  - runtime `trade spot` does not execute on-chain when server returns `approval_pending`
+  - runtime `trade spot` executes only after management approves, and surfaces reason on reject
 
 ## 7) Evidence + Rollback
 - Capture command outputs and UX evidence in `acceptance.md`.
 - Rollback plan:
-  1. revert Slice 32 touched files only,
+  1. revert Slice 33 touched files only,
   2. rerun required gates,
-  3. confirm chain access toggle disappears and trade paths no longer consult owner chain policy.
+  3. confirm `trade spot` returns to direct on-chain mode and `/agents/:id` policy/approval UI returns to pre-slice behavior.

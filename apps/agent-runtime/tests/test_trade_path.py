@@ -259,6 +259,59 @@ class TradePathRuntimeTests(unittest.TestCase):
         parsed = json.loads(raw_lines[0])
         self.assertTrue(parsed.get("ok"))
 
+    def test_trade_spot_blocks_when_approval_pending(self) -> None:
+        args = argparse.Namespace(
+            chain="base_sepolia",
+            token_in="WETH",
+            token_out="USDC",
+            amount_in="1",
+            slippage_bps=50,
+            deadline_sec=120,
+            to=None,
+            json=True,
+        )
+
+        with mock.patch.object(cli, "_replay_trade_usage_outbox"), mock.patch.object(
+            cli, "_resolve_token_address", side_effect=["0x" + "11" * 20, "0x" + "22" * 20]
+        ), mock.patch.object(
+            cli, "load_wallet_store", return_value={}
+        ), mock.patch.object(
+            cli, "_execution_wallet", return_value=("0x" + "33" * 20, "0x" + "44" * 32)
+        ), mock.patch.object(
+            cli, "_require_cast_bin", return_value="cast"
+        ), mock.patch.object(
+            cli, "_chain_rpc_url", return_value="https://rpc.example"
+        ), mock.patch.object(
+            cli, "_require_chain_contract_address", return_value="0x" + "55" * 20
+        ), mock.patch.object(
+            cli,
+            "_fetch_erc20_metadata",
+            side_effect=[{"symbol": "WETH", "decimals": 18}, {"symbol": "USDC", "decimals": 6}],
+        ), mock.patch.object(
+            cli, "_enforce_spend_preconditions", return_value=({}, "2026-02-15", 0, 0)
+        ), mock.patch.object(
+            cli, "_router_get_amount_out", return_value=123
+        ), mock.patch.object(
+            cli, "_enforce_trade_caps", return_value=({}, "2026-02-15", Decimal("0"), 0, {"maxDailyUsd": "250", "maxDailyTradeCount": 50})
+        ), mock.patch.object(
+            cli, "_post_trade_proposed", return_value={"ok": True, "tradeId": "trd_1", "status": "approval_pending"}
+        ), mock.patch.object(
+            cli,
+            "_wait_for_trade_approval",
+            side_effect=cli.WalletPolicyError(
+                "approval_required",
+                "Trade is waiting for management approval.",
+                "Approve trade from authorized management view, then retry.",
+                {"tradeId": "trd_1", "chain": "base_sepolia"},
+            ),
+        ), mock.patch.object(
+            cli, "_cast_rpc_send_transaction"
+        ) as send_mock:
+            payload = self._run_and_parse_stdout(lambda: cli.cmd_trade_spot(args))
+        self.assertFalse(payload.get("ok"))
+        self.assertEqual(payload.get("code"), "approval_required")
+        send_mock.assert_not_called()
+
     def test_trade_caps_blocked_when_owner_chain_disabled(self) -> None:
         policy_payload = {
             "ok": True,
@@ -345,6 +398,12 @@ class TradePathRuntimeTests(unittest.TestCase):
             cli, "_replay_trade_usage_outbox", return_value=(0, 0)
         ), mock.patch.object(
             cli, "_enforce_trade_caps", return_value=({}, "2026-02-14", cli.Decimal("0"), 0, {"maxDailyUsd": "1000", "maxDailyTradeCount": 10})
+        ), mock.patch.object(
+            cli, "_post_trade_proposed", return_value={"ok": True, "tradeId": "trd_1", "status": "approved"}
+        ), mock.patch.object(
+            cli, "_wait_for_trade_approval", side_effect=AssertionError("trade-spot should not wait when proposal is already approved")
+        ), mock.patch.object(
+            cli, "_post_trade_status"
         ), mock.patch.object(
             cli, "_record_trade_cap_ledger"
         ), mock.patch.object(

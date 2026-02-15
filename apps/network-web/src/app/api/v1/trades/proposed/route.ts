@@ -90,6 +90,12 @@ export async function POST(req: NextRequest) {
         return { found: true as const, blocked: capCheck.violation };
       }
 
+      const tokenInNormalized = body.tokenIn.trim().toLowerCase();
+      const allowedTokenSet = new Set(capCheck.caps.allowedTokens.map((token) => String(token).trim().toLowerCase()).filter((v) => v.length > 0));
+      const approvalRequired = capCheck.caps.approvalMode !== 'auto' && !allowedTokenSet.has(tokenInNormalized);
+      const initialStatus = approvalRequired ? 'approval_pending' : 'approved';
+      const initialEventType = approvalRequired ? 'trade_approval_pending' : 'trade_approved';
+
       await client.query(
         `
         insert into trades (
@@ -98,9 +104,9 @@ export async function POST(req: NextRequest) {
           price_impact_bps, slippage_bps, reason, created_at, updated_at
         )
         values (
-          $1, $2, $3, $4, 'proposed',
-          $5, $6, $7, $8, $9,
-          $10, $11, $12, now(), now()
+          $1, $2, $3, $4, $5::trade_status,
+          $6, $7, $8, $9, $10,
+          $11, $12, $13, now(), now()
         )
         `,
         [
@@ -108,6 +114,7 @@ export async function POST(req: NextRequest) {
           body.agentId,
           body.chainKey,
           body.mode === 'mock',
+          initialStatus,
           body.tokenIn,
           body.tokenOut,
           `${body.tokenIn}/${body.tokenOut}`,
@@ -122,12 +129,13 @@ export async function POST(req: NextRequest) {
       await client.query(
         `
         insert into agent_events (event_id, agent_id, trade_id, event_type, payload, created_at)
-        values ($1, $2, $3, 'trade_proposed', $4::jsonb, now())
+        values ($1, $2, $3, $4, $5::jsonb, now())
         `,
         [
           makeId('evt'),
           body.agentId,
           tradeId,
+          initialEventType,
           JSON.stringify({
             chainKey: body.chainKey,
             mode: body.mode,
@@ -139,7 +147,7 @@ export async function POST(req: NextRequest) {
         ]
       );
 
-      return { found: true as const };
+      return { found: true as const, status: initialStatus };
     });
 
     if (!inserted.found) {
@@ -170,7 +178,7 @@ export async function POST(req: NextRequest) {
     const responseBody = {
       ok: true,
       tradeId,
-      status: 'proposed'
+      status: 'status' in inserted ? inserted.status : 'proposed'
     };
 
     await storeIdempotencyResponse(idempotency.ctx, 200, responseBody);

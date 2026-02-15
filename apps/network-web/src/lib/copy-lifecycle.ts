@@ -134,36 +134,31 @@ async function followerPolicyAllows(
   tokenOut: string,
   scaledAmountUsd: number
 ): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
-  const policy = await client.query<{
-    max_trade_usd: string | null;
-    max_daily_usd: string | null;
-    allowed_tokens: string[] | null;
-    approval_mode: 'per_trade' | 'auto';
-  }>(
-    `
-    select max_trade_usd::text, max_daily_usd::text, allowed_tokens, approval_mode
-    from agent_policy_snapshots
-    where agent_id = $1
-    order by created_at desc
-    limit 1
-    `,
-    [followerAgentId]
-  );
+	const policy = await client.query<{
+	    max_trade_usd: string | null;
+	    max_daily_usd: string | null;
+	    approval_mode: 'per_trade' | 'auto';
+	  }>(
+	    `
+	    select max_trade_usd::text, max_daily_usd::text, approval_mode
+	    from agent_policy_snapshots
+	    where agent_id = $1
+	    order by created_at desc
+	    limit 1
+	    `,
+	    [followerAgentId]
+	  );
 
   if ((policy.rowCount ?? 0) === 0) {
     return { ok: false, code: 'policy_denied', message: 'Follower has no active policy snapshot.' };
   }
 
-  const row = policy.rows[0];
-  const allowed = normalizeAllowedTokens(row.allowed_tokens);
-  if (allowed && (!allowed.has(tokenIn.toLowerCase()) || !allowed.has(tokenOut.toLowerCase()))) {
-    return { ok: false, code: 'pair_not_enabled', message: 'Follower policy blocked this pair.' };
-  }
+	  const row = policy.rows[0];
 
-  const maxTradeUsd = asNumber(row.max_trade_usd);
-  if (maxTradeUsd > 0 && scaledAmountUsd > maxTradeUsd) {
-    return { ok: false, code: 'policy_denied', message: 'Follower max_trade_usd limit exceeded.' };
-  }
+	  const maxTradeUsd = asNumber(row.max_trade_usd);
+	  if (maxTradeUsd > 0 && scaledAmountUsd > maxTradeUsd) {
+	    return { ok: false, code: 'policy_denied', message: 'Follower max_trade_usd limit exceeded.' };
+	  }
 
   const maxDailyUsd = asNumber(row.max_daily_usd);
   if (maxDailyUsd > 0) {
@@ -341,9 +336,9 @@ export async function generateCopyIntentsForLeaderFill(
     }
 
     const followerTradeId = makeId('trd');
-    const approvalModeResult = await client.query<{ approval_mode: 'per_trade' | 'auto' }>(
+    const approvalModeResult = await client.query<{ approval_mode: 'per_trade' | 'auto'; allowed_tokens: unknown }>(
       `
-      select approval_mode
+      select approval_mode, allowed_tokens
       from agent_policy_snapshots
       where agent_id = $1
       order by created_at desc
@@ -352,7 +347,11 @@ export async function generateCopyIntentsForLeaderFill(
       [sub.follower_agent_id]
     );
     const approvalMode = approvalModeResult.rows[0]?.approval_mode ?? 'per_trade';
-    const followerTradeStatus = approvalMode === 'auto' ? 'approved' : 'approval_pending';
+    const allowedTokens = Array.isArray(approvalModeResult.rows[0]?.allowed_tokens)
+      ? approvalModeResult.rows[0].allowed_tokens.map((value) => String(value).trim().toLowerCase()).filter((value) => value.length > 0)
+      : [];
+    const tokenInPreapproved = allowedTokens.includes(String(leaderTrade.token_in).trim().toLowerCase());
+    const followerTradeStatus = approvalMode === 'auto' || tokenInPreapproved ? 'approved' : 'approval_pending';
 
     await client.query(
       `

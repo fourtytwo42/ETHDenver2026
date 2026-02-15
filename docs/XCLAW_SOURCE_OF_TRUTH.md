@@ -408,6 +408,9 @@ All agent write endpoints require:
 
 6. `POST /api/v1/trades/proposed`
 - Ingests proposed trade and returns normalized `tradeId`.
+- Initial trade status is assigned at proposal time:
+  - `approved` when Global Approval is ON, or when Global Approval is OFF and `tokenIn` is preapproved.
+  - `approval_pending` otherwise.
 
 7. `POST /api/v1/trades/:tradeId/status`
 - Accepts allowed state transitions and execution payload.
@@ -888,11 +891,12 @@ This section supersedes any earlier conflicting statements in this file.
 - Fixed native gas buffer is 0.005 ETH minimum and not user-lowerable.
 - Withdraw destination changes require step-up auth.
 - Approvals are managed on web; agent executes locally and enforces policy before trading.
-- Approval precedence is deny > specific trade > pair > global.
-- Pair approvals are non-directional and chain-scoped.
-- Global approvals are chain-scoped.
-- Per-trade approval does not require additional step-up beyond management auth policy.
-- Sensitive actions (`withdraw`, `approve-all`, `pair/global approval changes`) require 24h step-up.
+- Approval model is policy-driven:
+  - Global Approval ON (`approval_mode=auto`) means new trade proposals are auto-approved.
+  - Global Approval OFF (`approval_mode=per_trade`) means approval is required unless `tokenIn` is preapproved (present in `allowed_tokens`).
+  - Token preapproval is evaluated on `tokenIn` only (chain-scoped).
+- Per-trade approval decisions do not require step-up beyond base management auth.
+- Sensitive actions (`withdraw`, enabling Global Approval, enabling token preapproval, outbound transfer policy enablements) require 24h step-up.
 - Step-up is server-verified HttpOnly session, not localStorage.
 - Step-up code is single-use and rate-limited to 5 failed attempts per 10 minutes.
 - Pause/resume is user-controlled from management UI and requires base management auth only.
@@ -1497,9 +1501,19 @@ These defaults define baseline UX/layout behavior so frontend implementation is 
 
 ---
 
-## 30) Approval Contract Schema (Locked)
+## 30) Approval Contract (Locked)
 
-### 30.1 Approval Object
+### 30.1 Canonical Approval Semantics (Policy-Driven)
+
+1. Global Approval is controlled by policy snapshot `approval_mode`:
+   - `auto` => Global Approval ON.
+   - `per_trade` => Global Approval OFF.
+2. Token preapproval is controlled by policy snapshot `allowed_tokens`:
+   - When Global Approval is OFF, a trade is auto-approved if and only if `tokenIn` is in `allowed_tokens` (case-insensitive address compare).
+   - Otherwise the trade is created as `approval_pending` and requires manual approve/reject from authorized `/agents/:id`.
+3. Pair approvals are deprecated in the active product surface (legacy compatibility only).
+
+### 30.2 Legacy Approval Object (Deprecated)
 
 ```json
 {
@@ -1524,7 +1538,7 @@ These defaults define baseline UX/layout behavior so frontend implementation is 
 }
 ```
 
-### 30.2 Scope Rules
+Legacy scope rules:
 1. `trade` applies to one intent id.
 2. `pair` applies to non-directional pair on one chain.
 3. `global` applies to all pairs on one chain.
@@ -2151,7 +2165,7 @@ Required sections:
 
 3) Authorized management panel (pinned on desktop):
 - Approval queue: approve/reject pending actions
-- Policy controls: per-trade / pair / global, chain-scoped
+- Policy controls: Global Approval toggle + per-token preapproval toggles (tokenIn-only), chain-scoped
 - Withdraw controls: set destination + initiate withdraw
 - Pause/Resume control
 - Step-up auth status card with expiry countdown (24h)
@@ -2463,6 +2477,38 @@ Limitations / notes:
    - agent runtime must block trade actions and outbound `wallet-send` on that chain with structured `code=chain_disabled`,
    - server must reject trade proposal / limit-order execution paths for that chain with structured `code=chain_disabled`,
    - owner withdraw remains available for safety recovery.
+
+---
+
+## 57) Slice 33 Simplified Approvals + Wallet-First Agent Page Contract (Locked)
+
+1. Pair approvals are removed from the active product surface.
+2. Global Approval:
+   - stored as `agent_policy_snapshots.approval_mode`,
+   - `auto` => Global Approval ON (new trades are auto-approved),
+   - `per_trade` => Global Approval OFF (approval required unless token preapproved).
+3. Token preapproval:
+   - stored as `agent_policy_snapshots.allowed_tokens` (array of token addresses),
+   - evaluated on `tokenIn` only (case-insensitive address compare),
+   - chain-scoped via trade `chain_key` and management chain selector context.
+4. Step-up rules:
+   - enabling Global Approval requires step-up,
+   - enabling a token preapproval toggle requires step-up,
+   - disabling either does not require step-up.
+5. Trade proposal behavior (`POST /api/v1/trades/proposed`):
+   - sets initial trade status to `approved` or `approval_pending` based on Global Approval + tokenIn preapproval rule.
+6. Agent runtime `trade spot` behavior:
+   - server-first: propose before on-chain execution,
+   - if approval is pending, wait/poll until approved or rejected,
+   - only rejection must be surfaced as an approval-system-aware failure (reasonCode/reasonMessage).
+7. `/agents/:id` UX:
+   - public profile remains long-scroll but is wallet-first:
+     - wallet header (copyable address pill),
+     - assets list with token icons and balances (owner-only balances),
+     - unified activity feed (trades + lifecycle events) in a MetaMask-like list.
+   - authorized management rail:
+     - approvals queue (approve/reject with rejection reason message),
+     - policy controls show Global Approval toggle + per-token preapproval toggles (no pair approvals UI).
 4. Enabling chain access is a protected action:
    - enabling requires an active step-up session,
    - disabling does not require step-up.

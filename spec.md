@@ -121,6 +121,45 @@ Harden the agent runtime/skill command surface to prevent hangs, improve identit
 
 ---
 
+# Slice 33 Spec: MetaMask-Like Agent Wallet UX + Simplified Approvals (Global + Per-Token)
+
+## Goal
+Redesign `/agents/:id` to feel like a MetaMask-style wallet (wallet header + assets + unified activity feed) and simplify approvals to:
+- Global Approval toggle (policy-driven).
+- Per-token preapproval toggles evaluated on `tokenIn` only.
+- No pair approvals in the active product surface.
+
+## Success Criteria
+1. Server:
+   - `POST /api/v1/trades/proposed` persists initial status `approved|approval_pending` based on global/tokenIn preapproval policy.
+   - initial event emitted matches status (`trade_approved` or `trade_approval_pending`).
+   - copy lifecycle follower trade creation uses the same approval semantics.
+2. Runtime:
+   - `trade spot` is server-first: propose before on-chain execution, wait when pending, execute only if approved, surface rejection reason.
+3. UI (`/agents/:id`):
+   - public view is wallet-first with a MetaMask-like wallet header + assets list.
+   - trades + activity are presented as a unified MetaMask-like activity feed.
+   - owner-only management rail includes approvals (approve/reject with reason) and policy toggles (Global Approval + per-token).
+4. Deprecated legacy:
+   - pair/global approval scope UI is removed.
+   - `POST /api/v1/management/approvals/scope` is deprecated and not used by UI.
+5. Docs/contracts are synced (source-of-truth, openapi, tracker/roadmap, context/spec/tasks/acceptance).
+
+## Non-Goals
+1. New auth model or route split for management.
+2. Applying approvals to read-only wallet commands.
+3. Introducing a separate “allowed tokens” safety allowlist beyond the preapproval list.
+
+## Acceptance Checks
+- `npm run db:parity`
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:verify`
+- `npm run build`
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+---
+
 # Slice 32 Spec: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)
 
 ## Goal

@@ -247,6 +247,17 @@ function CopyIcon() {
   );
 }
 
+function shortenHex(value: string | null | undefined, head = 6, tail = 4): string {
+  if (!value) {
+    return '—';
+  }
+  const raw = String(value);
+  if (raw.length <= head + tail + 3) {
+    return raw;
+  }
+  return `${raw.slice(0, head)}...${raw.slice(-tail)}`;
+}
+
 function formatUnitsTruncated(raw: string | null | undefined, decimals: number, maxFraction: number): string {
   if (!raw) {
     return '—';
@@ -453,7 +464,8 @@ export default function AgentPublicProfilePage() {
   const [policyDailyCapUsdEnabled, setPolicyDailyCapUsdEnabled] = useState(true);
   const [policyDailyTradeCapEnabled, setPolicyDailyTradeCapEnabled] = useState(true);
   const [policyMaxDailyTradeCount, setPolicyMaxDailyTradeCount] = useState('0');
-  const [policyAllowedTokensInput, setPolicyAllowedTokensInput] = useState('');
+  const [policyAllowedTokens, setPolicyAllowedTokens] = useState<string[]>([]);
+  const [approvalRejectReasons, setApprovalRejectReasons] = useState<Record<string, string>>({});
   const [chainUpdatePending, setChainUpdatePending] = useState(false);
 
   useEffect(() => {
@@ -560,7 +572,7 @@ export default function AgentPublicProfilePage() {
               ? String(payload.tradeCaps.maxDailyTradeCount)
               : (payload.latestPolicy?.max_daily_trade_count ?? '0')
           );
-          setPolicyAllowedTokensInput((payload.latestPolicy?.allowed_tokens ?? []).join(','));
+          setPolicyAllowedTokens(payload.latestPolicy?.allowed_tokens ?? []);
           rememberManagedAgent(agentId);
 
           const savedDestination =
@@ -614,6 +626,60 @@ export default function AgentPublicProfilePage() {
     return `${hours}h ${minutes}m`;
   }, [management]);
 
+  const policyTokenOptions = useMemo(() => {
+    const unique = new Set<string>();
+    for (const token of policyAllowedTokens) {
+      if (typeof token === 'string' && token.trim()) {
+        unique.add(token.trim());
+      }
+    }
+    const chain = depositData?.chains?.[0];
+    for (const row of chain?.balances ?? []) {
+      const token = typeof row?.token === 'string' ? row.token.trim() : '';
+      if (!token || token.toUpperCase() === 'NATIVE') {
+        continue;
+      }
+      unique.add(token);
+    }
+    return [...unique].sort((a, b) => a.localeCompare(b));
+  }, [depositData, policyAllowedTokens]);
+
+  const activityFeed = useMemo(() => {
+    const items: Array<
+      | { kind: 'trade'; id: string; at: string; status: string; pair: string; tokenIn: string; tokenOut: string; txHash: string | null; reason: string | null }
+      | { kind: 'event'; id: string; at: string; eventType: string; pairDisplay: string | null; tokenInSymbol: string | null; tokenOutSymbol: string | null }
+    > = [];
+
+    for (const trade of trades ?? []) {
+      items.push({
+        kind: 'trade',
+        id: trade.trade_id,
+        at: trade.created_at,
+        status: trade.status,
+        pair: trade.pair,
+        tokenIn: trade.token_in,
+        tokenOut: trade.token_out,
+        txHash: trade.tx_hash,
+        reason: trade.reason_code ?? trade.reason_message ?? trade.reason ?? null
+      });
+    }
+
+    for (const event of activity ?? []) {
+      items.push({
+        kind: 'event',
+        id: event.event_id,
+        at: event.created_at,
+        eventType: event.event_type,
+        pairDisplay: event.pair_display,
+        tokenInSymbol: event.token_in_symbol,
+        tokenOutSymbol: event.token_out_symbol
+      });
+    }
+
+    items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+    return items.slice(0, 30);
+  }, [activity, trades]);
+
   async function refreshManagementState() {
     if (!agentId) {
       return;
@@ -653,7 +719,7 @@ export default function AgentPublicProfilePage() {
           ? String(payload.tradeCaps.maxDailyTradeCount)
           : (payload.latestPolicy?.max_daily_trade_count ?? '0')
       );
-      setPolicyAllowedTokensInput((payload.latestPolicy?.allowed_tokens ?? []).join(','));
+      setPolicyAllowedTokens(payload.latestPolicy?.allowed_tokens ?? []);
       const [depositPayload, limitOrderPayload] = await Promise.all([
         managementGet(`/api/v1/management/deposit?agentId=${encodeURIComponent(agentId)}&chainKey=${encodeURIComponent(activeChainKey)}`),
         managementGet(`/api/v1/management/limit-orders?agentId=${encodeURIComponent(agentId)}&limit=50`)
@@ -744,7 +810,7 @@ export default function AgentPublicProfilePage() {
         {error ? <p className="warning-banner">{error}</p> : null}
 
         <section className="panel" id="overview">
-          <h1 className="section-title">Agent Overview</h1>
+          <h1 className="section-title">Wallet</h1>
           {!profile ? <p className="muted">Loading agent profile...</p> : null}
 
           {profile ? (
@@ -764,14 +830,14 @@ export default function AgentPublicProfilePage() {
 
               <div className="overview-wallet">
                 <div style={{ marginTop: '0.8rem' }}>
-                  <div className="muted">Deposit address</div>
+                  <div className="muted">Address</div>
                   {(() => {
                     const activeWallet = (profile.wallets ?? []).find((w) => w.chain_key === activeChainKey) ?? null;
                     const address = activeWallet?.address ?? null;
                     return (
                       <button
                         type="button"
-                        className="copy-row"
+                        className="copy-pill"
                         disabled={!address}
                         onClick={async () => {
                           if (!address) return;
@@ -800,12 +866,14 @@ export default function AgentPublicProfilePage() {
                   {(() => {
                   const chain = depositData?.chains?.[0];
                   const balances = chain?.balances ?? [];
-                  const byToken = new Map<string, { balance: string; decimals: number }>();
+                  const byToken = new Map<string, { balance: string; decimals: number | null }>();
                   for (const row of balances) {
                     if (!row?.token) continue;
                     const token = String(row.token);
                     const balance = String(row.balance ?? '0');
-                    const decimals = typeof row.decimals === 'number' && Number.isFinite(row.decimals) ? row.decimals : 18;
+                    // `deposit` payload sometimes omits decimals; do not default to 18 for known stables.
+                    const decimals =
+                      typeof row.decimals === 'number' && Number.isFinite(row.decimals) ? Math.trunc(row.decimals) : null;
                     byToken.set(token, { balance, decimals });
                   }
 
@@ -813,19 +881,20 @@ export default function AgentPublicProfilePage() {
                     {
                       symbol: 'ETH',
                       name: 'Ethereum',
-                      decimals: byToken.get('NATIVE')?.decimals ?? 18,
+                      decimals: 18,
                       raw: byToken.get('NATIVE')?.balance ?? null
                     },
                     {
                       symbol: 'WETH',
                       name: 'Wrapped Ether',
-                      decimals: byToken.get('WETH')?.decimals ?? 18,
+                      decimals: 18,
                       raw: byToken.get('WETH')?.balance ?? null
                     },
                     {
                       symbol: 'USDC',
                       name: 'USD Coin',
-                      decimals: byToken.get('USDC')?.decimals ?? 6,
+                      // Canonical: USDC is 6 decimals on Base/EVM.
+                      decimals: 6,
                       raw: byToken.get('USDC')?.balance ?? null
                     }
                   ];
@@ -889,76 +958,42 @@ export default function AgentPublicProfilePage() {
           </article>
         </section>
 
-        <section className="panel" id="trades">
-          <h2 className="section-title">Trades</h2>
-          <p className="muted">Recent network trades for this agent. Timestamps are UTC.</p>
-          {!trades ? <p className="muted">Loading trades...</p> : null}
-          {trades && trades.length === 0 ? <p className="muted">No trades found for this agent.</p> : null}
-          {trades && trades.length > 0 ? (
-            <>
-              <div className="table-desktop">
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Source</th>
-                        <th>Pair</th>
-                        <th>Status</th>
-                        <th>Execution ID</th>
-                        <th>Reason</th>
-                        <th>Created (UTC)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {trades.map((trade) => (
-                        <tr key={trade.trade_id}>
-                          <td>{trade.source_label ?? (trade.source_trade_id ? 'copied' : 'self')}</td>
-                          <td>{trade.pair}</td>
-                          <td>
-                            <span className="status-chip">{trade.status}</span>
-                          </td>
-                          <td className="hard-wrap">{trade.tx_hash ?? '-'}</td>
-                          <td>{trade.reason_code ?? trade.reason_message ?? trade.reason ?? '-'}</td>
-                          <td>{formatUtc(trade.created_at)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div className="cards-mobile">
-                <div className="cards-mobile-grid">
-                  {trades.map((trade) => (
-                    <article key={`${trade.trade_id}:mobile`} className="data-card">
-                      <div>
-                        <strong>{trade.pair}</strong>
+        <section className="panel" id="activity">
+          <h2 className="section-title">Activity</h2>
+          <p className="muted">Trades and lifecycle events for this agent. Timestamps are UTC.</p>
+          {!trades || !activity ? <p className="muted">Loading activity...</p> : null}
+          {activityFeed.length === 0 && trades && activity ? <p className="muted">No activity yet.</p> : null}
+          {activityFeed.length > 0 ? (
+            <div className="wallet-activity-list">
+              {activityFeed.map((item) =>
+                item.kind === 'trade' ? (
+                  <article className="wallet-activity-item" key={`trade:${item.id}`}>
+                    <div className="wallet-activity-main">
+                      <div className="wallet-activity-title">
+                        <strong>Swap</strong>
+                        <span className="status-chip">{item.status}</span>
                       </div>
-                      <div className="toolbar" style={{ marginBottom: 0 }}>
-                        <span className="status-chip">{trade.status}</span>
+                      <div className="muted">{item.pair || `${item.tokenIn} -> ${item.tokenOut}`}</div>
+                      {item.txHash ? <div className="muted hard-wrap">Tx: {shortenHex(item.txHash, 10, 8)}</div> : null}
+                      {item.reason ? <div className="muted">Reason: {item.reason}</div> : null}
+                    </div>
+                    <div className="wallet-activity-meta muted">{formatUtc(item.at)} UTC</div>
+                  </article>
+                ) : (
+                  <article className="wallet-activity-item" key={`event:${item.id}`}>
+                    <div className="wallet-activity-main">
+                      <div className="wallet-activity-title">
+                        <strong>{formatActivityTitle(item.eventType)}</strong>
                       </div>
-                      <div className="data-pairs">
-                        <div>
-                          <div className="data-label">Source</div>
-                          <div className="data-value">{trade.source_label ?? (trade.source_trade_id ? 'copied' : 'self')}</div>
-                        </div>
-                        <div>
-                          <div className="data-label">Execution ID</div>
-                          <div className="data-value hard-wrap">{trade.tx_hash ?? '-'}</div>
-                        </div>
-                        <div>
-                          <div className="data-label">Reason</div>
-                          <div className="data-value">{trade.reason_code ?? trade.reason_message ?? trade.reason ?? '-'}</div>
-                        </div>
-                        <div>
-                          <div className="data-label">Created (UTC)</div>
-                          <div className="data-value">{formatUtc(trade.created_at)}</div>
-                        </div>
+                      <div className="muted">
+                        {item.pairDisplay ?? `${item.tokenInSymbol ?? 'token'} -> ${item.tokenOutSymbol ?? 'token'}`}
                       </div>
-                    </article>
-                  ))}
-                </div>
-              </div>
-            </>
+                    </div>
+                    <div className="wallet-activity-meta muted">{formatUtc(item.at)} UTC</div>
+                  </article>
+                )
+              )}
+            </div>
           ) : null}
           {profile?.copyBreakdown ? (
             <div style={{ marginTop: '0.8rem' }}>
@@ -970,30 +1005,6 @@ export default function AgentPublicProfilePage() {
               <div>
                 Self PnL: {formatUsd(profile.copyBreakdown.selfPnlUsd)} | Copied PnL: {formatUsd(profile.copyBreakdown.copiedPnlUsd)}
               </div>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="panel" id="activity">
-          <h2 className="section-title">Activity Timeline</h2>
-          <p className="muted">Live trade-related events for this agent.</p>
-          {!activity ? <p className="muted">Loading activity...</p> : null}
-          {activity && activity.length === 0 ? <p className="muted">No activity yet on Base Sepolia.</p> : null}
-          {activity && activity.length > 0 ? (
-            <div className="activity-list">
-              {activity.map((event) => (
-                <article className="activity-item" key={event.event_id}>
-                  <div>
-                    <strong>{formatActivityTitle(event.event_type)}</strong>
-                    <div className="muted">
-                      {event.pair_display ?? `${event.token_in_symbol ?? 'token'} -> ${event.token_out_symbol ?? 'token'}`}
-                    </div>
-                  </div>
-                  <div className="muted">
-                    {event.chain_key} • {formatUtc(event.created_at)} UTC
-                  </div>
-                </article>
-              ))}
             </div>
           ) : null}
         </section>
@@ -1124,10 +1135,7 @@ export default function AgentPublicProfilePage() {
                             dailyCapUsdEnabled: policyDailyCapUsdEnabled,
                             dailyTradeCapEnabled: policyDailyTradeCapEnabled,
                             maxDailyTradeCount: policyDailyTradeCapEnabled ? Number(policyMaxDailyTradeCount || '0') : null,
-                            allowedTokens: policyAllowedTokensInput
-                              .split(',')
-                              .map((value) => value.trim())
-                              .filter((value) => value.length > 0),
+                            allowedTokens: policyAllowedTokens,
                             outboundTransfersEnabled,
                             outboundMode,
                             outboundWhitelistAddresses: outboundWhitelistInput
@@ -1272,15 +1280,51 @@ export default function AgentPublicProfilePage() {
                 <h3>Policy Controls</h3>
                 <div className="toolbar">
                   <label>
-                    <span className="muted">Approval mode </span>
-                    <select
-                      value={policyApprovalMode}
-                      onChange={(event) => setPolicyApprovalMode((event.target.value as 'per_trade' | 'auto') ?? 'per_trade')}
-                    >
-                      <option value="per_trade">per_trade</option>
-                      <option value="auto">auto</option>
-                    </select>
+                    <input
+                      type="checkbox"
+                      checked={policyApprovalMode === 'auto'}
+                      onChange={(event) => setPolicyApprovalMode(event.target.checked ? 'auto' : 'per_trade')}
+                    />{' '}
+                    Global Approval
                   </label>
+                  <span className="muted">
+                    {policyApprovalMode === 'auto'
+                      ? 'On: new trades are auto-approved.'
+                      : 'Off: approvals required unless tokenIn is preapproved.'}
+                  </span>
+                </div>
+                <div style={{ marginTop: '0.6rem' }}>
+                  <div className="muted">Token preapprovals (tokenIn only)</div>
+                  {policyTokenOptions.length === 0 ? <p className="muted">No tokens discovered yet for this agent.</p> : null}
+                  {policyTokenOptions.length > 0 ? (
+                    <div className="token-toggle-list">
+                      {policyTokenOptions.map((token) => {
+                        const enabled = policyAllowedTokens.includes(token);
+                        const label = /^0x[a-fA-F0-9]{40}$/.test(token) ? shortenAddress(token) : token.toUpperCase();
+                        return (
+                          <label key={token} className="token-toggle">
+                            <input
+                              type="checkbox"
+                              checked={enabled}
+                              disabled={policyApprovalMode === 'auto'}
+                              onChange={(event) => {
+                                const next = Boolean(event.target.checked);
+                                setPolicyAllowedTokens((current) => {
+                                  const normalized = token.trim();
+                                  if (!normalized) return current;
+                                  if (next) {
+                                    return current.includes(normalized) ? current : [...current, normalized];
+                                  }
+                                  return current.filter((value) => value !== normalized);
+                                });
+                              }}
+                            />{' '}
+                            {label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="toolbar">
                   <label>
@@ -1316,13 +1360,6 @@ export default function AgentPublicProfilePage() {
                   />
                 </div>
                 <div className="toolbar">
-                  <input
-                    value={policyAllowedTokensInput}
-                    onChange={(event) => setPolicyAllowedTokensInput(event.target.value)}
-                    placeholder="Comma-separated allowed token addresses"
-                  />
-                </div>
-                <div className="toolbar">
                   <button
                     type="button"
                     className="theme-toggle"
@@ -1338,10 +1375,7 @@ export default function AgentPublicProfilePage() {
                             dailyCapUsdEnabled: policyDailyCapUsdEnabled,
                             dailyTradeCapEnabled: policyDailyTradeCapEnabled,
                             maxDailyTradeCount: policyDailyTradeCapEnabled ? Number(policyMaxDailyTradeCount || '0') : null,
-                            allowedTokens: policyAllowedTokensInput
-                              .split(',')
-                              .map((value) => value.trim())
-                              .filter((value) => value.length > 0)
+                            allowedTokens: policyAllowedTokens
                           }).then(() => Promise.resolve()),
                         'Policy saved.',
                         'sensitive_action'
@@ -1349,30 +1383,6 @@ export default function AgentPublicProfilePage() {
                     }
                   >
                     Save Policy
-                  </button>
-                </div>
-                <div className="toolbar">
-                  <button
-                    type="button"
-                    className="theme-toggle"
-                    onClick={() =>
-                      void runManagementAction(
-                        () =>
-                          managementPost('/api/v1/management/approvals/scope', {
-                            agentId,
-                            chainKey: activeChainKey,
-                            scope: 'global',
-                            action: 'grant',
-                            maxAmountUsd: '50',
-                            slippageBpsMax: 50,
-                            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-                          }).then(() => Promise.resolve()),
-                        'Global approval scope updated.',
-                        'approval_scope_change'
-                      )
-                    }
-                  >
-                    Grant Global Approval
                   </button>
                 </div>
               </article>
@@ -1465,6 +1475,16 @@ export default function AgentPublicProfilePage() {
                       <div className="muted">{formatUtc(item.created_at)} UTC</div>
                     </div>
                     <div className="toolbar">
+                      <input
+                        value={approvalRejectReasons[item.trade_id] ?? ''}
+                        onChange={(event) =>
+                          setApprovalRejectReasons((current) => ({
+                            ...current,
+                            [item.trade_id]: event.target.value
+                          }))
+                        }
+                        placeholder="Rejection reason (optional)"
+                      />
                       <button
                         type="button"
                         className="theme-toggle"
@@ -1493,7 +1513,8 @@ export default function AgentPublicProfilePage() {
                                 agentId,
                                 tradeId: item.trade_id,
                                 decision: 'reject',
-                                reasonCode: 'approval_rejected'
+                                reasonCode: 'approval_rejected',
+                                reasonMessage: (approvalRejectReasons[item.trade_id] ?? '').trim() || 'Rejected by owner.'
                               }).then(() => Promise.resolve()),
                             `Rejected ${item.trade_id}`
                           )

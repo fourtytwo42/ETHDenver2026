@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 
-import { withTransaction } from '@/lib/db';
+import { dbQuery, withTransaction } from '@/lib/db';
 import { errorResponse, internalErrorResponse, successResponse } from '@/lib/errors';
 import { parseJsonBody } from '@/lib/http';
 import { makeId } from '@/lib/ids';
@@ -39,6 +39,23 @@ function normalizeWhitelist(values: string[] | undefined): string[] {
   return [...unique];
 }
 
+function normalizeTokenSet(values: unknown): Set<string> {
+  if (!Array.isArray(values)) {
+    return new Set<string>();
+  }
+  const out = new Set<string>();
+  for (const entry of values) {
+    if (typeof entry !== 'string') {
+      continue;
+    }
+    const normalized = entry.trim().toLowerCase();
+    if (normalized.length > 0) {
+      out.add(normalized);
+    }
+  }
+  return out;
+}
+
 export async function POST(req: NextRequest) {
   const requestId = getRequestId(req);
 
@@ -73,7 +90,27 @@ export async function POST(req: NextRequest) {
       typeof body.outboundMode === 'string' ||
       Array.isArray(body.outboundWhitelistAddresses);
 
-    if (outboundFieldsTouched) {
+    const previousPolicy = await dbQuery<{ approval_mode: 'per_trade' | 'auto'; allowed_tokens: unknown }>(
+      `
+      select approval_mode, allowed_tokens
+      from agent_policy_snapshots
+      where agent_id = $1
+      order by created_at desc
+      limit 1
+      `,
+      [body.agentId]
+    );
+    const prevMode = previousPolicy.rows[0]?.approval_mode ?? null;
+    const prevAllowed = normalizeTokenSet(previousPolicy.rows[0]?.allowed_tokens ?? []);
+
+    const nextAllowed = normalizeTokenSet(body.allowedTokens);
+    const enablingGlobalApproval = body.approvalMode === 'auto' && prevMode !== 'auto';
+    const enablingAnyTokenPreapproval = [...nextAllowed].some((token) => !prevAllowed.has(token));
+    const approvalEnablingTouched = enablingGlobalApproval || enablingAnyTokenPreapproval;
+
+    // Slice 33: step-up is required to enable Global Approval or enable token preapproval toggles.
+    // Disabling does not require step-up.
+    if (outboundFieldsTouched || approvalEnablingTouched) {
       const stepup = await requireStepupSession(req, requestId, body.agentId, auth.session.sessionId);
       if (!stepup.ok) {
         return stepup.response;

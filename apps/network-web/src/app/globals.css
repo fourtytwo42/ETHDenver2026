@@ -587,6 +587,76 @@ th {
   min-width: 0;
 }
 
+.copy-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.52rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 72%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.copy-pill:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.token-toggle-list {
+  margin-top: 0.45rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.token-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.wallet-activity-list {
+  margin-top: 0.8rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.wallet-activity-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.85rem 0.9rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 72%, transparent);
+}
+
+.wallet-activity-title {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.wallet-activity-meta {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wallet-activity-main {
+  min-width: 0;
+}
+
 .asset-list {
   margin-top: 0.6rem;
   border: 1px solid var(--line);

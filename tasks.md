@@ -201,6 +201,53 @@ Issue mapping: `#24`
 
 ---
 
+# Slice 33 Tasks: MetaMask-Like Agent Wallet UX + Simplified Approvals (Global + Per-Token)
+
+Active slice: `Slice 33: MetaMask-Like Agent Wallet UX + Simplified Approvals (Global + Per-Token)`
+
+## Checklist
+- [ ] Docs sync first:
+  - [ ] `docs/XCLAW_SLICE_TRACKER.md`
+  - [ ] `docs/XCLAW_BUILD_ROADMAP.md`
+  - [ ] `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - [ ] `docs/api/openapi.v1.yaml`
+  - [ ] `docs/CONTEXT_PACK.md`
+  - [ ] `spec.md`
+  - [ ] `tasks.md`
+  - [ ] `acceptance.md`
+- [ ] Deprecate legacy approval scopes:
+  - [ ] UI removes any pair/global scope controls.
+  - [ ] `POST /api/v1/management/approvals/scope` returns structured deprecation response (410) and is not used by UI.
+- [ ] Server: trade proposal assigns initial approval state:
+  - [ ] `POST /api/v1/trades/proposed` sets initial `trades.status` to `approved|approval_pending` based on:
+    - [ ] Global Approval ON (`approval_mode=auto`) => `approved`
+    - [ ] Global OFF and `tokenIn` preapproved (`allowed_tokens`) => `approved`
+    - [ ] otherwise => `approval_pending`
+  - [ ] `agent_events` uses `trade_approved` or `trade_approval_pending` for the initial event.
+- [ ] Server: copy lifecycle aligns with simplified approvals:
+  - [ ] follower trade status uses the same global/tokenIn gating
+  - [ ] follower policy no longer rejects due to `allowed_tokens` mismatch (treated as preapproval, not allowlist)
+- [ ] Runtime: server-first `trade spot`:
+  - [ ] proposes to server before any on-chain tx
+  - [ ] waits/polls if `approval_pending`
+  - [ ] executes only if approved and posts status transitions
+  - [ ] surfaces rejection reason on deny (`reasonCode/reasonMessage`)
+- [ ] `/agents/:id` UX:
+  - [ ] Wallet-first header (copyable address pill)
+  - [ ] Assets list (MetaMask-like rows with icon placeholders)
+  - [ ] Unified Activity feed (trades + events) in MetaMask-style list
+  - [ ] Owner-only approvals panel supports reject reason message
+  - [ ] Owner-only policy panel has Global Approval toggle + per-token preapproval toggles
+- [ ] Gates:
+  - [ ] `npm run db:parity`
+  - [ ] `npm run seed:reset`
+  - [ ] `npm run seed:load`
+  - [ ] `npm run seed:verify`
+  - [ ] `npm run build`
+  - [ ] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+---
+
 # Slice 32 Tasks: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)
 
 Active slice: `Slice 32: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)`

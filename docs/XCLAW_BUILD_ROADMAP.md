@@ -1087,3 +1087,56 @@ Use this every work session:
   - [x] `npm run seed:verify`
   - [x] `npm run build`
   - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+---
+
+## 33) Slice 33: MetaMask-Like Agent Wallet UX + Simplified Approvals (Global + Per-Token)
+
+### 33.1 Canonical/doc sync (must happen before implementation)
+- [x] Add Slice 33 goal/DoD to `docs/XCLAW_SLICE_TRACKER.md`.
+- [x] Map Slice 33 to a GitHub issue in `docs/XCLAW_SLICE_TRACKER.md` (required by `AGENTS.md`).
+- [x] Add Slice 33 roadmap checklist (this section).
+- [x] Update `docs/XCLAW_SOURCE_OF_TRUTH.md` with locked Slice 33 approval semantics and wallet-first `/agents/:id` UX contract.
+- [x] Update `docs/api/openapi.v1.yaml`:
+  - [x] `POST /api/v1/trades/proposed` response status may be `approved|approval_pending`.
+  - [x] `POST /api/v1/management/approvals/scope` is deprecated (pair/global scopes removed from product surface).
+- [x] Update handoff/process artifacts:
+  - [x] `docs/CONTEXT_PACK.md`
+  - [x] `spec.md`
+  - [x] `tasks.md`
+  - [x] `acceptance.md`
+
+### 33.2 Approval semantics (server)
+- [x] `POST /api/v1/trades/proposed` sets initial trade status:
+  - [x] `approved` when `approval_mode=auto` (Global Approval ON),
+  - [x] `approved` when Global OFF and `tokenIn` is preapproved (present in `allowed_tokens`),
+  - [x] `approval_pending` otherwise.
+- [x] Agent events reflect the initial state (`trade_approved` or `trade_approval_pending`).
+- [x] Copy lifecycle aligns: follower trade status uses the same global/tokenIn gating.
+- [x] Legacy `POST /api/v1/management/approvals/scope` returns a structured deprecation response and is not used by UI.
+
+### 33.3 Runtime semantics (agent)
+- [x] `trade spot` is server-first:
+  - [x] proposes to server before any on-chain tx,
+  - [x] waits for approval when pending,
+  - [x] executes only when approved,
+  - [x] surfaces `reasonCode/reasonMessage` on rejection.
+
+### 33.4 `/agents/:id` UX
+- [x] Public column is wallet-first:
+  - [x] MetaMask-like wallet header (name/status + copyable address pill),
+  - [x] assets list (icon + symbol + balance) with room for more tokens,
+  - [x] unified activity feed (trades + lifecycle events) in MetaMask-style rows.
+- [x] Owner-only management rail:
+  - [x] Approvals card supports approve/reject with a rejection reason message.
+  - [x] Policy card exposes Global Approval toggle and per-token preapproval toggles (no pair approvals UI).
+
+### 33.5 Validation + evidence
+- [x] Run required gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+- [x] Runtime tests:
+  - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`

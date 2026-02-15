@@ -577,3 +577,24 @@ DoD:
 - [x] runtime enforces owner chain access (`chainEnabled`) for trade and `wallet-send` paths.
 - [x] `/agents/:id` management rail exposes “Chain Access” toggle for active chain (global header selector drives chain context).
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
+
+---
+
+## Slice 33: MetaMask-Like Agent Wallet UX + Simplified Approvals (Global + Per-Token)
+Status: [x]
+Issue: #42 (umbrella)
+
+Goal:
+- Redesign `/agents/:id` to feel like a MetaMask-style wallet (assets + unified activity feed), and simplify approvals to global-on/off + per-token preapprovals (tokenIn-only) with no pair approvals.
+
+DoD:
+- [x] docs sync first: source-of-truth + roadmap + tracker + openapi + context/spec/tasks/acceptance aligned to Slice 33.
+- [x] `/agents/:id` public view is wallet-first with MetaMask-like header, assets list, and unified activity feed (trades + events).
+- [x] approvals model:
+  - [x] Global Approval toggle (`approval_mode=auto`) exists owner-only and is step-up gated on enable.
+  - [x] Per-token preapproval toggles (`allowed_tokens`) exist owner-only and are step-up gated on enable.
+  - [x] Pair approvals are removed from UI and server usage.
+- [x] `POST /api/v1/trades/proposed` sets initial trade status to `approved` or `approval_pending` based on approval policy (global or tokenIn preapproved).
+- [x] runtime `trade spot` is server-first: proposes, waits if `approval_pending`, executes only if approved, and surfaces rejection reason on deny.
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
+- [x] slice is mapped to a GitHub issue (required by `AGENTS.md`).

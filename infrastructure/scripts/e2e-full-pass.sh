@@ -196,8 +196,8 @@ main() {
     record "FAIL" "agent:wallet-sign-challenge" "$out"
   fi
 
-  # Agent proposes trade and moves to approval_pending
-  local idem trade_resp trade_id code now_utc
+  # Agent proposes trade; initial status is assigned server-side (`approved` or `approval_pending`).
+  local idem trade_resp trade_id trade_status code
   idem="e2e-propose-$(date +%s)"
   trade_resp="${WORK_DIR}/trade_proposed.json"
   code="$(post_json "POST" "${API_BASE}/trades/proposed" \
@@ -207,30 +207,27 @@ main() {
     -H "Idempotency-Key: ${idem}")"
   if [ "$code" = "200" ]; then
     trade_id="$(jq -r '.tradeId' "$trade_resp")"
-    record "PASS" "agent:trade-proposed" "tradeId=${trade_id}"
+    trade_status="$(jq -r '.status' "$trade_resp" 2>/dev/null || echo "")"
+    record "PASS" "agent:trade-proposed" "tradeId=${trade_id} status=${trade_status}"
   else
     trade_id=""
     record "FAIL" "agent:trade-proposed" "status=${code} body=$(cat "$trade_resp" 2>/dev/null)"
   fi
 
   if [ -n "$trade_id" ] && [ "$trade_id" != "null" ]; then
-    now_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    code="$(post_json "POST" "${API_BASE}/trades/${trade_id}/status" \
-      "{\"tradeId\":\"${trade_id}\",\"fromStatus\":\"proposed\",\"toStatus\":\"approval_pending\",\"at\":\"${now_utc}\"}" \
-      "${WORK_DIR}/trade_pending.json" \
-      -H "Authorization: Bearer ${AGENT_API_KEY}" \
-      -H "Idempotency-Key: e2e-pending-${trade_id}")"
-    if [ "$code" = "200" ]; then
-      record "PASS" "agent:trade-status->approval_pending" "tradeId=${trade_id}"
-    else
-      record "FAIL" "agent:trade-status->approval_pending" "status=${code} body=$(cat "${WORK_DIR}/trade_pending.json" 2>/dev/null)"
-    fi
-
     out="$(skill_cmd approval-check "$trade_id" 2>&1)"
-    if printf '%s' "$out" | jq -e '.ok == false and .code == "approval_required"' >/dev/null 2>&1; then
-      record "PASS" "agent:approval-check-pending" "$(printf '%s' "$out" | jq -c '{ok,code,message}')"
+    if [ "$trade_status" = "approval_pending" ]; then
+      if printf '%s' "$out" | jq -e '.ok == false and .code == "approval_required"' >/dev/null 2>&1; then
+        record "PASS" "agent:approval-check-pending" "$(printf '%s' "$out" | jq -c '{ok,code,message}')"
+      else
+        record "FAIL" "agent:approval-check-pending" "$out"
+      fi
     else
-      record "FAIL" "agent:approval-check-pending" "$out"
+      if printf '%s' "$out" | jq -e '.ok == true' >/dev/null 2>&1; then
+        record "PASS" "agent:approval-check-approved" "$(printf '%s' "$out" | jq -c '{ok,code,message}')"
+      else
+        record "FAIL" "agent:approval-check-approved" "$out"
+      fi
     fi
   fi
 
