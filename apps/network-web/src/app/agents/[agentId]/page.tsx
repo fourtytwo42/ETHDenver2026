@@ -174,12 +174,7 @@ type DepositPayload = {
     lastSyncedAt: string | null;
     syncStatus: 'ok' | 'degraded';
     syncDetail: string | null;
-    balances: Array<{
-      token: string;
-      balance: string;
-      blockNumber: number | null;
-      observedAt: string;
-    }>;
+    balances: Array<{ token: string; balance: string; decimals?: number; blockNumber: number | null; observedAt: string }>;
     recentDeposits: Array<{
       token: string;
       amount: string;
@@ -774,25 +769,44 @@ export default function AgentPublicProfilePage() {
                 <div style={{ marginTop: '0.9rem' }}>
                   <div className="muted">Assets</div>
                   {(() => {
-                    const chain = depositData?.chains?.[0];
-                    const balances = chain?.balances ?? [];
-                    const byToken = new Map<string, string>();
-                    for (const row of balances) {
-                      if (row?.token) byToken.set(String(row.token), String(row.balance ?? '0'));
-                    }
+                  const chain = depositData?.chains?.[0];
+                  const balances = chain?.balances ?? [];
+                  const byToken = new Map<string, { balance: string; decimals: number }>();
+                  for (const row of balances) {
+                    if (!row?.token) continue;
+                    const token = String(row.token);
+                    const balance = String(row.balance ?? '0');
+                    const decimals = typeof row.decimals === 'number' && Number.isFinite(row.decimals) ? row.decimals : 18;
+                    byToken.set(token, { balance, decimals });
+                  }
 
-                    const items: Array<{ symbol: string; name: string; decimals: number; raw: string | null }> = [
-                      { symbol: 'ETH', name: 'Ethereum', decimals: 18, raw: byToken.get('NATIVE') ?? null },
-                      { symbol: 'WETH', name: 'Wrapped Ether', decimals: 18, raw: byToken.get('WETH') ?? null },
-                      { symbol: 'USDC', name: 'USD Coin', decimals: 6, raw: byToken.get('USDC') ?? null }
-                    ];
-
-                    // Room for more tokens: append any other known snapshot tokens.
-                    const known = new Set(['NATIVE', 'WETH', 'USDC']);
-                    for (const [token, raw] of byToken.entries()) {
-                      if (known.has(token)) continue;
-                      items.push({ symbol: token, name: 'Token', decimals: 18, raw });
+                  const items: Array<{ symbol: string; name: string; decimals: number; raw: string | null }> = [
+                    {
+                      symbol: 'ETH',
+                      name: 'Ethereum',
+                      decimals: byToken.get('NATIVE')?.decimals ?? 18,
+                      raw: byToken.get('NATIVE')?.balance ?? null
+                    },
+                    {
+                      symbol: 'WETH',
+                      name: 'Wrapped Ether',
+                      decimals: byToken.get('WETH')?.decimals ?? 18,
+                      raw: byToken.get('WETH')?.balance ?? null
+                    },
+                    {
+                      symbol: 'USDC',
+                      name: 'USD Coin',
+                      decimals: byToken.get('USDC')?.decimals ?? 6,
+                      raw: byToken.get('USDC')?.balance ?? null
                     }
+                  ];
+
+                  // Room for more tokens: append any other known snapshot tokens.
+                  const known = new Set(['NATIVE', 'WETH', 'USDC']);
+                  for (const [token, meta] of byToken.entries()) {
+                    if (known.has(token)) continue;
+                    items.push({ symbol: token, name: 'Token', decimals: meta.decimals ?? 18, raw: meta.balance });
+                  }
 
                     return (
                       <div className="asset-list">

@@ -20,6 +20,19 @@ type RpcLog = {
   data: string;
 };
 
+async function readErc20Decimals(rpcUrl: string, tokenAddress: string): Promise<number | null> {
+  try {
+    const raw = (await rpcRequest(rpcUrl, 'eth_call', [{ to: tokenAddress, data: '0x313ce567' }, 'latest'])) as string;
+    const parsed = Number(hexToBigInt(raw));
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 255) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function toHexBlock(blockNumber: bigint): string {
   return `0x${blockNumber.toString(16)}`;
 }
@@ -218,6 +231,16 @@ export async function GET(req: NextRequest) {
     for (const wallet of wallets.rows) {
       const sync = await syncChainDeposits(agentId, wallet.chain_key, wallet.address);
 
+      const rpcUrl = chainRpcUrl(wallet.chain_key);
+      const cfg = getChainConfig(wallet.chain_key);
+      const decimalsByToken: Record<string, number> = { NATIVE: 18 };
+      if (rpcUrl && cfg?.canonicalTokens) {
+        for (const [symbol, tokenAddress] of Object.entries(cfg.canonicalTokens)) {
+          const decimals = await readErc20Decimals(rpcUrl, tokenAddress);
+          decimalsByToken[symbol] = decimals ?? 18;
+        }
+      }
+
       const [balances, deposits] = await Promise.all([
         dbQuery<{ token: string; balance: string; block_number: string | null; observed_at: string }>(
           `
@@ -240,7 +263,6 @@ export async function GET(req: NextRequest) {
         )
       ]);
 
-      const cfg = getChainConfig(wallet.chain_key);
       const lastSyncedAt = balances.rows.length > 0 ? balances.rows[0].observed_at : null;
 
       chains.push({
@@ -253,6 +275,7 @@ export async function GET(req: NextRequest) {
         balances: balances.rows.map((row) => ({
           token: row.token,
           balance: row.balance,
+          decimals: decimalsByToken[row.token] ?? 18,
           blockNumber: row.block_number ? Number(row.block_number) : null,
           observedAt: row.observed_at
         })),
