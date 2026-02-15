@@ -575,6 +575,77 @@ th {
   min-width: 0;
 }
 
+.asset-list {
+  margin-top: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-elev) 72%, transparent);
+  overflow: hidden;
+}
+
+.asset-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.asset-row + .asset-row {
+  border-top: 1px solid var(--line);
+}
+
+.asset-left {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.asset-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  background: color-mix(in srgb, var(--bg-elev-2) 88%, transparent);
+  color: var(--text);
+  flex: 0 0 auto;
+}
+
+.asset-meta {
+  min-width: 0;
+}
+
+.asset-symbol {
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.asset-name {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.1;
+}
+
+.asset-balance {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.asset-balance-main {
+  font-weight: 700;
+}
+
+.asset-balance-sub {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
 .agent-directory-actions {
   margin-top: 0.68rem;
 }

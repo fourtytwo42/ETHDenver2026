@@ -252,6 +252,42 @@ function CopyIcon() {
   );
 }
 
+function formatUnitsTruncated(raw: string | null | undefined, decimals: number, maxFraction: number): string {
+  if (!raw) {
+    return '—';
+  }
+  let value: bigint;
+  try {
+    value = BigInt(raw);
+  } catch {
+    return '—';
+  }
+  if (value < BigInt(0)) {
+    value = BigInt(0);
+  }
+  if (decimals <= 0) {
+    return value.toString();
+  }
+
+  const neg = value < BigInt(0);
+  const digits = (neg ? -value : value).toString();
+  const padded = digits.padStart(decimals + 1, '0');
+  const whole = padded.slice(0, -decimals) || '0';
+  let frac = padded.slice(-decimals);
+  // Trim trailing zeros, then truncate to maxFraction without rounding.
+  frac = frac.replace(/0+$/, '');
+  if (maxFraction >= 0 && frac.length > maxFraction) {
+    frac = frac.slice(0, maxFraction).replace(/0+$/, '');
+  }
+  const core = frac.length > 0 ? `${whole}.${frac}` : whole;
+  return neg ? `-${core}` : core;
+}
+
+function TokenIcon({ symbol }: { symbol: string }) {
+  const text = (symbol || '?').slice(0, 1).toUpperCase();
+  return <span className="asset-icon" aria-hidden="true">{text}</span>;
+}
+
 async function bootstrapSession(
   agentId: string,
   token: string
@@ -725,13 +761,64 @@ export default function AgentPublicProfilePage() {
                       aria-label={address ? 'Copy deposit address' : 'Deposit address unavailable'}
                       title={address ? 'Copy deposit address' : 'Deposit address unavailable'}
                     >
-                    <span className="copy-row-icon">
-                      <CopyIcon />
-                    </span>
-                    <span className="copy-row-text">{address ? shortenAddress(address) : '-'}</span>
-                  </button>
-                );
-              })()}
+                      <span className="copy-row-icon">
+                        <CopyIcon />
+                      </span>
+                      <span className="copy-row-text">{address ? shortenAddress(address) : '-'}</span>
+                    </button>
+                  );
+                })()}
+              </div>
+
+              <div style={{ marginTop: '0.9rem' }}>
+                <div className="muted">Assets</div>
+                {(() => {
+                  const chain = depositData?.chains?.[0];
+                  const balances = chain?.balances ?? [];
+                  const byToken = new Map<string, string>();
+                  for (const row of balances) {
+                    if (row?.token) byToken.set(String(row.token), String(row.balance ?? '0'));
+                  }
+
+                  const items: Array<{ symbol: string; name: string; decimals: number; raw: string | null }> = [
+                    { symbol: 'ETH', name: 'Ethereum', decimals: 18, raw: byToken.get('NATIVE') ?? null },
+                    { symbol: 'WETH', name: 'Wrapped Ether', decimals: 18, raw: byToken.get('WETH') ?? null },
+                    { symbol: 'USDC', name: 'USD Coin', decimals: 6, raw: byToken.get('USDC') ?? null }
+                  ];
+
+                  // Room for more tokens: append any other known snapshot tokens.
+                  const known = new Set(['NATIVE', 'WETH', 'USDC']);
+                  for (const [token, raw] of byToken.entries()) {
+                    if (known.has(token)) continue;
+                    items.push({ symbol: token, name: 'Token', decimals: 18, raw });
+                  }
+
+                  return (
+                    <div className="asset-list">
+                      {items.map((item) => {
+                        const display =
+                          item.symbol === 'USDC'
+                            ? formatUnitsTruncated(item.raw, item.decimals, 2)
+                            : formatUnitsTruncated(item.raw, item.decimals, 4);
+                        return (
+                          <div className="asset-row" key={item.symbol}>
+                            <div className="asset-left">
+                              <TokenIcon symbol={item.symbol} />
+                              <div className="asset-meta">
+                                <div className="asset-symbol">{item.symbol}</div>
+                                <div className="asset-name">{item.name}</div>
+                              </div>
+                            </div>
+                            <div className="asset-balance">
+                              <div className="asset-balance-main">{display}</div>
+                              <div className="asset-balance-sub">{item.symbol}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             </>
           ) : null}
