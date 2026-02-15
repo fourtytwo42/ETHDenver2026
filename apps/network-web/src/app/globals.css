@@ -245,7 +245,20 @@ a {
 }
 
 @media (min-width: 1161px) {
-  /* Desktop-wide: KPI cards were reading overly tall relative to content. */
+  /* Desktop-wide: tighten vertical rhythm on agent page and KPI cards. */
+  .agent-layout .panel {
+    padding: 0.7rem 0.85rem;
+  }
+
+  .agent-layout .section-title {
+    margin-bottom: 0.55rem;
+    font-size: 1.12rem;
+  }
+
+  .agent-layout .toolbar {
+    margin-bottom: 0.6rem;
+  }
+
   .kpi-grid .panel {
     padding: 0.52rem 0.7rem;
   }
