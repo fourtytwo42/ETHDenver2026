@@ -196,5 +196,5 @@ Issue mapping: `#24`
   - [x] `npm run build`
 - [x] Record evidence in `acceptance.md`.
 - [x] Mark Slice 29 tracker/roadmap DoD complete.
-- [ ] Commit + push Slice 29.
-- [ ] Post verification evidence + commit hash(es) to issue #24.
+- [x] Commit + push Slice 29.
+- [x] Post verification evidence + commit hash(es) to issue #24.
