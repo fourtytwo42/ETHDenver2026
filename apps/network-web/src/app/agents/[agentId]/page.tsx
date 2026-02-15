@@ -738,87 +738,89 @@ export default function AgentPublicProfilePage() {
               )}
               {profile.agent.description ? <p style={{ marginTop: '0.8rem' }}>{profile.agent.description}</p> : null}
 
-              <div style={{ marginTop: '0.8rem' }}>
-                <div className="muted">Deposit address</div>
-                {(() => {
-                  const activeWallet = (profile.wallets ?? []).find((w) => w.chain_key === activeChainKey) ?? null;
-                  const address = activeWallet?.address ?? null;
-                  return (
-                    <button
-                      type="button"
-                      className="copy-row"
-                      disabled={!address}
-                      onClick={async () => {
-                        if (!address) return;
-                        try {
-                          await navigator.clipboard.writeText(address);
-                          setOverviewDepositCopied(true);
-                          window.setTimeout(() => setOverviewDepositCopied(false), 1000);
-                        } catch {
-                          setOverviewDepositCopied(false);
-                        }
-                      }}
-                      aria-label={address ? 'Copy deposit address' : 'Deposit address unavailable'}
-                      title={address ? 'Copy deposit address' : 'Deposit address unavailable'}
-                    >
-                      <span className="copy-row-icon">
-                        <CopyIcon />
-                      </span>
-                      <span className="copy-row-text">{address ? shortenAddress(address) : '-'}</span>
-                    </button>
-                  );
-                })()}
-              </div>
+              <div className="overview-wallet">
+                <div style={{ marginTop: '0.8rem' }}>
+                  <div className="muted">Deposit address</div>
+                  {(() => {
+                    const activeWallet = (profile.wallets ?? []).find((w) => w.chain_key === activeChainKey) ?? null;
+                    const address = activeWallet?.address ?? null;
+                    return (
+                      <button
+                        type="button"
+                        className="copy-row"
+                        disabled={!address}
+                        onClick={async () => {
+                          if (!address) return;
+                          try {
+                            await navigator.clipboard.writeText(address);
+                            setOverviewDepositCopied(true);
+                            window.setTimeout(() => setOverviewDepositCopied(false), 1000);
+                          } catch {
+                            setOverviewDepositCopied(false);
+                          }
+                        }}
+                        aria-label={address ? 'Copy deposit address' : 'Deposit address unavailable'}
+                        title={address ? 'Copy deposit address' : 'Deposit address unavailable'}
+                      >
+                        <span className="copy-row-icon">
+                          <CopyIcon />
+                        </span>
+                        <span className="copy-row-text">{address ? shortenAddress(address) : '-'}</span>
+                      </button>
+                    );
+                  })()}
+                </div>
 
-              <div style={{ marginTop: '0.9rem' }}>
-                <div className="muted">Assets</div>
-                {(() => {
-                  const chain = depositData?.chains?.[0];
-                  const balances = chain?.balances ?? [];
-                  const byToken = new Map<string, string>();
-                  for (const row of balances) {
-                    if (row?.token) byToken.set(String(row.token), String(row.balance ?? '0'));
-                  }
+                <div style={{ marginTop: '0.9rem' }}>
+                  <div className="muted">Assets</div>
+                  {(() => {
+                    const chain = depositData?.chains?.[0];
+                    const balances = chain?.balances ?? [];
+                    const byToken = new Map<string, string>();
+                    for (const row of balances) {
+                      if (row?.token) byToken.set(String(row.token), String(row.balance ?? '0'));
+                    }
 
-                  const items: Array<{ symbol: string; name: string; decimals: number; raw: string | null }> = [
-                    { symbol: 'ETH', name: 'Ethereum', decimals: 18, raw: byToken.get('NATIVE') ?? null },
-                    { symbol: 'WETH', name: 'Wrapped Ether', decimals: 18, raw: byToken.get('WETH') ?? null },
-                    { symbol: 'USDC', name: 'USD Coin', decimals: 6, raw: byToken.get('USDC') ?? null }
-                  ];
+                    const items: Array<{ symbol: string; name: string; decimals: number; raw: string | null }> = [
+                      { symbol: 'ETH', name: 'Ethereum', decimals: 18, raw: byToken.get('NATIVE') ?? null },
+                      { symbol: 'WETH', name: 'Wrapped Ether', decimals: 18, raw: byToken.get('WETH') ?? null },
+                      { symbol: 'USDC', name: 'USD Coin', decimals: 6, raw: byToken.get('USDC') ?? null }
+                    ];
 
-                  // Room for more tokens: append any other known snapshot tokens.
-                  const known = new Set(['NATIVE', 'WETH', 'USDC']);
-                  for (const [token, raw] of byToken.entries()) {
-                    if (known.has(token)) continue;
-                    items.push({ symbol: token, name: 'Token', decimals: 18, raw });
-                  }
+                    // Room for more tokens: append any other known snapshot tokens.
+                    const known = new Set(['NATIVE', 'WETH', 'USDC']);
+                    for (const [token, raw] of byToken.entries()) {
+                      if (known.has(token)) continue;
+                      items.push({ symbol: token, name: 'Token', decimals: 18, raw });
+                    }
 
-                  return (
-                    <div className="asset-list">
-                      {items.map((item) => {
-                        const display =
-                          item.symbol === 'USDC'
-                            ? formatUnitsTruncated(item.raw, item.decimals, 2)
-                            : formatUnitsTruncated(item.raw, item.decimals, 4);
-                        return (
-                          <div className="asset-row" key={item.symbol}>
-                            <div className="asset-left">
-                              <TokenIcon symbol={item.symbol} />
-                              <div className="asset-meta">
-                                <div className="asset-symbol">{item.symbol}</div>
-                                <div className="asset-name">{item.name}</div>
+                    return (
+                      <div className="asset-list">
+                        {items.map((item) => {
+                          const display =
+                            item.symbol === 'USDC'
+                              ? formatUnitsTruncated(item.raw, item.decimals, 2)
+                              : formatUnitsTruncated(item.raw, item.decimals, 4);
+                          return (
+                            <div className="asset-row" key={item.symbol}>
+                              <div className="asset-left">
+                                <TokenIcon symbol={item.symbol} />
+                                <div className="asset-meta">
+                                  <div className="asset-symbol">{item.symbol}</div>
+                                  <div className="asset-name">{item.name}</div>
+                                </div>
+                              </div>
+                              <div className="asset-balance">
+                                <div className="asset-balance-main">{display}</div>
+                                <div className="asset-balance-sub">{item.symbol}</div>
                               </div>
                             </div>
-                            <div className="asset-balance">
-                              <div className="asset-balance-main">{display}</div>
-                              <div className="asset-balance-sub">{item.symbol}</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             </>
           ) : null}

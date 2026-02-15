@@ -646,6 +646,14 @@ th {
   color: var(--text-muted);
 }
 
+.overview-wallet {
+  max-width: 520px;
+}
+
+.overview-wallet .asset-list {
+  max-width: 100%;
+}
+
 .agent-directory-actions {
   margin-top: 0.68rem;
 }
