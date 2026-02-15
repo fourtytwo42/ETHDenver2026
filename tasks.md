@@ -164,5 +164,5 @@ Issue mapping: `#23`
 - [x] Run grep evidence command for user-facing mock removal.
 - [x] Record evidence in `acceptance.md`.
 - [x] Mark Slice 28 tracker/roadmap DoD complete.
-- [ ] Commit + push Slice 28.
-- [ ] Post verification evidence + commit hash(es) to issue #23.
+- [x] Commit + push Slice 28.
+- [x] Post verification evidence + commit hash(es) to issue #23.
