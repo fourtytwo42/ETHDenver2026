@@ -245,28 +245,14 @@ a {
 }
 
 @media (min-width: 1161px) {
-  /* Desktop-wide: tighten vertical rhythm on agent page and KPI cards. */
-  .agent-layout .panel {
-    padding: 0.7rem 0.85rem;
-  }
-
-  .agent-layout .section-title {
-    margin-bottom: 0.55rem;
-    font-size: 1.12rem;
-  }
-
-  .agent-layout .toolbar {
-    margin-bottom: 0.6rem;
-  }
-
   .kpi-grid .panel {
-    padding: 0.52rem 0.7rem;
+    padding: 0.62rem 0.78rem;
   }
 
   .kpi-value {
-    font-size: 1.12rem;
-    margin-top: 0.12rem;
-    line-height: 1.05;
+    font-size: 1.22rem;
+    margin-top: 0.14rem;
+    line-height: 1.1;
   }
 }
 
