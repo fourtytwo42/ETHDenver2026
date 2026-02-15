@@ -124,36 +124,7 @@ class TradePathRuntimeTests(unittest.TestCase):
             code = cli.cmd_approvals_check(args)
         self.assertEqual(code, 1)
 
-    def test_trade_execute_mock_success(self) -> None:
-        args = argparse.Namespace(intent="trd_1", chain="hardhat_local", json=True)
-        trade_payload = {
-            "tradeId": "trd_1",
-            "chainKey": "hardhat_local",
-            "status": "approved",
-            "mode": "mock",
-            "retry": {"eligible": False},
-        }
-
-        posted: list[tuple[str, str]] = []
-
-        def fake_post(trade_id: str, from_status: str, to_status: str, extra: dict | None = None) -> None:
-            posted.append((from_status, to_status))
-
-        with mock.patch.object(cli, "_read_trade_details", return_value=trade_payload), mock.patch.object(
-            cli,
-            "_post_trade_status",
-            side_effect=fake_post,
-        ), mock.patch.object(
-            cli, "_send_trade_execution_report", return_value={"ok": True, "eventType": "trade_filled"}
-        ):
-            code = cli.cmd_trade_execute(args)
-
-        self.assertEqual(code, 0)
-        self.assertEqual(posted[0], ("approved", "executing"))
-        self.assertEqual(posted[1], ("executing", "verifying"))
-        self.assertEqual(posted[2], ("verifying", "filled"))
-
-    def test_trade_execute_mock_auto_reports(self) -> None:
+    def test_trade_execute_rejects_mock_mode(self) -> None:
         args = argparse.Namespace(intent="trd_1", chain="hardhat_local", json=True)
         trade_payload = {
             "tradeId": "trd_1",
@@ -164,12 +135,11 @@ class TradePathRuntimeTests(unittest.TestCase):
         }
         with mock.patch.object(cli, "_read_trade_details", return_value=trade_payload), mock.patch.object(
             cli, "_post_trade_status"
-        ), mock.patch.object(
-            cli, "_send_trade_execution_report", return_value={"ok": True, "eventType": "trade_filled"}
-        ) as report_mock:
-            code = cli.cmd_trade_execute(args)
-        self.assertEqual(code, 0)
-        report_mock.assert_called_once_with("trd_1")
+        ) as post_mock:
+            payload = self._run_and_parse_stdout(lambda: cli.cmd_trade_execute(args))
+        self.assertFalse(payload.get("ok"))
+        self.assertEqual(payload.get("code"), "unsupported_mode")
+        post_mock.assert_not_called()
 
     def test_trade_execute_retry_not_eligible_denied(self) -> None:
         args = argparse.Namespace(intent="trd_1", chain="hardhat_local", json=True)
@@ -186,16 +156,17 @@ class TradePathRuntimeTests(unittest.TestCase):
 
         self.assertEqual(code, 1)
 
-    def test_report_send_success(self) -> None:
+    def test_report_send_deprecated(self) -> None:
         args = argparse.Namespace(trade="trd_1", json=True)
         with mock.patch.object(
             cli,
             "_read_trade_details",
             return_value={"tradeId": "trd_1", "agentId": "agt_1", "status": "filled", "mode": "mock", "chainKey": "hardhat_local", "reasonCode": None},
-        ), mock.patch.object(cli, "_api_request", return_value=(200, {"ok": True})):
-            code = cli.cmd_report_send(args)
-
-        self.assertEqual(code, 0)
+        ), mock.patch.object(cli, "_api_request") as api_mock:
+            payload = self._run_and_parse_stdout(lambda: cli.cmd_report_send(args))
+        self.assertFalse(payload.get("ok"))
+        self.assertEqual(payload.get("code"), "report_send_deprecated")
+        api_mock.assert_not_called()
 
     def test_report_send_rejects_real_trade(self) -> None:
         args = argparse.Namespace(trade="trd_real_1", json=True)
@@ -386,7 +357,7 @@ class TradePathRuntimeTests(unittest.TestCase):
     def test_limit_orders_create_omits_expires_at_when_missing(self) -> None:
         args = argparse.Namespace(
             chain="base_sepolia",
-            mode="mock",
+            mode="real",
             side="buy",
             token_in="USDC",
             token_out="WETH",
@@ -417,7 +388,7 @@ class TradePathRuntimeTests(unittest.TestCase):
     def test_limit_orders_create_surfaces_api_details(self) -> None:
         args = argparse.Namespace(
             chain="base_sepolia",
-            mode="mock",
+            mode="real",
             side="buy",
             token_in="USDC",
             token_out="WETH",
@@ -665,7 +636,7 @@ class TradePathRuntimeTests(unittest.TestCase):
         ):
             code = cli.cmd_limit_orders_run_once(args)
         self.assertEqual(code, 0)
-        self.assertEqual([entry["status"] for entry in statuses], ["triggered", "filled"])
+        self.assertEqual([entry["status"] for entry in statuses], ["failed"])
 
     def test_limit_orders_run_once_real_failure_reports_failed(self) -> None:
         args = argparse.Namespace(chain="hardhat_local", json=True, sync=False)

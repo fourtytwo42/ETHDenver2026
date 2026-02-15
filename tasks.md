@@ -131,3 +131,38 @@ Issue mapping: `#22`
 - [x] Mark Slice 27 tracker/roadmap DoD complete.
 - [x] Commit + push Slice 27.
 - [x] Post verification evidence + commit hash(es) to issue #22.
+
+---
+
+# Slice 28 Tasks: Mock Mode Deprecation (Network-Only User Surface, Base Sepolia)
+
+Active slice: `Slice 28: Mock Mode Deprecation (Network-Only User Surface, Base Sepolia)`
+Issue mapping: `#23`
+
+## Checklist
+- [x] Create and map issue #23 for Slice 28.
+- [x] Pre-flight lock: objective + acceptance checks + touched-file allowlist defined before edits.
+- [x] Docs sync before implementation:
+  - [x] `docs/XCLAW_SLICE_TRACKER.md`
+  - [x] `docs/XCLAW_BUILD_ROADMAP.md`
+  - [x] `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - [x] `docs/api/openapi.v1.yaml`
+  - [x] `docs/CONTEXT_PACK.md`
+  - [x] `spec.md`
+  - [x] `tasks.md`
+- [x] Remove mode controls/mock wording from web user-facing pages.
+- [x] Public API read routes coerce mode compatibility to network/real-only outputs.
+- [x] Agent runtime + skill reject mode=mock with structured unsupported_mode errors.
+- [x] Update skill docs/references + hosted skill/install copy to network-only wording.
+- [ ] Run required gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+  - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+- [x] Run grep evidence command for user-facing mock removal.
+- [x] Record evidence in `acceptance.md`.
+- [x] Mark Slice 28 tracker/roadmap DoD complete.
+- [ ] Commit + push Slice 28.
+- [ ] Post verification evidence + commit hash(es) to issue #23.

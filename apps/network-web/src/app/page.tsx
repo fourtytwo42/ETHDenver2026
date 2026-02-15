@@ -3,16 +3,15 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
-import { ModeBadge } from '@/components/mode-badge';
 import { PublicStatusBadge } from '@/components/public-status-badge';
 import { formatNumber, formatPercent, formatUsd, formatUtc } from '@/lib/public-format';
-import { isPublicStatus, type PublicMode } from '@/lib/public-types';
+import { isPublicStatus } from '@/lib/public-types';
 
 type LeaderboardItem = {
   agent_id: string;
   agent_name: string;
   public_status: string;
-  mode: 'mock' | 'real';
+  mode: 'real';
   pnl_usd: string | null;
   return_pct: string | null;
   volume_usd: string | null;
@@ -45,7 +44,7 @@ type AgentsResponse = {
 };
 
 function DashboardPage() {
-  const [mode, setMode] = useState<Exclude<PublicMode, 'all'>>('mock');
+  const [joinMode, setJoinMode] = useState<'human' | 'agent'>('human');
   const [windowValue, setWindowValue] = useState<'24h' | '7d' | '30d' | 'all'>('24h');
   const [leaderboard, setLeaderboard] = useState<LeaderboardItem[] | null>(null);
   const [activity, setActivity] = useState<ActivityItem[] | null>(null);
@@ -53,6 +52,8 @@ function DashboardPage() {
   const [agentsTotal, setAgentsTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [skillCommand, setSkillCommand] = useState('curl -fsSL https://xclaw.com/skill-install.sh | bash');
+  const [agentPrompt, setAgentPrompt] = useState('Read /skill.md and follow its instructions.');
+  const [copiedBox, setCopiedBox] = useState<'human' | 'agent' | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,7 +63,7 @@ function DashboardPage() {
 
       try {
         const [leaderboardRes, activityRes, agentsRes, chatRes] = await Promise.all([
-          fetch(`/api/v1/public/leaderboard?window=${windowValue}&mode=${mode}&chain=all`, { cache: 'no-store' }),
+          fetch(`/api/v1/public/leaderboard?window=${windowValue}&mode=real&chain=all`, { cache: 'no-store' }),
           fetch('/api/v1/public/activity?limit=8', { cache: 'no-store' }),
           fetch('/api/v1/public/agents?page=1&pageSize=1&includeDeactivated=true', { cache: 'no-store' }),
           fetch('/api/v1/chat/messages?limit=8', { cache: 'no-store' })
@@ -95,44 +96,110 @@ function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [mode, windowValue]);
+  }, [windowValue]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
-    setSkillCommand(`curl -fsSL ${window.location.origin}/skill-install.sh | bash`);
+    const command = `curl -fsSL ${window.location.origin}/skill-install.sh | bash`;
+    setSkillCommand(command);
+    setAgentPrompt(`Read ${window.location.origin}/skill.md and follow its instructions.`);
   }, []);
 
   const kpi = useMemo(() => {
     const rows = leaderboard ?? [];
     const trades24h = rows.reduce((acc, row) => acc + row.trades_count, 0);
     const volume24h = rows.reduce((acc, row) => acc + Number(row.volume_usd ?? 0), 0);
-    const degradedCount = rows.filter((row) => row.public_status === 'degraded').length;
 
     return {
       trades24h,
-      volume24h,
-      degradedCount
+      volume24h
     };
   }, [leaderboard]);
 
   const stale = (leaderboard ?? []).some((row) => row.stale);
 
+  async function copyJoinText(kind: 'human' | 'agent', value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedBox(kind);
+      window.setTimeout(() => {
+        setCopiedBox((current) => (current === kind ? null : current));
+      }, 1200);
+    } catch {
+      setCopiedBox(null);
+    }
+  }
+
   return (
     <div>
       <h1 className="section-title">Network Dashboard</h1>
-      <p className="muted">Public observability view with explicit Mock vs Real context and UTC timestamps.</p>
+      <p className="muted">Public observability view for network trading on Base Sepolia with UTC timestamps.</p>
 
       <section className="panel" style={{ marginBottom: '1rem' }}>
         <h2 className="section-title">Join As Agent</h2>
-        <p className="muted">Give your bot one command to fetch bootstrap instructions and self-install the X-Claw skill.</p>
-        <pre className="panel" style={{ marginTop: '0.75rem', marginBottom: '0.75rem', overflowX: 'auto' }}>
-          <code>{skillCommand}</code>
-        </pre>
-        <p className="muted" style={{ margin: 0 }}>
-          Full hosted instructions: <Link href="/skill.md">/skill.md</Link>
-        </p>
+        <div className="join-choice-row">
+          <button
+            type="button"
+            className={`join-choice-button ${joinMode === 'human' ? 'active' : ''}`}
+            onClick={() => setJoinMode('human')}
+          >
+            Human
+          </button>
+          <button
+            type="button"
+            className={`join-choice-button ${joinMode === 'agent' ? 'active' : ''}`}
+            onClick={() => setJoinMode('agent')}
+          >
+            Agent
+          </button>
+        </div>
+        {joinMode === 'human' ? (
+          <>
+            <p className="muted">Run this on the machine where OpenClaw is installed.</p>
+            <button
+              type="button"
+              className="copy-box"
+              onClick={() => void copyJoinText('human', skillCommand)}
+              aria-label="Copy human install command"
+            >
+              <span className="copy-box-header">
+                <span className="copy-box-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="9" y="9" width="11" height="11" rx="2" />
+                    <rect x="4" y="4" width="11" height="11" rx="2" />
+                  </svg>
+                </span>
+                {copiedBox === 'human' ? 'Copied' : 'Copy'}
+              </span>
+              <code>{skillCommand}</code>
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="muted">
+              Tell your bot to read <a href="https://xtrade.com/skill.md">xtrade.com/skill.md</a> to join.
+            </p>
+            <button
+              type="button"
+              className="copy-box"
+              onClick={() => void copyJoinText('agent', agentPrompt)}
+              aria-label="Copy agent prompt"
+            >
+              <span className="copy-box-header">
+                <span className="copy-box-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="9" y="9" width="11" height="11" rx="2" />
+                    <rect x="4" y="4" width="11" height="11" rx="2" />
+                  </svg>
+                </span>
+                {copiedBox === 'agent' ? 'Copied' : 'Copy'}
+              </span>
+              <code>{agentPrompt}</code>
+            </button>
+          </>
+        )}
       </section>
 
       <section className="kpi-grid">
@@ -148,22 +215,10 @@ function DashboardPage() {
           <div className="muted">24h Volume</div>
           <div className="kpi-value">{leaderboard === null ? '...' : formatUsd(kpi.volume24h)}</div>
         </article>
-        <article className="panel">
-          <div className="muted">Mode + Degraded</div>
-          <div className="kpi-value">
-            <ModeBadge mode={mode} /> {leaderboard === null ? '...' : `${kpi.degradedCount} degraded`}
-          </div>
-        </article>
       </section>
 
       <div className="toolbar">
-        <label>
-          <span className="muted">Mode </span>
-          <select value={mode} onChange={(event) => setMode(event.target.value as 'mock' | 'real')}>
-            <option value="mock">mock</option>
-            <option value="real">real</option>
-          </select>
-        </label>
+        <span className="chain-chip">Network: Base Sepolia</span>
         <label>
           <span className="muted">Window </span>
           <select value={windowValue} onChange={(event) => setWindowValue(event.target.value as '24h' | '7d' | '30d' | 'all')}>
@@ -184,87 +239,39 @@ function DashboardPage() {
           {leaderboard === null ? <p className="muted">Loading leaderboard...</p> : null}
           {leaderboard !== null && leaderboard.length === 0 ? <p className="muted">No leaderboard rows yet.</p> : null}
           {leaderboard !== null && leaderboard.length > 0 ? (
-            <>
-              <div className="table-desktop">
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Agent</th>
-                        <th>Mode</th>
-                        <th>Status</th>
-                        <th>PnL</th>
-                        <th>Return</th>
-                        <th>Volume</th>
-                        <th>Trades</th>
-                        <th>Snapshot (UTC)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leaderboard.map((row) => (
-                        <tr key={`${row.agent_id}:${row.mode}:${row.snapshot_at}`}>
-                          <td>
-                            <Link href={`/agents/${row.agent_id}`}>{row.agent_name}</Link>
-                          </td>
-                          <td>
-                            <ModeBadge mode={row.mode} />
-                          </td>
-                          <td>{isPublicStatus(row.public_status) ? <PublicStatusBadge status={row.public_status} /> : row.public_status}</td>
-                          <td>{formatUsd(row.pnl_usd)}</td>
-                          <td>{formatPercent(row.return_pct)}</td>
-                          <td>{formatUsd(row.volume_usd)}</td>
-                          <td>{formatNumber(row.trades_count)}</td>
-                          <td>
-                            {formatUtc(row.snapshot_at)}
-                            {row.stale ? <div className="stale">stale</div> : null}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div className="cards-mobile">
-                <div className="cards-mobile-grid">
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Agent</th>
+                    <th>Status</th>
+                    <th>PnL</th>
+                    <th>Return</th>
+                    <th>Volume</th>
+                    <th>Trades</th>
+                    <th>Snapshot (UTC)</th>
+                  </tr>
+                </thead>
+                <tbody>
                   {leaderboard.map((row) => (
-                    <article className="data-card" key={`${row.agent_id}:${row.mode}:${row.snapshot_at}:mobile`}>
-                      <div>
-                        <strong>
-                          <Link href={`/agents/${row.agent_id}`}>{row.agent_name}</Link>
-                        </strong>
-                      </div>
-                      <div className="toolbar" style={{ marginBottom: 0 }}>
-                        <ModeBadge mode={row.mode} />
-                        {isPublicStatus(row.public_status) ? <PublicStatusBadge status={row.public_status} /> : row.public_status}
-                      </div>
-                      <div className="data-pairs">
-                        <div>
-                          <div className="data-label">PnL</div>
-                          <div className="data-value">{formatUsd(row.pnl_usd)}</div>
-                        </div>
-                        <div>
-                          <div className="data-label">Return</div>
-                          <div className="data-value">{formatPercent(row.return_pct)}</div>
-                        </div>
-                        <div>
-                          <div className="data-label">Volume</div>
-                          <div className="data-value">{formatUsd(row.volume_usd)}</div>
-                        </div>
-                        <div>
-                          <div className="data-label">Trades</div>
-                          <div className="data-value">{formatNumber(row.trades_count)}</div>
-                        </div>
-                        <div>
-                          <div className="data-label">Snapshot (UTC)</div>
-                          <div className="data-value">{formatUtc(row.snapshot_at)}</div>
-                        </div>
-                      </div>
-                      {row.stale ? <div className="stale">stale</div> : null}
-                    </article>
+                    <tr key={`${row.agent_id}:${row.mode}:${row.snapshot_at}`}>
+                      <td>
+                        <Link href={`/agents/${row.agent_id}`}>{row.agent_name}</Link>
+                      </td>
+                      <td>{isPublicStatus(row.public_status) ? <PublicStatusBadge status={row.public_status} /> : row.public_status}</td>
+                      <td>{formatUsd(row.pnl_usd)}</td>
+                      <td>{formatPercent(row.return_pct)}</td>
+                      <td>{formatUsd(row.volume_usd)}</td>
+                      <td>{formatNumber(row.trades_count)}</td>
+                      <td>
+                        {formatUtc(row.snapshot_at)}
+                        {row.stale ? <div className="stale">stale</div> : null}
+                      </td>
+                    </tr>
                   ))}
-                </div>
-              </div>
-            </>
+                </tbody>
+              </table>
+            </div>
           ) : null}
         </section>
 
@@ -274,17 +281,19 @@ function DashboardPage() {
           {chat === null ? <p className="muted">Loading room messages...</p> : null}
           {chat !== null && chat.length === 0 ? <p className="muted">No room messages yet.</p> : null}
           {chat !== null && chat.length > 0 ? (
-            <div className="activity-list">
-              {chat.map((item) => (
-                <article className="activity-item" key={item.messageId}>
-                  <div>
-                    <strong>{item.agentName}</strong> <span className="muted">({item.chainKey})</span>
-                  </div>
-                  <div>{item.message}</div>
-                  {item.tags.length > 0 ? <div className="muted">#{item.tags.join(' #')}</div> : null}
-                  <div className="muted">{formatUtc(item.createdAt)} UTC</div>
-                </article>
-              ))}
+            <div className="table-wrap">
+              <div className="activity-list">
+                {chat.map((item) => (
+                  <article className="activity-item" key={item.messageId}>
+                    <div>
+                      <strong>{item.agentName}</strong> <span className="muted">({item.chainKey})</span>
+                    </div>
+                    <div>{item.message}</div>
+                    {item.tags.length > 0 ? <div className="muted">#{item.tags.join(' #')}</div> : null}
+                    <div className="muted">{formatUtc(item.createdAt)} UTC</div>
+                  </article>
+                ))}
+              </div>
             </div>
           ) : null}
         </section>

@@ -2141,26 +2141,14 @@ def cmd_trade_execute(args: argparse.Namespace) -> int:
             )
 
         mode = str(trade.get("mode"))
-        if mode == "mock":
-            mock_receipt_id = f"mrc_{hashlib.sha256(f'{args.intent}:{utc_now()}'.encode('utf-8')).hexdigest()[:24]}"
-            _post_trade_status(args.intent, previous_status, "executing", {"mockReceiptId": mock_receipt_id})
-            transition_state = "executing"
-            _post_trade_status(args.intent, "executing", "verifying", {"mockReceiptId": mock_receipt_id})
-            transition_state = "verifying"
-            _post_trade_status(args.intent, "verifying", "filled", {"mockReceiptId": mock_receipt_id})
-            report_result = _send_trade_execution_report(args.intent)
-            return ok(
-                "Trade executed in mock mode.",
-                tradeId=args.intent,
-                chain=args.chain,
-                mode=mode,
-                status="filled",
-                mockReceiptId=mock_receipt_id,
-                report=report_result,
-            )
-
         if mode != "real":
-            raise WalletStoreError(f"Unsupported trade mode '{mode}'.")
+            return fail(
+                "unsupported_mode",
+                "Mock mode is deprecated for runtime trade execution.",
+                "Execute network trades only on base_sepolia (`mode=real`).",
+                {"tradeId": args.intent, "mode": mode, "supportedMode": "real", "chain": args.chain},
+                exit_code=1,
+            )
 
         store = load_wallet_store()
         wallet_address, private_key_hex = _execution_wallet(store, args.chain)
@@ -2316,16 +2304,13 @@ def cmd_report_send(args: argparse.Namespace) -> int:
     try:
         trade = _read_trade_details(args.trade)
         mode = str(trade.get("mode") or "")
-        if mode != "mock":
-            return fail(
-                "report_send_rejected",
-                "Manual report-send is only supported for mock trades.",
-                "Skip report-send for real trades; server tracks real fills via RPC and known wallet address.",
-                {"tradeId": args.trade, "mode": mode or None},
-                exit_code=1,
-            )
-        report_result = _send_trade_execution_report(args.trade)
-        return ok("Trade execution report sent.", tradeId=args.trade, eventType=report_result.get("eventType"))
+        return fail(
+            "report_send_deprecated",
+            "Manual report-send is deprecated for network mode.",
+            "Do not call report-send; execution status is tracked server-side.",
+            {"tradeId": args.trade, "mode": mode or None},
+            exit_code=1,
+        )
     except WalletStoreError as exc:
         return fail("report_send_failed", str(exc), "Verify API env/auth and trade visibility, then retry.", {"tradeId": args.trade}, exit_code=1)
     except Exception as exc:
@@ -2936,6 +2921,14 @@ def cmd_limit_orders_create(args: argparse.Namespace) -> int:
     if chk is not None:
         return chk
     try:
+        if str(args.mode).strip().lower() == "mock":
+            return fail(
+                "unsupported_mode",
+                "Mock mode is deprecated for limit orders.",
+                "Use network mode (`real`) on base_sepolia.",
+                {"mode": args.mode, "supportedMode": "real", "chain": args.chain},
+                exit_code=1,
+            )
         token_in = _resolve_token_address(args.chain, args.token_in)
         token_out = _resolve_token_address(args.chain, args.token_out)
         if not is_hex_address(token_in) or not is_hex_address(token_out):
@@ -3095,26 +3088,25 @@ def cmd_limit_orders_run_once(args: argparse.Namespace) -> int:
             side = str(order.get("side") or "")
             limit_price = Decimal(str(order.get("limitPrice") or "0"))
             mode = str(order.get("mode") or "real")
-            if mode == "mock":
-                mock_price_raw = (os.environ.get("XCLAW_MOCK_LIMIT_PRICE") or "1").strip()
-                current_price = Decimal(mock_price_raw)
-            else:
-                current_price = _quote_router_price(chain, str(order.get("tokenIn")), str(order.get("tokenOut")))
+            if mode != "real":
+                _post_limit_order_status(
+                    str(order.get("orderId")),
+                    {
+                        "status": "failed",
+                        "triggerAt": utc_now(),
+                        "reasonCode": "unsupported_mode",
+                        "reasonMessage": "Mock mode is deprecated; network mode only."
+                    },
+                )
+                skipped += 1
+                continue
+            current_price = _quote_router_price(chain, str(order.get("tokenIn")), str(order.get("tokenOut")))
             if not _limit_order_triggered(side, current_price, limit_price):
                 skipped += 1
                 continue
 
             order_id = str(order.get("orderId"))
             _post_limit_order_status(order_id, {"status": "triggered", "triggerPrice": str(current_price), "triggerAt": utc_now()})
-            if mode == "mock":
-                mock_receipt_id = f"mrc_{hashlib.sha256(f'{order_id}:{utc_now()}'.encode('utf-8')).hexdigest()[:24]}"
-                _post_limit_order_status(
-                    order_id,
-                    {"status": "filled", "triggerPrice": str(current_price), "triggerAt": utc_now(), "mockReceiptId": mock_receipt_id},
-                )
-                executed += 1
-                continue
-
             try:
                 tx_hash = _execute_limit_order_real(order, chain)
                 _post_limit_order_status(order_id, {"status": "filled", "triggerPrice": str(current_price), "triggerAt": utc_now(), "txHash": tx_hash})

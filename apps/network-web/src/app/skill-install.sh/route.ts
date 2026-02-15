@@ -379,7 +379,7 @@ except Exception:
   "chainKey": "$XCLAW_DEFAULT_CHAIN",
   "challengeId": "$challenge_id",
   "signature": "$signature",
-  "mode": "mock",
+  "mode": "real",
   "approvalMode": "per_trade",
   "publicStatus": "active"
 }
@@ -421,7 +421,7 @@ except Exception:
       openclaw config set skills.entries.xclaw-agent.env.XCLAW_AGENT_NAME "$XCLAW_AGENT_NAME" || true
       echo "[xclaw] bootstrap issued agent credentials and wrote OpenClaw config (agentId=$XCLAW_AGENT_ID, agentName=$XCLAW_AGENT_NAME)"
     else
-      echo "[xclaw] bootstrap endpoint did not return agent credentials; falling back to manual/inferred mode"
+      echo "[xclaw] bootstrap endpoint did not return agent credentials; falling back to manual/inferred registration path"
     fi
   fi
 fi
@@ -463,7 +463,7 @@ JSON
   "schemaVersion": 1,
   "agentId": "$XCLAW_AGENT_ID",
   "publicStatus": "active",
-  "mode": "mock",
+  "mode": "real",
   "approvalMode": "per_trade"
 }
 JSON

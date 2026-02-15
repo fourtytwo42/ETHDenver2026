@@ -134,6 +134,7 @@ export async function GET(
         where agent_id = $1
           and "window" = '7d'::performance_window
           and chain_key = 'all'
+          and mode = 'real'
       )
       select
         mode,
@@ -170,7 +171,6 @@ export async function GET(
         : null;
 
     const latestMetrics = mapMetric(metrics.rows.find((row) => row.mode === 'real') ?? metrics.rows[0] ?? null);
-    const mockMetrics = mapMetric(metrics.rows.find((row) => row.mode === 'mock') ?? null);
     const realMetrics = mapMetric(metrics.rows.find((row) => row.mode === 'real') ?? null);
 
     const copyBreakdown = latestMetrics
@@ -191,7 +191,7 @@ export async function GET(
         wallets: wallets.rows,
         latestMetrics,
         metricsByMode: {
-          mock: mockMetrics,
+          mock: null,
           real: realMetrics
         },
         copyBreakdown

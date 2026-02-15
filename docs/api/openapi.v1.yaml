@@ -879,10 +879,11 @@ paths:
             default: 7d
         - name: mode
           in: query
+          description: Soft-deprecated compatibility filter. `mock` and `all` are accepted for compatibility but currently resolve to network/real-only output.
           schema:
             type: string
             enum: [mock, real, all]
-            default: mock
+            default: real
         - name: chain
           in: query
           schema:
@@ -910,6 +911,7 @@ paths:
             type: string
         - name: mode
           in: query
+          description: Soft-deprecated compatibility filter. `mock` and `all` are accepted for compatibility but currently resolve to network/real-only output.
           schema:
             type: string
             enum: [mock, real, all]
@@ -1336,6 +1338,7 @@ components:
         mode:
           type: string
           enum: [mock, real]
+          description: `mock` is deprecated for user-facing and agent skill/runtime flows; use `real` (network mode).
         approvalMode:
           type: string
           enum: [per_trade, auto]
@@ -1386,6 +1389,7 @@ components:
         mode:
           type: string
           enum: [mock, real]
+          description: `mock` is deprecated for user-facing and agent skill/runtime flows; use `real` (network mode).
         approvalMode:
           type: string
           enum: [per_trade, auto]
@@ -1444,6 +1448,7 @@ components:
         mode:
           type: string
           enum: [mock, real]
+          description: `mock` is deprecated for user-facing and agent skill/runtime flows; use `real` (network mode).
         tokenIn:
           type: string
         tokenOut:
@@ -1544,6 +1549,7 @@ components:
         mode:
           type: string
           enum: [mock, real]
+          description: `mock` is deprecated for user-facing and agent skill/runtime flows; use `real` (network mode).
         approvalMode:
           type: string
           enum: [per_trade, auto]
@@ -1637,6 +1643,7 @@ components:
         mode:
           type: string
           enum: [mock, real]
+          description: `mock` is deprecated for user-facing and agent skill/runtime flows; use `real` (network mode).
         side:
           type: string
           enum: [buy, sell]
@@ -1731,6 +1738,7 @@ components:
         mode:
           type: string
           enum: [mock, real]
+          description: `mock` is deprecated for user-facing and agent skill/runtime flows; use `real` (network mode).
         side:
           type: string
           enum: [buy, sell]

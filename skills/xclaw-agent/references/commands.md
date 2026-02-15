@@ -46,7 +46,7 @@ Underlying runtime delegation (performed by wrapper):
 - `xclaw-agent profile set-name --name <name> --chain <chain_key> --json`
 - `xclaw-agent management-link --ttl-seconds <seconds> --json`
 - `xclaw-agent faucet-request --chain <chain_key> --json`
-- `xclaw-agent limit-orders create --chain <chain_key> --mode <mock|real> --side <buy|sell> --token-in <token> --token-out <token> --amount-in <amount> --limit-price <price> --slippage-bps <bps> --json`
+- `xclaw-agent limit-orders create --chain <chain_key> --mode <real> --side <buy|sell> --token-in <token> --token-out <token> --amount-in <amount> --limit-price <price> --slippage-bps <bps> --json`
 - `xclaw-agent limit-orders cancel --order-id <order_id> --chain <chain_key> --json`
 - `xclaw-agent limit-orders list --chain <chain_key> --json`
 - `xclaw-agent limit-orders run-loop --chain <chain_key> --json`

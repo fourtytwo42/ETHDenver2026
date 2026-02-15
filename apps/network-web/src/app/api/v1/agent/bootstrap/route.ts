@@ -61,7 +61,8 @@ export async function POST(req: NextRequest) {
     const body = validated.data;
     const runtimePlatform = body.runtimePlatform ?? 'linux';
     const chainKey = body.chainKey ?? 'base_sepolia';
-    const mode = body.mode ?? 'mock';
+    const requestedMode = body.mode ?? 'real';
+    const mode = requestedMode === 'mock' ? 'real' : requestedMode;
     const approvalMode = body.approvalMode ?? 'per_trade';
     const publicStatus = body.publicStatus ?? 'active';
 

@@ -481,3 +481,21 @@ DoD:
   - [x] 900x1600
   - [x] 1440x900
   - [x] 1920x1080
+
+---
+
+## Slice 28: Mock Mode Deprecation (Network-Only User Surface, Base Sepolia)
+Status: [x]
+Issue: #23 ("Slice 28: Mock Mode Deprecation (Network-Only User Surface, Base Sepolia)")
+
+Goal:
+- Soft-deprecate mock trading so user-facing web and agent skill/runtime are network-only (Base Sepolia) while backend contracts/storage remain compatibility-safe for this slice.
+
+DoD:
+- [x] docs sync first: source-of-truth + roadmap + tracker + openapi + context/spec/tasks/acceptance aligned to Slice 28.
+- [x] dashboard/agents/profile UI removes mock/real mode controls and mock wording; user-facing terminology is network/base_sepolia.
+- [x] public read APIs remain backward-compatible for `mode` query values but coerce to real/network-only result sets.
+- [x] historical mock rows remain stored but are excluded from public UI result paths.
+- [x] runtime/skill mode-bearing flows reject `mock` with structured `unsupported_mode` + actionable `actionHint`.
+- [x] skill docs/command references/hosted `skill.md` and installer copy are network-only (no mock mentions for agent-facing guidance).
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.

@@ -422,6 +422,15 @@ def main(argv: List[str]) -> int:
                 "usage: limit-orders-create <mode> <side> <token_in> <token_out> <amount_in> <limit_price> <slippage_bps>",
                 exit_code=2,
             )
+        mode = str(argv[2]).strip().lower()
+        if mode == "mock":
+            return _err(
+                "unsupported_mode",
+                "Mock mode is deprecated for agent skill commands.",
+                "Use network mode (`real`) on base_sepolia.",
+                {"mode": argv[2], "supportedMode": "real", "chain": chain},
+                exit_code=2,
+            )
         return _run_agent(
             [
                 "limit-orders",
@@ -429,7 +438,7 @@ def main(argv: List[str]) -> int:
                 "--chain",
                 chain,
                 "--mode",
-                argv[2],
+                mode,
                 "--side",
                 argv[3],
                 "--token-in",

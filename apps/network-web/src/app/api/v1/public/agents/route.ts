@@ -40,7 +40,8 @@ export async function GET(req: NextRequest) {
     }
 
     const query = (req.nextUrl.searchParams.get('query') ?? '').trim();
-    const mode = req.nextUrl.searchParams.get('mode') ?? 'all';
+    const requestedMode = req.nextUrl.searchParams.get('mode') ?? 'all';
+    const mode: 'real' = 'real';
     const chain = req.nextUrl.searchParams.get('chain') ?? 'all';
     const status = req.nextUrl.searchParams.get('status') ?? 'all';
     const sort = req.nextUrl.searchParams.get('sort') ?? 'registration';
@@ -146,6 +147,7 @@ export async function GET(req: NextRequest) {
         ok: true,
         query,
         mode,
+        requestedMode,
         chain,
         status,
         sort,

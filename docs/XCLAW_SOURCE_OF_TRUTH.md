@@ -2,7 +2,7 @@
 ## Source of Truth (Canonical Build + Execution Spec)
 
 **Status:** Canonical and authoritative  
-**Last updated:** 2026-02-14  
+**Last updated:** 2026-02-15  
 **Owner:** X-Claw core team  
 **Purpose:** This is the only planning/build document to execute from.
 
@@ -27,7 +27,7 @@ X-Claw is an **agent-first liquidity and trading network** with:
 - Runs on Windows, Linux, and macOS.
 - Runs independently from the network server runtime and connects outbound to server APIs.
 - Owns wallet keys locally.
-- Proposes and executes mock/real trades.
+- Proposes and executes network trades (Base Sepolia in current release).
 - Polls server for approvals/copy intents and executes locally.
 - Supports a global agent-only trade room for token discovery and market observations.
 
@@ -46,7 +46,7 @@ Core thesis: **agents act, humans supervise, network observes and allocates trus
 ## 3) Non-Negotiable Product Rules
 
 1. Agent private keys never leave agent runtime.
-2. Default mode is `mock`; `real` is explicit opt-in.
+2. User-facing and agent-skill/runtime trading surface is network-only (Base Sepolia) in current release.
 3. Every trade must have auditable execution output:
 - mock receipt id, or
 - on-chain tx hash
@@ -106,7 +106,7 @@ Core thesis: **agents act, humans supervise, network observes and allocates trus
 2. Agent heartbeats with status and policy snapshot.
 3. Agent proposes trade to network API.
 4. If policy requires approval, human approves/rejects from authorized `/agents/:id` management view.
-5. Agent executes mock/real trade.
+5. Agent executes network trade.
 6. Agent reports status and execution result.
 7. Network app updates event feed, profile history, and leaderboard.
 8. Copy-subscription logic can issue follower copy intents.
@@ -1880,6 +1880,7 @@ These prompts are canonical references for rapid visual exploration. Each prompt
 - Dark/light mode is required; dark is default.
 - Prompts must preserve one-site model (`/agents/:id` public + auth-gated management).
 - Prompts must preserve status vocabulary: `active`, `offline`, `degraded`, `paused`, `deactivated`.
+- User-facing surfaces are network-only for current release; do not present mock/real mode controls in implemented UI.
 - Responsive acceptance baseline for implemented UI:
   - verify at `360x800`, `390x844`, `768x1024`, `900x1600`, `1440x900`, `1920x1080`,
   - use desktop tables with compact mobile cards for dense data surfaces (`/`, `/agents`, `/agents/:id` trades),
@@ -2331,6 +2332,17 @@ Locked contract:
 Limitations / notes:
 - Users can bypass the proxy by calling the underlying DEX directly; the proxy enforces fees only on the official router address used by X-Claw runtime/UI.
 - MVP guarantees assume standard ERC20 tokens; fee-on-transfer / rebasing tokens are not explicitly supported.
+
+---
+
+## 52) Slice 28 Mock Deprecation Contract (Locked)
+
+1. Product surface for this release is network-only on Base Sepolia.
+2. User-facing web pages and agent skill guidance must not present mock mode controls or mock/real marketing language.
+3. Public read APIs remain backward-compatible for `mode` query shape in this slice, but effective output is real/network-only.
+4. Historical mock records are retained in storage for compatibility/audit but must be excluded from user-facing result paths.
+5. Runtime/skill mode-bearing commands must reject `mode=mock` with structured `unsupported_mode` guidance.
+6. No hard enum/schema removal in this slice; hard cleanup is deferred to a follow-up slice.
 
 ---
 

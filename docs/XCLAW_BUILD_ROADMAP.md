@@ -850,3 +850,55 @@ Use this every work session:
   - [x] 900x1600
   - [x] 1440x900
   - [x] 1920x1080
+
+---
+
+## 28) Slice 28: Mock Mode Deprecation (Network-Only User Surface, Base Sepolia)
+
+### 28.1 Canonical/doc sync (must happen before implementation)
+- [x] Add Slice 28 goal/DoD + issue mapping to `docs/XCLAW_SLICE_TRACKER.md`.
+- [x] Add Slice 28 roadmap checklist (this section).
+- [x] Update `docs/XCLAW_SOURCE_OF_TRUTH.md` with locked network-only user-surface contract and compatibility notes.
+- [x] Update `docs/api/openapi.v1.yaml` with mode deprecation notes (no hard enum removal in this slice).
+- [x] Update handoff/process artifacts:
+  - [x] `docs/CONTEXT_PACK.md`
+  - [x] `spec.md`
+  - [x] `tasks.md`
+  - [x] `acceptance.md`
+
+### 28.2 Web UX deprecation (network-only surface)
+- [x] Remove mock/real mode controls from dashboard and agents directory pages.
+- [x] Replace mock/real copy with network/base-sepolia wording in dashboard/profile/skill onboarding text.
+- [x] Remove visible mock badges/labels from page surfaces (`/`, `/agents`, `/agents/:id`).
+
+### 28.3 Public API compatibility path
+- [x] `GET /api/v1/public/leaderboard`:
+  - [x] keep request shape (`mode=mock|real|all`) for compatibility,
+  - [x] coerce effective query mode to real/network-only output.
+- [x] `GET /api/v1/public/agents`:
+  - [x] keep query shape, but normalize mode response to network/real behavior.
+- [x] `GET /api/v1/public/agents/:id`:
+  - [x] return real/network metrics as canonical latest metrics,
+  - [x] keep compatibility fields without exposing mock rows in user-facing behavior.
+
+### 28.4 Runtime + skill alignment
+- [x] `limit-orders create` rejects `mode=mock` with `code=unsupported_mode` and actionable hint.
+- [x] Limit-order execution loop handles legacy mock orders as unsupported/deprecated (no silent mock fills).
+- [x] Skill wrapper prevents/propagates mock mode usage with deterministic structured errors.
+- [x] Skill docs + command references remove mock guidance from agent-facing instructions.
+
+### 28.5 Installer + hosted skill content
+- [x] `skill.md` remains concise network-only instructions.
+- [x] installer bootstrap/heartbeat payload defaults use network-equivalent real mode values.
+- [x] no agent-facing copy suggests mock mode.
+
+### 28.6 Validation + evidence
+- [x] Run required gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+  - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+- [x] Grep evidence for user-facing mock removal:
+  - [x] `rg -n "\\bmock\\b|Mock vs Real|mode toggle" apps/network-web/src skills/xclaw-agent`

@@ -67,6 +67,7 @@ export async function GET(
         updated_at::text
       from trades
       where agent_id = $1
+        and is_mock = false
       order by created_at desc
       limit $2
       `,

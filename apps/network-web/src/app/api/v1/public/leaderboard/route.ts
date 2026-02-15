@@ -38,7 +38,8 @@ export async function GET(req: NextRequest) {
     }
 
     const window = req.nextUrl.searchParams.get('window') ?? '7d';
-    const mode = req.nextUrl.searchParams.get('mode') ?? 'mock';
+    const requestedMode = req.nextUrl.searchParams.get('mode') ?? 'real';
+    const mode: 'real' = 'real';
     const chain = req.nextUrl.searchParams.get('chain') ?? 'all';
     const includeDeactivated = parseBoolean(req.nextUrl.searchParams.get('includeDeactivated'), false);
 
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    if (!['mock', 'real', 'all'].includes(mode)) {
+    if (!['mock', 'real', 'all'].includes(requestedMode)) {
       return errorResponse(
         400,
         {
@@ -77,6 +78,7 @@ export async function GET(req: NextRequest) {
             ok: true,
             window,
             mode,
+            requestedMode,
             chain,
             includeDeactivated,
             cached: true,
@@ -127,7 +129,7 @@ export async function GET(req: NextRequest) {
           ) as rn
         from performance_snapshots ps
         where ps."window" = $1::performance_window
-          and ($2::text = 'all' or ps.mode::text = $2)
+          and ps.mode::text = $2
           and (
             ($3::text = 'all' and ps.chain_key = 'all')
             or ($3::text <> 'all' and ps.chain_key = $3)
@@ -175,6 +177,7 @@ export async function GET(req: NextRequest) {
         ok: true,
         window,
         mode,
+        requestedMode,
         chain,
         includeDeactivated,
         cached: false,

@@ -2205,3 +2205,75 @@ Outcomes:
 1. Revert Slice 27 touched files only.
 2. Re-run required gates (`db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`).
 3. Re-check responsive class paths and page rendering contracts.
+
+## Slice 28 Acceptance Evidence
+
+Date (UTC): 2026-02-15
+Active slice: `Slice 28: Mock Mode Deprecation (Network-Only User Surface, Base Sepolia)`
+Issue mapping: `#23`
+
+### Objective + scope lock
+- Objective: soft-deprecate mock trading from user-facing web and agent skill/runtime surfaces while preserving compatibility-safe contracts/storage.
+- Scope guard honored: no DB enum removals or destructive mock-data migrations in this slice.
+
+### File-level evidence
+- Web/API:
+  - `apps/network-web/src/app/page.tsx`
+  - `apps/network-web/src/app/agents/page.tsx`
+  - `apps/network-web/src/app/agents/[agentId]/page.tsx`
+  - `apps/network-web/src/app/api/v1/public/leaderboard/route.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/route.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/[agentId]/route.ts`
+  - `apps/network-web/src/app/api/v1/public/agents/[agentId]/trades/route.ts`
+  - `apps/network-web/src/app/api/v1/agent/bootstrap/route.ts`
+  - `apps/network-web/src/app/skill.md/route.ts`
+  - `apps/network-web/src/app/skill-install.sh/route.ts`
+- Runtime/skill:
+  - `apps/agent-runtime/xclaw_agent/cli.py`
+  - `apps/agent-runtime/tests/test_trade_path.py`
+  - `skills/xclaw-agent/scripts/xclaw_agent_skill.py`
+  - `skills/xclaw-agent/SKILL.md`
+  - `skills/xclaw-agent/references/commands.md`
+- Canonical/process artifacts:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/api/openapi.v1.yaml`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+
+### Required gate evidence
+- `npm run db:parity` -> PASS (`ok: true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+- `npm run build` -> PASS
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS (`Ran 35 tests`, `OK`)
+
+### Behavior evidence
+- User-facing pages now network-only wording and controls:
+  - no mode selectors on `/` and `/agents`
+  - `/agents/:id` profile/trades no longer surface mock-specific labels/receipt branching in UI
+  - dashboard/agents fetch real-only public mode path
+- Public read API compatibility:
+  - leaderboard/agents read paths accept prior `mode` request shape but coerce effective output to real/network rows
+  - profile/trades paths exclude mock rows from rendered public surfaces
+- Runtime/skill:
+  - `limit-orders create` rejects `mode=mock` with `code: unsupported_mode` + actionable hint
+  - legacy non-real limit orders in run-once path are marked failed with `reasonCode: unsupported_mode`
+  - trade execute mock path rejects with `unsupported_mode`
+
+### Grep evidence
+- User-facing surface grep:
+  - `rg -n "\\bmock\\b|Mock vs Real|mode toggle" apps/network-web/src/app/page.tsx apps/network-web/src/app/agents/page.tsx apps/network-web/src/app/agents/[agentId]/page.tsx apps/network-web/src/app/status/page.tsx apps/network-web/src/app/skill.md/route.ts skills/xclaw-agent/SKILL.md`
+  - result: no matches
+- Broad compatibility grep:
+  - `rg -n "\\bmock\\b|Mock vs Real|mode toggle" apps/network-web/src skills/xclaw-agent`
+  - result: internal compatibility/runtime references remain (expected) in API/runtime/types and legacy compatibility paths; no user-facing copy regressions in core page surfaces.
+
+### Rollback plan
+1. Revert Slice 28 touched files only.
+2. Re-run required gates + runtime test file.
+3. Reconfirm source-of-truth/openapi/tracker/roadmap parity for Slice 28.

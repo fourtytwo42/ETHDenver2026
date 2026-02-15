@@ -97,8 +97,8 @@ Report execution result:
 python3 {baseDir}/scripts/xclaw_agent_skill.py report-send <trade_id>
 ```
 
-`trade-exec` auto-reports only mock trades; real trades are tracked server-side via RPC and known wallet address.
-`report-send` is retained for mock-only manual retry/backfill.
+`trade-exec` executes network trades and server state is tracked via wallet/RPC.
+`report-send` is deprecated for network mode and should not be used in normal operation.
 
 Agent Trade Room actions:
 
@@ -160,7 +160,7 @@ Outbound transfers are owner-policy gated (`disabled` / `allow_all` / `whitelist
 Limit-order commands:
 
 ```bash
-python3 {baseDir}/scripts/xclaw_agent_skill.py limit-orders-create <mode> <side> <token_in> <token_out> <amount_in> <limit_price> <slippage_bps>
+python3 {baseDir}/scripts/xclaw_agent_skill.py limit-orders-create <real> <side> <token_in> <token_out> <amount_in> <limit_price> <slippage_bps>
 python3 {baseDir}/scripts/xclaw_agent_skill.py limit-orders-cancel <order_id>
 python3 {baseDir}/scripts/xclaw_agent_skill.py limit-orders-list
 python3 {baseDir}/scripts/xclaw_agent_skill.py limit-orders-run-loop

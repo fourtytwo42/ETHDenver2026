@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 
 import { rememberManagedAgent } from '@/components/management-header-controls';
-import { ModeBadge } from '@/components/mode-badge';
 import { PublicStatusBadge } from '@/components/public-status-badge';
 import { formatNumber, formatPercent, formatUsd, formatUtc, isStale, shortenAddress } from '@/lib/public-format';
 import { isPublicStatus } from '@/lib/public-types';
@@ -63,7 +62,6 @@ type TradePayload = {
     source_trade_id: string | null;
     source_label?: 'self' | 'copied';
     chain_key: string;
-    is_mock: boolean;
     status: string;
     token_in: string;
     token_out: string;
@@ -74,7 +72,6 @@ type TradePayload = {
     reason_code: string | null;
     reason_message: string | null;
     tx_hash: string | null;
-    mock_receipt_id: string | null;
     executed_at: string | null;
     created_at: string;
   }>;
@@ -108,7 +105,7 @@ type ManagementStatePayload = {
     created_at: string;
   }>;
   latestPolicy: {
-    mode: 'mock' | 'real';
+    mode: 'real';
     approval_mode: 'per_trade' | 'auto';
     max_trade_usd: string | null;
     max_daily_usd: string | null;
@@ -176,7 +173,7 @@ type LimitOrderItem = {
   orderId: string;
   agentId: string;
   chainKey: string;
-  mode: 'mock' | 'real';
+  mode: 'real';
   side: 'buy' | 'sell';
   tokenIn: string;
   tokenOut: string;
@@ -307,7 +304,6 @@ export default function AgentPublicProfilePage() {
   const [depositData, setDepositData] = useState<DepositPayload | null>(null);
   const [limitOrders, setLimitOrders] = useState<LimitOrderItem[]>([]);
   const [orderChainKey, setOrderChainKey] = useState('base_sepolia');
-  const [orderMode, setOrderMode] = useState<'mock' | 'real'>('real');
   const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy');
   const [orderTokenIn, setOrderTokenIn] = useState('0x4200000000000000000000000000000000000006');
   const [orderTokenOut, setOrderTokenOut] = useState('0x036CbD53842c5426634e7929541eC2318f3dCF7e');
@@ -443,12 +439,6 @@ export default function AgentPublicProfilePage() {
     };
   }, [agentId, bootstrapState.phase]);
 
-  const mixedMode = useMemo(() => {
-    const tradeRows = trades ?? [];
-    const hasReal = tradeRows.some((trade) => !trade.is_mock);
-    return hasReal ? 'real' : 'mock';
-  }, [trades]);
-
   const stepupRemaining = useMemo(() => {
     if (management.phase !== 'ready' || !management.data.stepup.expiresAt || !management.data.stepup.active) {
       return null;
@@ -542,7 +532,7 @@ export default function AgentPublicProfilePage() {
               <div className="identity-row">
                 <strong>{profile.agent.agent_name}</strong>
                 {isPublicStatus(profile.agent.public_status) ? <PublicStatusBadge status={profile.agent.public_status} /> : profile.agent.public_status}
-                <ModeBadge mode={mixedMode} />
+                <span className="chain-chip">Network</span>
                 <span className="muted">{profile.agent.runtime_platform}</span>
                 <span className="muted">Last activity: {formatUtc(profile.agent.last_activity_at)} UTC</span>
               </div>
@@ -597,7 +587,6 @@ export default function AgentPublicProfilePage() {
                     <thead>
                       <tr>
                         <th>Source</th>
-                        <th>Mode</th>
                         <th>Pair</th>
                         <th>Status</th>
                         <th>Execution ID</th>
@@ -609,10 +598,9 @@ export default function AgentPublicProfilePage() {
                       {trades.map((trade) => (
                         <tr key={trade.trade_id}>
                           <td>{trade.source_label ?? (trade.source_trade_id ? 'copied' : 'self')}</td>
-                          <td>{trade.is_mock ? <ModeBadge mode="mock" /> : <ModeBadge mode="real" />}</td>
                           <td>{trade.pair}</td>
                           <td>{trade.status}</td>
-                          <td className="hard-wrap">{trade.is_mock ? trade.mock_receipt_id ?? '-' : trade.tx_hash ?? '-'}</td>
+                          <td className="hard-wrap">{trade.tx_hash ?? '-'}</td>
                           <td>{trade.reason_code ?? trade.reason_message ?? trade.reason ?? '-'}</td>
                           <td>{formatUtc(trade.created_at)}</td>
                         </tr>
@@ -629,7 +617,6 @@ export default function AgentPublicProfilePage() {
                         <strong>{trade.pair}</strong>
                       </div>
                       <div className="toolbar" style={{ marginBottom: 0 }}>
-                        {trade.is_mock ? <ModeBadge mode="mock" /> : <ModeBadge mode="real" />}
                         <span>{trade.status}</span>
                       </div>
                       <div className="data-pairs">
@@ -639,7 +626,7 @@ export default function AgentPublicProfilePage() {
                         </div>
                         <div>
                           <div className="data-label">Execution ID</div>
-                          <div className="data-value hard-wrap">{trade.is_mock ? trade.mock_receipt_id ?? '-' : trade.tx_hash ?? '-'}</div>
+                          <div className="data-value hard-wrap">{trade.tx_hash ?? '-'}</div>
                         </div>
                         <div>
                           <div className="data-label">Reason</div>
@@ -741,7 +728,6 @@ export default function AgentPublicProfilePage() {
                 <h3>Limit Orders</h3>
                 <div className="toolbar">
                   <input value={orderChainKey} onChange={(event) => setOrderChainKey(event.target.value)} placeholder="Chain key" />
-                  <input value={orderMode} onChange={(event) => setOrderMode(event.target.value === 'mock' ? 'mock' : 'real')} placeholder="Mode" />
                   <input value={orderSide} onChange={(event) => setOrderSide(event.target.value === 'sell' ? 'sell' : 'buy')} placeholder="Side" />
                 </div>
                 <div className="toolbar">
@@ -763,7 +749,7 @@ export default function AgentPublicProfilePage() {
                           managementPost('/api/v1/management/limit-orders', {
                             agentId,
                             chainKey: orderChainKey,
-                            mode: orderMode,
+                            mode: 'real',
                             side: orderSide,
                             tokenIn: orderTokenIn,
                             tokenOut: orderTokenOut,
@@ -924,7 +910,7 @@ export default function AgentPublicProfilePage() {
                         () =>
                           managementPost('/api/v1/management/policy/update', {
                             agentId,
-                            mode: management.data.latestPolicy?.mode ?? 'mock',
+                            mode: 'real',
                             approvalMode: management.data.latestPolicy?.approval_mode ?? 'per_trade',
                             maxTradeUsd: management.data.latestPolicy?.max_trade_usd ?? '50',
                             maxDailyUsd: management.data.latestPolicy?.max_daily_usd ?? '250',
@@ -1001,7 +987,7 @@ export default function AgentPublicProfilePage() {
                         () =>
                           managementPost('/api/v1/management/policy/update', {
                             agentId,
-                            mode: management.data.latestPolicy?.mode ?? 'mock',
+                            mode: 'real',
                             approvalMode: management.data.latestPolicy?.approval_mode ?? 'per_trade',
                             maxTradeUsd: management.data.latestPolicy?.max_trade_usd ?? '50',
                             maxDailyUsd: management.data.latestPolicy?.max_daily_usd ?? '250',

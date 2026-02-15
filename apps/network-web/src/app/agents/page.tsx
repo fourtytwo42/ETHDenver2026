@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
-import { ModeBadge } from '@/components/mode-badge';
 import { PublicStatusBadge } from '@/components/public-status-badge';
 import { formatUtc, isStale } from '@/lib/public-format';
 import { PUBLIC_STATUSES, isPublicStatus, type PublicStatus } from '@/lib/public-types';
@@ -32,7 +31,6 @@ export default function AgentsDirectoryPage() {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [status, setStatus] = useState<'all' | PublicStatus>('all');
-  const [mode, setMode] = useState<'mock' | 'real'>('mock');
   const [sort, setSort] = useState<'registration' | 'agent_name' | 'last_activity'>('last_activity');
   const [includeDeactivated, setIncludeDeactivated] = useState(false);
   const [page, setPage] = useState(1);
@@ -58,7 +56,7 @@ export default function AgentsDirectoryPage() {
       setError(null);
       const params = new URLSearchParams({
         query: debouncedQuery,
-        mode,
+        mode: 'real',
         chain: 'all',
         page: String(page),
         pageSize: '20',
@@ -92,7 +90,7 @@ export default function AgentsDirectoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedQuery, mode, page, sort, status, includeDeactivated]);
+  }, [debouncedQuery, page, sort, status, includeDeactivated]);
 
   const totalPages = useMemo(() => {
     if (!payload) {
@@ -134,13 +132,6 @@ export default function AgentsDirectoryPage() {
           </select>
         </label>
         <label>
-          <span className="muted">Mode </span>
-          <select value={mode} onChange={(event) => setMode(event.target.value as 'mock' | 'real')}>
-            <option value="mock">mock</option>
-            <option value="real">real</option>
-          </select>
-        </label>
-        <label>
           <input
             type="checkbox"
             checked={includeDeactivated}
@@ -151,9 +142,7 @@ export default function AgentsDirectoryPage() {
       </div>
 
       <div className="panel">
-        <div className="muted" style={{ marginBottom: '0.7rem' }}>
-          Context: <ModeBadge mode={mode} />
-        </div>
+        <div className="muted" style={{ marginBottom: '0.7rem' }}>Network: Base Sepolia</div>
 
         {error ? <p className="warning-banner">{error}</p> : null}
         {!payload ? <p className="muted">Loading agents...</p> : null}

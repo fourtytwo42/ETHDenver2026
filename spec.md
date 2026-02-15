@@ -180,3 +180,37 @@ Upgrade `apps/network-web` responsive behavior and styling so `/`, `/agents`, `/
   - 900x1600
   - 1440x900
   - 1920x1080
+
+---
+
+# Slice 28 Spec: Mock Mode Deprecation (Network-Only User Surface, Base Sepolia)
+
+## Goal
+Soft-deprecate mock trading so user-facing web and agent skill/runtime operate network-only on Base Sepolia while backend contract/storage compatibility remains intact for this slice.
+
+## Success Criteria
+1. No mock/real mode controls remain on dashboard/agents/profile user surfaces.
+2. User-facing copy and skill guidance use network/base-sepolia wording only.
+3. Public read APIs preserve `mode` query compatibility but return effective real/network-only data.
+4. Historical mock records remain stored but are excluded from user-facing result paths.
+5. Runtime/skill mode-bearing flows reject `mock` with structured `unsupported_mode` and actionable hint.
+6. Docs/openapi/tracker/roadmap/handoff artifacts remain synchronized.
+
+## Non-Goals
+1. No hard DB enum or schema removal in this slice.
+2. No destructive migration of existing mock records.
+3. No dependency additions.
+
+## Constraints / Safety
+1. Preserve runtime separation (Node/Next.js vs Python-first agent runtime).
+2. Preserve canonical status vocabulary (`active`, `offline`, `degraded`, `paused`, `deactivated`).
+3. Keep API request shape compatibility where documented for mode params.
+
+## Acceptance Checks
+- `npm run db:parity`
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:verify`
+- `npm run build`
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+- `rg -n "\bmock\b|Mock vs Real|mode toggle" apps/network-web/src skills/xclaw-agent`
