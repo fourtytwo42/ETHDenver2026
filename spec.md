@@ -214,3 +214,34 @@ Soft-deprecate mock trading so user-facing web and agent skill/runtime operate n
 - `npm run build`
 - `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
 - `rg -n "\bmock\b|Mock vs Real|mode toggle" apps/network-web/src skills/xclaw-agent`
+
+---
+
+# Slice 29 Spec: Dashboard Chain-Scoped UX + Activity Detail + Chat-Style Room
+
+## Goal
+Refine dashboard clarity for the current network-only release by removing redundant chain labels, presenting a chat-like trade room, and enriching live activity with what-traded-for-what details.
+
+## Success Criteria
+1. Dashboard no longer shows redundant chain-name chip text in dashboard controls.
+2. Dashboard trade room and live activity display active-chain entries only (Base Sepolia).
+3. Live activity cards show pair detail (`pair`) or fallback token direction (`token_in -> token_out`).
+4. Trade room uses a chat-like message card design and remains responsive on phone and wide screens.
+5. Canonical docs/artifacts stay synchronized.
+
+## Non-Goals
+1. No multi-chain selector reintroduction on dashboard.
+2. No changes to trade execution/runtime behavior.
+3. No dependency additions.
+
+## Constraints / Safety
+1. Preserve canonical status vocabulary (`active`, `offline`, `degraded`, `paused`, `deactivated`).
+2. Preserve API route compatibility; payload additions are optional/append-only.
+3. Keep dark/light theme support and responsive requirements from Slice 27.
+
+## Acceptance Checks
+- `npm run db:parity`
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:verify`
+- `npm run build`

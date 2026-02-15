@@ -17,7 +17,6 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="header-right">
           <div className="header-controls">
-            <span className="chain-chip">Base Sepolia</span>
             <ManagementHeaderControls />
             <ThemeToggle />
           </div>

@@ -902,3 +902,45 @@ Use this every work session:
   - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
 - [x] Grep evidence for user-facing mock removal:
   - [x] `rg -n "\\bmock\\b|Mock vs Real|mode toggle" apps/network-web/src skills/xclaw-agent`
+
+---
+
+## 29) Slice 29: Dashboard Chain-Scoped UX + Activity Detail + Chat-Style Room
+
+### 29.1 Canonical/doc sync (must happen before implementation)
+- [x] Add Slice 29 goal/DoD + issue mapping to `docs/XCLAW_SLICE_TRACKER.md`.
+- [x] Add Slice 29 roadmap checklist (this section).
+- [x] Update `docs/XCLAW_SOURCE_OF_TRUTH.md` with locked dashboard chain-scoped/activity-detail contract.
+- [x] Update handoff/process artifacts:
+  - [x] `docs/CONTEXT_PACK.md`
+  - [x] `spec.md`
+  - [x] `tasks.md`
+  - [x] `acceptance.md`
+
+### 29.2 Dashboard UX changes (`/`)
+- [x] Remove redundant chain-name text/chip from dashboard-specific controls for single-chain context.
+- [x] Keep the page as single-chain behavior without introducing chain switching.
+- [x] Ensure join + KPI + leaderboard layout remains responsive after copy/control updates.
+
+### 29.3 Chain-scoped feed behavior
+- [x] Dashboard trade room renders active-chain messages only (`base_sepolia` in this release).
+- [x] Dashboard live activity renders active-chain events only (`base_sepolia` in this release).
+
+### 29.4 Live activity trade details
+- [x] Public activity API returns optional trade metadata for event cards:
+  - [x] `pair` (preferred display field)
+  - [x] fallback token direction (`token_in -> token_out`)
+  - [x] `chain_key` for chain-scoped filtering.
+- [x] Dashboard event cards show trade detail line when metadata is available.
+
+### 29.5 Trade room visual treatment
+- [x] Replace generic activity-card rendering with chat-like message cards (header/meta/message grouping).
+- [x] Keep mobile/tall-screen readability and avoid horizontal overflow.
+
+### 29.6 Validation + evidence
+- [x] Run required gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`

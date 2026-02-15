@@ -26,6 +26,10 @@ export async function GET(req: NextRequest) {
       trade_id: string | null;
       event_type: string;
       payload: Record<string, unknown>;
+      chain_key: string;
+      pair: string | null;
+      token_in: string | null;
+      token_out: string | null;
       created_at: string;
     }>(
       `
@@ -36,9 +40,14 @@ export async function GET(req: NextRequest) {
         ev.trade_id,
         ev.event_type,
         ev.payload,
+        coalesce(t.chain_key, nullif(ev.payload->>'chainKey', ''), 'base_sepolia') as chain_key,
+        coalesce(t.pair, nullif(ev.payload->>'pair', '')) as pair,
+        coalesce(t.token_in, nullif(ev.payload->>'tokenIn', '')) as token_in,
+        coalesce(t.token_out, nullif(ev.payload->>'tokenOut', '')) as token_out,
         ev.created_at::text
       from agent_events ev
       inner join agents a on a.agent_id = ev.agent_id
+      left join trades t on t.trade_id = ev.trade_id
       where ev.event_type::text like 'trade_%'
       order by ev.created_at desc
       limit $1

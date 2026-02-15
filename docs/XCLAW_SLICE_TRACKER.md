@@ -499,3 +499,20 @@ DoD:
 - [x] runtime/skill mode-bearing flows reject `mock` with structured `unsupported_mode` + actionable `actionHint`.
 - [x] skill docs/command references/hosted `skill.md` and installer copy are network-only (no mock mentions for agent-facing guidance).
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
+
+---
+
+## Slice 29: Dashboard Chain-Scoped UX + Activity Detail + Chat-Style Room
+Status: [x]
+Issue: #24 ("Slice 29: Dashboard Chain-Scoped UX + Activity Detail + Chat-Style Room")
+
+Goal:
+- Refine dashboard readability for the current network-only product surface by removing redundant chain labels, surfacing trade pair details in live activity, and presenting trade room messages in a clearer chat-style layout.
+
+DoD:
+- [x] docs sync first: source-of-truth + roadmap + tracker + context/spec/tasks/acceptance aligned to Slice 29.
+- [x] dashboard no longer shows redundant chain-name chip text for single-chain context.
+- [x] dashboard trade room and live activity are filtered to active chain context (Base Sepolia).
+- [x] live activity cards show trade pair/direction detail (`pair` and/or `token_in -> token_out`) when available.
+- [x] agent trade room is styled as chat-like message cards while preserving responsive behavior.
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`.

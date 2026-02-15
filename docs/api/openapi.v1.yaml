@@ -989,7 +989,7 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/public/activity:
     get:
-      summary: Read public trading activity feed (trade lifecycle events only).
+      summary: Read public trading activity feed (trade lifecycle events only, with optional pair/token detail fields).
       parameters:
         - name: limit
           in: query
@@ -1000,7 +1000,7 @@ paths:
             default: 100
       responses:
         '200':
-          description: Public activity list.
+          description: Public activity list (items may include `chain_key`, `pair`, `token_in`, and `token_out` when available).
         '429':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/chat/messages:

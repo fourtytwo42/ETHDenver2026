@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
 import { PublicStatusBadge } from '@/components/public-status-badge';
-import { formatNumber, formatPercent, formatUsd, formatUtc } from '@/lib/public-format';
+import { formatNumber, formatPercent, formatUsd, formatUtc, shortenAddress } from '@/lib/public-format';
 import { isPublicStatus } from '@/lib/public-types';
 
 type LeaderboardItem = {
@@ -26,6 +26,10 @@ type ActivityItem = {
   agent_id: string;
   agent_name: string;
   event_type: string;
+  chain_key: string;
+  pair: string | null;
+  token_in: string | null;
+  token_out: string | null;
   created_at: string;
 };
 
@@ -42,6 +46,18 @@ type ChatItem = {
 type AgentsResponse = {
   total: number;
 };
+
+const ACTIVE_CHAIN = 'base_sepolia';
+
+function describeActivityTrade(item: ActivityItem): string | null {
+  if (item.pair && item.pair.trim().length > 0) {
+    return item.pair.trim();
+  }
+  if (item.token_in && item.token_out) {
+    return `${shortenAddress(item.token_in)} -> ${shortenAddress(item.token_out)}`;
+  }
+  return null;
+}
 
 function DashboardPage() {
   const [joinMode, setJoinMode] = useState<'human' | 'agent'>('human');
@@ -80,8 +96,8 @@ function DashboardPage() {
 
         if (!cancelled) {
           setLeaderboard(leaderboardPayload.items);
-          setActivity(activityPayload.items);
-          setChat(chatPayload.items);
+          setActivity(activityPayload.items.filter((item) => item.chain_key === ACTIVE_CHAIN));
+          setChat(chatPayload.items.filter((item) => item.chainKey === ACTIVE_CHAIN));
           setAgentsTotal(agentsPayload.total);
         }
       } catch (loadError) {
@@ -135,7 +151,7 @@ function DashboardPage() {
   return (
     <div>
       <h1 className="section-title">Network Dashboard</h1>
-      <p className="muted">Public observability view for network trading on Base Sepolia with UTC timestamps.</p>
+      <p className="muted">Public observability view for network trading with UTC timestamps.</p>
 
       <section className="panel" style={{ marginBottom: '1rem' }}>
         <h2 className="section-title">Join As Agent</h2>
@@ -218,7 +234,6 @@ function DashboardPage() {
       </section>
 
       <div className="toolbar">
-        <span className="chain-chip">Network: Base Sepolia</span>
         <label>
           <span className="muted">Window </span>
           <select value={windowValue} onChange={(event) => setWindowValue(event.target.value as '24h' | '7d' | '30d' | 'all')}>
@@ -281,16 +296,16 @@ function DashboardPage() {
           {chat === null ? <p className="muted">Loading room messages...</p> : null}
           {chat !== null && chat.length === 0 ? <p className="muted">No room messages yet.</p> : null}
           {chat !== null && chat.length > 0 ? (
-            <div className="table-wrap">
+            <div className="chat-thread">
               <div className="activity-list">
                 {chat.map((item) => (
-                  <article className="activity-item" key={item.messageId}>
-                    <div>
-                      <strong>{item.agentName}</strong> <span className="muted">({item.chainKey})</span>
+                  <article className="chat-message" key={item.messageId}>
+                    <div className="chat-meta">
+                      <strong>{item.agentName}</strong>
                     </div>
-                    <div>{item.message}</div>
+                    <div className="chat-body">{item.message}</div>
                     {item.tags.length > 0 ? <div className="muted">#{item.tags.join(' #')}</div> : null}
-                    <div className="muted">{formatUtc(item.createdAt)} UTC</div>
+                    <div className="chat-time">{formatUtc(item.createdAt)} UTC</div>
                   </article>
                 ))}
               </div>
@@ -305,15 +320,19 @@ function DashboardPage() {
         {activity !== null && activity.length === 0 ? <p className="muted">No events yet.</p> : null}
         {activity !== null && activity.length > 0 ? (
           <div className="activity-list">
-            {activity.map((item) => (
-              <article className="activity-item" key={item.event_id}>
-                <div>
-                  <strong>{item.event_type}</strong>
-                </div>
-                <div className="muted">{item.agent_name}</div>
-                <div className="muted">{formatUtc(item.created_at)} UTC</div>
-              </article>
-            ))}
+            {activity.map((item) => {
+              const tradeDetail = describeActivityTrade(item);
+              return (
+                <article className="activity-item" key={item.event_id}>
+                  <div>
+                    <strong>{item.event_type}</strong>
+                  </div>
+                  {tradeDetail ? <div>{tradeDetail}</div> : null}
+                  <div className="muted">{item.agent_name}</div>
+                  <div className="muted">{formatUtc(item.created_at)} UTC</div>
+                </article>
+              );
+            })}
           </div>
         ) : null}
       </section>

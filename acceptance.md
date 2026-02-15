@@ -2277,3 +2277,56 @@ Issue mapping: `#23`
 1. Revert Slice 28 touched files only.
 2. Re-run required gates + runtime test file.
 3. Reconfirm source-of-truth/openapi/tracker/roadmap parity for Slice 28.
+
+## Slice 29 Acceptance Evidence
+
+Date (UTC): 2026-02-15
+Active slice: `Slice 29: Dashboard Chain-Scoped UX + Activity Detail + Chat-Style Room`
+Issue mapping: `#24`
+
+### Objective + scope lock
+- Remove redundant chain-label noise from dashboard single-chain UX.
+- Show trade pair/direction detail in live activity cards.
+- Render dashboard trade room with chat-style message cards.
+- Keep dashboard trade room/live activity scoped to active chain context (`base_sepolia`).
+
+### File-level evidence
+- Web/API:
+  - `apps/network-web/src/components/public-shell.tsx`
+  - `apps/network-web/src/app/page.tsx`
+  - `apps/network-web/src/app/api/v1/public/activity/route.ts`
+  - `apps/network-web/src/app/globals.css`
+- Canonical/process artifacts:
+  - `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - `docs/XCLAW_SLICE_TRACKER.md`
+  - `docs/XCLAW_BUILD_ROADMAP.md`
+  - `docs/api/openapi.v1.yaml`
+  - `docs/CONTEXT_PACK.md`
+  - `spec.md`
+  - `tasks.md`
+  - `acceptance.md`
+
+### Required gate evidence
+- `npm run db:parity` -> PASS (`ok: true`)
+- `npm run seed:reset` -> PASS
+- `npm run seed:load` -> PASS
+- `npm run seed:verify` -> PASS
+- `npm run build` -> PASS
+
+### Behavioral evidence
+- Dashboard chain chip/name redundancy removed:
+  - global header no longer shows fixed `Base Sepolia` chip.
+  - dashboard toolbar no longer shows `Network: Base Sepolia` chip.
+- Dashboard feeds are chain-scoped:
+  - trade room list on `/` filters to `chainKey === "base_sepolia"`.
+  - live activity list on `/` filters to `chain_key === "base_sepolia"`.
+- Live activity payload/card detail enrichment:
+  - public activity API now returns optional `chain_key`, `pair`, `token_in`, `token_out`.
+  - dashboard event cards show `pair` when present, else `token_in -> token_out`.
+- Trade room visual treatment:
+  - dashboard room now renders `chat-thread` + `chat-message` card style with sender/meta, message body, tags, and UTC timestamp.
+
+### Rollback plan
+1. Revert Slice 29 touched files only.
+2. Re-run required gate commands.
+3. Re-verify dashboard feed rendering contract (single-chain presentation + activity detail + chat style).

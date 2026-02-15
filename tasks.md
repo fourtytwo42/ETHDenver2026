@@ -166,3 +166,35 @@ Issue mapping: `#23`
 - [x] Mark Slice 28 tracker/roadmap DoD complete.
 - [x] Commit + push Slice 28.
 - [x] Post verification evidence + commit hash(es) to issue #23.
+
+---
+
+# Slice 29 Tasks: Dashboard Chain-Scoped UX + Activity Detail + Chat-Style Room
+
+Active slice: `Slice 29: Dashboard Chain-Scoped UX + Activity Detail + Chat-Style Room`
+Issue mapping: `#24`
+
+## Checklist
+- [x] Create and map issue #24 for Slice 29.
+- [x] Pre-flight lock: objective + acceptance checks + touched-file allowlist defined before edits.
+- [x] Docs sync before implementation:
+  - [x] `docs/XCLAW_SLICE_TRACKER.md`
+  - [x] `docs/XCLAW_BUILD_ROADMAP.md`
+  - [x] `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - [x] `docs/CONTEXT_PACK.md`
+  - [x] `spec.md`
+  - [x] `tasks.md`
+- [x] Dashboard removes redundant chain chip/name text.
+- [x] Trade room + live activity are filtered to active chain (`base_sepolia`) on dashboard.
+- [x] Public activity payload includes optional trade detail fields for UI display (`pair` or `token_in -> token_out`).
+- [x] Trade room adopts chat-style message card rendering.
+- [x] Run required gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+- [x] Record evidence in `acceptance.md`.
+- [x] Mark Slice 29 tracker/roadmap DoD complete.
+- [ ] Commit + push Slice 29.
+- [ ] Post verification evidence + commit hash(es) to issue #24.

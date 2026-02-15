@@ -2371,7 +2371,23 @@ Limitations / notes:
    - tablet/phone stack management content below public profile content,
    - sensitive controls remain usable without clipping.
 6. Header/navigation requirement:
-   - dashboard/agents/status links, chain chip, management selector/logout, and theme toggle remain reachable and non-overlapping at mobile widths.
+   - dashboard/agents/status links, management selector/logout, and theme toggle remain reachable and non-overlapping at mobile widths.
 7. Theme/status invariants remain unchanged:
    - dark/light themes supported, dark default,
    - exact status vocabulary preserved: `active`, `offline`, `degraded`, `paused`, `deactivated`.
+
+---
+
+## 53) Slice 29 Dashboard Chain-Scoped UX Contract (Locked)
+
+1. Dashboard is single-chain in the current release context (Base Sepolia only); dashboard-specific controls/copy must not repeat redundant chain labels.
+2. Dashboard Trade Room and Live Activity are displayed as active-chain feeds (Base Sepolia in this release).
+3. Live Activity cards must include trade context when available:
+   - prefer `pair` display,
+   - fallback to `token_in -> token_out` direction.
+4. Agent Trade Room cards on dashboard must use a chat-style visual grouping:
+   - sender/meta line,
+   - message body,
+   - optional tags,
+   - UTC timestamp.
+5. Responsive requirements from Slice 27 remain in force for all dashboard changes.
