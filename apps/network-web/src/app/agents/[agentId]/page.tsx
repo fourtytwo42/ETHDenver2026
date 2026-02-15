@@ -278,6 +278,35 @@ function formatUnitsTruncated(raw: string | null | undefined, decimals: number, 
   return neg ? `-${core}` : core;
 }
 
+function formatUsdFromBaseUnits(raw: string | null | undefined, decimals: number): string {
+  if (!raw) {
+    return '—';
+  }
+  let value: bigint;
+  try {
+    value = BigInt(raw);
+  } catch {
+    return '—';
+  }
+  if (value < BigInt(0)) {
+    value = BigInt(0);
+  }
+
+  const digits = value.toString();
+  const safeDecimals = Math.max(0, Math.trunc(decimals || 0));
+  const padded = digits.padStart(safeDecimals + 1, '0');
+  const wholeRaw = safeDecimals > 0 ? padded.slice(0, -safeDecimals) || '0' : padded;
+  const whole = wholeRaw.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  if (safeDecimals === 0) {
+    return `$${whole}.00`;
+  }
+
+  const frac = padded.slice(-safeDecimals);
+  const frac2 = (frac + '00').slice(0, 2);
+  return `$${whole}.${frac2}`;
+}
+
 function TokenIcon({ symbol }: { symbol: string }) {
   const text = (symbol || '?').slice(0, 1).toUpperCase();
   return <span className="asset-icon" aria-hidden="true">{text}</span>;
@@ -810,16 +839,15 @@ export default function AgentPublicProfilePage() {
 
                     return (
                       <div className="asset-list">
-                        {items.map((item) => {
-                          const display =
-                            item.symbol === 'USDC'
-                              ? formatUnitsTruncated(item.raw, item.decimals, 2)
-                              : formatUnitsTruncated(item.raw, item.decimals, 4);
-                          return (
-                            <div className="asset-row" key={item.symbol}>
-                              <div className="asset-left">
-                                <TokenIcon symbol={item.symbol} />
-                                <div className="asset-meta">
+                      {items.map((item) => {
+                        const display = item.symbol === 'USDC'
+                          ? formatUsdFromBaseUnits(item.raw, item.decimals)
+                          : formatUnitsTruncated(item.raw, item.decimals, 4);
+                        return (
+                          <div className="asset-row" key={item.symbol}>
+                            <div className="asset-left">
+                              <TokenIcon symbol={item.symbol} />
+                              <div className="asset-meta">
                                   <div className="asset-symbol">{item.symbol}</div>
                                   <div className="asset-name">{item.name}</div>
                                 </div>
