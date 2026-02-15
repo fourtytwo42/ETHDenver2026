@@ -247,13 +247,13 @@ a {
 @media (min-width: 1161px) {
   /* Desktop-wide: KPI cards were reading overly tall relative to content. */
   .kpi-grid .panel {
-    padding: 0.72rem 0.85rem;
+    padding: 0.52rem 0.7rem;
   }
 
   .kpi-value {
-    font-size: 1.22rem;
-    margin-top: 0.18rem;
-    line-height: 1.15;
+    font-size: 1.12rem;
+    margin-top: 0.12rem;
+    line-height: 1.05;
   }
 }
 
