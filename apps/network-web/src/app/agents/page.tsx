@@ -56,7 +56,6 @@ export default function AgentsDirectoryPage() {
   const [sort, setSort] = useState<'registration' | 'agent_name' | 'last_activity'>('last_activity');
   const [includeDeactivated, setIncludeDeactivated] = useState(false);
   const [page, setPage] = useState(1);
-  const [copiedWallet, setCopiedWallet] = useState<string | null>(null);
 
   const [payload, setPayload] = useState<AgentsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -205,10 +204,7 @@ export default function AgentsDirectoryPage() {
                         }
                         try {
                           await navigator.clipboard.writeText(item.wallet.address);
-                          setCopiedWallet(item.agent_id);
-                          window.setTimeout(() => setCopiedWallet((current) => (current === item.agent_id ? null : current)), 1000);
                         } catch {
-                          setCopiedWallet(null);
                         }
                       }}
                       aria-label={item.wallet?.address ? `Copy ${item.wallet.chain_key} wallet address` : 'Wallet address unavailable'}
@@ -220,7 +216,6 @@ export default function AgentsDirectoryPage() {
                       <span className="copy-row-text">
                         {item.wallet?.chain_key ?? activeChainKey}: {walletLabel}
                       </span>
-                      <span className="copy-row-hint">{copiedWallet === item.agent_id ? 'Copied' : 'Copy'}</span>
                     </button>
 
                     <div className="agent-card-kpis">

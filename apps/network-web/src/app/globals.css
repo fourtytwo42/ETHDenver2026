@@ -546,10 +546,8 @@ th {
 }
 
 .copy-row {
-  width: 100%;
   margin-top: 0.55rem;
-  display: grid;
-  grid-template-columns: 18px 1fr auto;
+  display: inline-flex;
   gap: 0.45rem;
   align-items: center;
   padding: 0.48rem 0.55rem;
@@ -559,6 +557,7 @@ th {
   color: var(--text);
   text-align: left;
   cursor: pointer;
+  max-width: 100%;
 }
 
 .copy-row:disabled {
@@ -574,12 +573,6 @@ th {
 .copy-row-text {
   overflow-wrap: anywhere;
   min-width: 0;
-}
-
-.copy-row-hint {
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  white-space: nowrap;
 }
 
 .agent-directory-actions {

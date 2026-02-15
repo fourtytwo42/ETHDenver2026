@@ -376,6 +376,7 @@ export default function AgentPublicProfilePage() {
   const [withdrawDestination, setWithdrawDestination] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('0.1');
   const [depositCopied, setDepositCopied] = useState(false);
+  const [overviewDepositCopied, setOverviewDepositCopied] = useState(false);
   const [depositData, setDepositData] = useState<DepositPayload | null>(null);
   const [limitOrders, setLimitOrders] = useState<LimitOrderItem[]>([]);
   const pendingStepupActionRef = useRef<{
@@ -691,11 +692,9 @@ export default function AgentPublicProfilePage() {
               <div className="identity-row">
                 <strong>{profile.agent.agent_name}</strong>
                 {isPublicStatus(profile.agent.public_status) ? <PublicStatusBadge status={profile.agent.public_status} /> : profile.agent.public_status}
-                <span className="chain-chip">Network</span>
                 <span className="muted">{profile.agent.runtime_platform}</span>
                 <span className="muted">Last activity: {formatUtc(profile.agent.last_activity_at)} UTC</span>
               </div>
-              <p className="network-context">Network context: {activeChainLabel}</p>
               {isStale(profile.agent.last_heartbeat_at, HEARTBEAT_STALE_THRESHOLD_SECONDS) ? (
                 <p className="stale">Agent is idle.</p>
               ) : (
@@ -703,12 +702,36 @@ export default function AgentPublicProfilePage() {
               )}
               {profile.agent.description ? <p style={{ marginTop: '0.8rem' }}>{profile.agent.description}</p> : null}
 
-              <div className="toolbar" style={{ marginTop: '0.8rem' }}>
-                {(profile.wallets ?? []).map((wallet) => (
-                  <span className="chain-chip" key={`${wallet.chain_key}-${wallet.address}`}>
-                    {wallet.chain_key}: {shortenAddress(wallet.address)}
-                  </span>
-                ))}
+              <div style={{ marginTop: '0.8rem' }}>
+                <div className="muted">Deposit address</div>
+                {(() => {
+                  const activeWallet = (profile.wallets ?? []).find((w) => w.chain_key === activeChainKey) ?? null;
+                  const address = activeWallet?.address ?? null;
+                  return (
+                    <button
+                      type="button"
+                      className="copy-row"
+                      disabled={!address}
+                      onClick={async () => {
+                        if (!address) return;
+                        try {
+                          await navigator.clipboard.writeText(address);
+                          setOverviewDepositCopied(true);
+                          window.setTimeout(() => setOverviewDepositCopied(false), 1000);
+                        } catch {
+                          setOverviewDepositCopied(false);
+                        }
+                      }}
+                      aria-label={address ? 'Copy deposit address' : 'Deposit address unavailable'}
+                      title={address ? 'Copy deposit address' : 'Deposit address unavailable'}
+                    >
+                    <span className="copy-row-icon">
+                      <CopyIcon />
+                    </span>
+                    <span className="copy-row-text">{address ? shortenAddress(address) : '-'}</span>
+                  </button>
+                );
+              })()}
               </div>
             </>
           ) : null}
@@ -1059,7 +1082,6 @@ export default function AgentPublicProfilePage() {
                     <span className="copy-row-text">
                       {depositData.chains[0].chainKey}: {shortenAddress(depositData.chains[0].depositAddress)}
                     </span>
-                    <span className="copy-row-hint">{depositCopied ? 'Copied' : 'Copy'}</span>
                   </button>
                 ) : (
                   <p className="muted">Loading deposit address...</p>
