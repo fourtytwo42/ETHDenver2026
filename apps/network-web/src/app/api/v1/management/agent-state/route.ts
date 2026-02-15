@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const [agent, approvals, policy, audit, outboundPolicy, dailyUsage, chainPolicy] = await Promise.all([
+    const [agent, approvals, policy, audit, outboundPolicy, dailyUsage, chainPolicy, approvalChannel] = await Promise.all([
       dbQuery<{
         agent_id: string;
         public_status: string;
@@ -175,6 +175,17 @@ export async function GET(req: NextRequest) {
         limit 1
         `,
         [agentId, chainKey]
+      ),
+      dbQuery<{ enabled: boolean; updated_at: string }>(
+        `
+        select enabled, updated_at::text
+        from agent_chain_approval_channels
+        where agent_id = $1
+          and chain_key = $2
+          and channel = 'telegram'
+        limit 1
+        `,
+        [agentId, chainKey]
       )
     ]);
 
@@ -213,6 +224,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const telegramApprovalEnabled = (approvalChannel.rowCount ?? 0) > 0 ? Boolean(approvalChannel.rows[0].enabled) : false;
+    const telegramApprovalUpdatedAt = (approvalChannel.rowCount ?? 0) > 0 ? approvalChannel.rows[0].updated_at ?? null : null;
+
     return successResponse(
       {
         ok: true,
@@ -220,6 +234,9 @@ export async function GET(req: NextRequest) {
           agentId: agent.rows[0].agent_id,
           publicStatus: agent.rows[0].public_status,
           metadata: agent.rows[0].openclaw_metadata ?? {}
+        },
+        approvalChannels: {
+          telegram: { enabled: telegramApprovalEnabled, updatedAt: telegramApprovalUpdatedAt }
         },
         approvalsQueue: approvals.rows,
         latestPolicy: policy.rows[0] ?? null,

@@ -99,6 +99,9 @@ type ManagementStatePayload = {
     publicStatus: string;
     metadata: Record<string, unknown>;
   };
+  approvalChannels?: {
+    telegram?: { enabled: boolean; updatedAt?: string | null };
+  };
   chainPolicy: {
     chainKey: string;
     chainEnabled: boolean;
@@ -467,6 +470,10 @@ export default function AgentPublicProfilePage() {
   const [policyAllowedTokens, setPolicyAllowedTokens] = useState<string[]>([]);
   const [approvalRejectReasons, setApprovalRejectReasons] = useState<Record<string, string>>({});
   const [chainUpdatePending, setChainUpdatePending] = useState(false);
+  const [telegramApprovalsEnabled, setTelegramApprovalsEnabled] = useState(false);
+  const [telegramUpdatePending, setTelegramUpdatePending] = useState(false);
+  const [telegramSecret, setTelegramSecret] = useState<string | null>(null);
+  const [telegramSecretCopied, setTelegramSecretCopied] = useState(false);
 
   useEffect(() => {
     if (!agentId) {
@@ -573,6 +580,7 @@ export default function AgentPublicProfilePage() {
               : (payload.latestPolicy?.max_daily_trade_count ?? '0')
           );
           setPolicyAllowedTokens(payload.latestPolicy?.allowed_tokens ?? []);
+          setTelegramApprovalsEnabled(Boolean(payload.approvalChannels?.telegram?.enabled));
           rememberManagedAgent(agentId);
 
           const savedDestination =
@@ -720,6 +728,7 @@ export default function AgentPublicProfilePage() {
           : (payload.latestPolicy?.max_daily_trade_count ?? '0')
       );
       setPolicyAllowedTokens(payload.latestPolicy?.allowed_tokens ?? []);
+      setTelegramApprovalsEnabled(Boolean(payload.approvalChannels?.telegram?.enabled));
       const [depositPayload, limitOrderPayload] = await Promise.all([
         managementGet(`/api/v1/management/deposit?agentId=${encodeURIComponent(agentId)}&chainKey=${encodeURIComponent(activeChainKey)}`),
         managementGet(`/api/v1/management/limit-orders?agentId=${encodeURIComponent(agentId)}&limit=50`)
@@ -1385,6 +1394,78 @@ export default function AgentPublicProfilePage() {
                     Save Policy
                   </button>
                 </div>
+              </article>
+
+              <article className="management-card">
+                <h3>Approval Delivery</h3>
+                <p className="muted">Optional Telegram inline-button approvals for pending trades (approve-only).</p>
+                <p className="muted">
+                  Active chain: <strong>{activeChainLabel}</strong>
+                </p>
+                <div className="toolbar">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={telegramApprovalsEnabled}
+                      disabled={telegramUpdatePending}
+                      onChange={(event) => {
+                        const next = Boolean(event.target.checked);
+                        setTelegramUpdatePending(true);
+                        void (async () => {
+                          await runManagementAction(
+                            async () => {
+                              const result = (await managementPost('/api/v1/management/approval-channels/update', {
+                                agentId,
+                                chainKey: activeChainKey,
+                                channel: 'telegram',
+                                enabled: next
+                              })) as { secret?: string } | null;
+                              setTelegramApprovalsEnabled(next);
+                              if (next && result?.secret) {
+                                setTelegramSecret(String(result.secret));
+                              }
+                            },
+                            next ? 'Telegram approvals enabled.' : 'Telegram approvals disabled.',
+                            'sensitive_action'
+                          );
+                          setTelegramUpdatePending(false);
+                        })();
+                      }}
+                    />{' '}
+                    Telegram approvals enabled
+                  </label>
+                  <span className="muted">{telegramApprovalsEnabled ? 'On: runtime may send approve prompts.' : 'Off: web UI only.'}</span>
+                </div>
+                {telegramSecret ? (
+                  <>
+                    <p className="muted">Secret (shown once on enable):</p>
+                    <button
+                      type="button"
+                      className="copy-row"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(telegramSecret);
+                          setTelegramSecretCopied(true);
+                          window.setTimeout(() => setTelegramSecretCopied(false), 1000);
+                        } catch {
+                          setTelegramSecretCopied(false);
+                        }
+                      }}
+                      aria-label="Copy Telegram approval secret"
+                      title="Copy Telegram approval secret"
+                    >
+                      <span className="copy-row-icon">
+                        <CopyIcon />
+                      </span>
+                      <span className="copy-row-text">{telegramSecret}</span>
+                    </button>
+                    {telegramSecretCopied ? <p className="muted">Copied.</p> : null}
+                    <p className="muted" style={{ marginTop: '0.35rem' }}>
+                      Configure on gateway host (OpenClaw config), then restart gateway:
+                    </p>
+                    <pre className="code-block">{`openclaw config set skills.entries.xclaw-agent.env.XCLAW_APPROVALS_TELEGRAM_SECRET \"${telegramSecret}\"\nopenclaw gateway restart`}</pre>
+                  </>
+                ) : null}
               </article>
 
               <article className="management-card">

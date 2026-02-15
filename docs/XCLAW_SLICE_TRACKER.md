@@ -598,3 +598,24 @@ DoD:
 - [x] runtime `trade spot` is server-first: proposes, waits if `approval_pending`, executes only if approved, and surfaces rejection reason on deny.
 - [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.
 - [x] slice is mapped to a GitHub issue (required by `AGENTS.md`).
+
+---
+
+## Slice 34: Telegram Approvals (Inline Button Approve) + Web UI Sync
+Status: [x]
+Issue: #42 (umbrella)
+
+Goal:
+- Add Telegram as an optional approvals surface that stays aligned with `/agents/:id` approvals UI.
+
+DoD:
+- [x] docs sync first: source-of-truth + roadmap + tracker + openapi + context/spec/tasks/acceptance aligned to Slice 34.
+- [x] migration adds per-agent/per-chain approval channel enablement + secret hash storage and prompt tracking tables.
+- [x] `POST /api/v1/management/approval-channels/update` implemented (step-up required to enable only) and returns secret once on enable.
+- [x] `GET /api/v1/management/agent-state` returns chain-scoped `approvalChannels.telegram.enabled`.
+- [x] `GET /api/v1/agent/transfers/policy` returns `approvalChannels.telegram.enabled` (no secrets).
+- [x] `POST /api/v1/agent/approvals/prompt` implemented (agent-auth) for prompt metadata tracking.
+- [x] `POST /api/v1/channel/approvals/decision` implemented (Bearer secret auth) and idempotently transitions `approval_pending -> approved`.
+- [x] runtime sends Telegram approval prompt only when Telegram approvals are enabled and OpenClaw last active channel is Telegram; runtime deletes prompt on approval and supports periodic `approvals sync`.
+- [x] OpenClaw Telegram callback handler intercepts `xappr|...` approve callbacks and calls X-Claw server directly (no LLM mediation); deletes message on success.
+- [x] required gates pass: `db:parity`, `seed:reset`, `seed:load`, `seed:verify`, `build`, runtime tests.

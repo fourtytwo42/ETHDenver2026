@@ -587,6 +587,20 @@ th {
   min-width: 0;
 }
 
+.code-block {
+  margin: 0.5rem 0 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev-2) 85%, transparent);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  overflow-x: auto;
+  white-space: pre;
+  max-width: 100%;
+}
+
 .copy-pill {
   display: inline-flex;
   align-items: center;

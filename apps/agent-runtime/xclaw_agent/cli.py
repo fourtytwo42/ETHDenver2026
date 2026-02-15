@@ -52,6 +52,7 @@ POLICY_FILE = APP_DIR / "policy.json"
 LIMIT_ORDER_STORE_FILE = APP_DIR / "limit_orders.json"
 LIMIT_ORDER_OUTBOX_FILE = APP_DIR / "limit_orders_outbox.json"
 TRADE_USAGE_OUTBOX_FILE = APP_DIR / "trade_usage_outbox.json"
+APPROVAL_PROMPTS_FILE = APP_DIR / "approval_prompts.json"
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 CHAIN_CONFIG_DIR = REPO_ROOT / "config" / "chains"
 
@@ -1474,6 +1475,11 @@ def _post_trade_proposed(
 
 
 def _wait_for_trade_approval(trade_id: str, chain: str) -> dict[str, Any]:
+    # Slice 34: Telegram approvals (optional). Best-effort prompt delivery + cleanup tracking.
+    try:
+        _maybe_send_telegram_approval_prompt(trade_id, chain)
+    except Exception:
+        pass
     deadline_ms = int(time.time() * 1000) + (APPROVAL_WAIT_TIMEOUT_SEC * 1000)
     last_status: str | None = None
     while int(time.time() * 1000) <= deadline_ms:
@@ -1481,11 +1487,19 @@ def _wait_for_trade_approval(trade_id: str, chain: str) -> dict[str, Any]:
         status = str(trade.get("status") or "")
         last_status = status
         if status == "approved":
+            try:
+                _maybe_delete_telegram_approval_prompt(trade_id)
+            except Exception:
+                pass
             return trade
         if status == "approval_pending":
             time.sleep(APPROVAL_WAIT_POLL_SEC)
             continue
         if status == "rejected":
+            try:
+                _maybe_delete_telegram_approval_prompt(trade_id)
+            except Exception:
+                pass
             reason_code = trade.get("reasonCode")
             reason_message = trade.get("reasonMessage")
             raise WalletPolicyError(
@@ -1495,6 +1509,10 @@ def _wait_for_trade_approval(trade_id: str, chain: str) -> dict[str, Any]:
                 {"tradeId": trade_id, "chain": chain, "reasonCode": reason_code, "reasonMessage": reason_message},
             )
         if status == "expired":
+            try:
+                _maybe_delete_telegram_approval_prompt(trade_id)
+            except Exception:
+                pass
             raise WalletPolicyError(
                 "approval_expired",
                 "Trade approval has expired.",
@@ -1502,6 +1520,10 @@ def _wait_for_trade_approval(trade_id: str, chain: str) -> dict[str, Any]:
                 {"tradeId": trade_id, "chain": chain},
             )
         # Any other status is not actionable for approval gating; fail closed.
+        try:
+            _maybe_delete_telegram_approval_prompt(trade_id)
+        except Exception:
+            pass
         raise WalletPolicyError(
             "policy_denied",
             f"Trade is not executable from status '{status}'.",
@@ -1515,6 +1537,299 @@ def _wait_for_trade_approval(trade_id: str, chain: str) -> dict[str, Any]:
         "Approve trade from authorized management view, then retry.",
         {"tradeId": trade_id, "chain": chain, "lastStatus": last_status},
     )
+
+
+def _load_approval_prompts() -> dict[str, Any]:
+    try:
+        ensure_app_dir()
+        if not APPROVAL_PROMPTS_FILE.exists():
+            return {"prompts": {}}
+        raw = APPROVAL_PROMPTS_FILE.read_text(encoding="utf-8")
+        payload = json.loads(raw or "{}")
+        if not isinstance(payload, dict):
+            return {"prompts": {}}
+        prompts = payload.get("prompts")
+        if not isinstance(prompts, dict):
+            payload["prompts"] = {}
+        return payload
+    except Exception:
+        return {"prompts": {}}
+
+
+def _save_approval_prompts(payload: dict[str, Any]) -> None:
+    ensure_app_dir()
+    if not isinstance(payload.get("prompts"), dict):
+        payload["prompts"] = {}
+    tmp = f"{APPROVAL_PROMPTS_FILE}.{os.getpid()}.tmp"
+    pathlib.Path(tmp).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    pathlib.Path(tmp).replace(APPROVAL_PROMPTS_FILE)
+    os.chmod(APPROVAL_PROMPTS_FILE, 0o600)
+
+
+def _record_approval_prompt(trade_id: str, prompt: dict[str, Any]) -> None:
+    state = _load_approval_prompts()
+    prompts = state.get("prompts")
+    if not isinstance(prompts, dict):
+        prompts = {}
+        state["prompts"] = prompts
+    prompts[trade_id] = {**prompt, "updatedAt": utc_now()}
+    _save_approval_prompts(state)
+
+
+def _get_approval_prompt(trade_id: str) -> dict[str, Any] | None:
+    state = _load_approval_prompts()
+    prompts = state.get("prompts")
+    if not isinstance(prompts, dict):
+        return None
+    entry = prompts.get(trade_id)
+    return entry if isinstance(entry, dict) else None
+
+
+def _remove_approval_prompt(trade_id: str) -> None:
+    state = _load_approval_prompts()
+    prompts = state.get("prompts")
+    if not isinstance(prompts, dict):
+        return
+    if trade_id in prompts:
+        prompts.pop(trade_id, None)
+        _save_approval_prompts(state)
+
+
+def _approval_channels_enabled(policy_payload: dict[str, Any], channel: str) -> bool:
+    channels = policy_payload.get("approvalChannels")
+    if not isinstance(channels, dict):
+        return False
+    entry = channels.get(channel)
+    if not isinstance(entry, dict):
+        return False
+    enabled = entry.get("enabled", False)
+    return bool(enabled)
+
+
+def _openclaw_state_dir() -> pathlib.Path:
+    raw = (os.environ.get("OPENCLAW_STATE_DIR") or "").strip()
+    if raw:
+        return pathlib.Path(raw).expanduser()
+    return pathlib.Path.home() / ".openclaw"
+
+
+def _sanitize_openclaw_agent_id(value: str | None) -> str:
+    raw = (value or "").strip() or "main"
+    if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", raw):
+        return raw.lower()
+    return "main"
+
+
+def _read_openclaw_last_delivery() -> dict[str, Any] | None:
+    """
+    Read OpenClaw session store and return best-effort last delivery context:
+      { lastChannel, lastTo, lastThreadId }
+    """
+    agent_id = _sanitize_openclaw_agent_id(os.environ.get("XCLAW_OPENCLAW_AGENT_ID"))
+    store_path = _openclaw_state_dir() / "agents" / agent_id / "sessions" / "sessions.json"
+    if not store_path.exists():
+        return None
+    try:
+        raw = store_path.read_text(encoding="utf-8")
+        payload = json.loads(raw or "{}")
+        if not isinstance(payload, dict):
+            return None
+        best: dict[str, Any] | None = None
+        best_updated = -1
+        for _, entry in payload.items():
+            if not isinstance(entry, dict):
+                continue
+            updated = entry.get("updatedAt")
+            try:
+                updated_ms = int(updated) if updated is not None else 0
+            except Exception:
+                updated_ms = 0
+            last_channel = str(entry.get("lastChannel") or "").strip().lower()
+            last_to = str(entry.get("lastTo") or "").strip()
+            if not last_channel or not last_to:
+                continue
+            if updated_ms >= best_updated:
+                best_updated = updated_ms
+                best = {
+                    "lastChannel": last_channel,
+                    "lastTo": last_to,
+                    "lastThreadId": entry.get("lastThreadId"),
+                }
+        return best
+    except Exception:
+        return None
+
+
+def _require_openclaw_bin() -> str:
+    path = shutil.which("openclaw")
+    if not path:
+        raise WalletStoreError("Missing dependency: openclaw (required for Telegram approval prompts).")
+    return path
+
+
+def _extract_openclaw_message_id(stdout: str) -> str | None:
+    try:
+        payload = json.loads((stdout or "").strip() or "{}")
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    inner = payload.get("payload")
+    if isinstance(inner, dict):
+        direct = inner.get("messageId")
+        if isinstance(direct, str) and direct.strip():
+            return direct.strip()
+        nested = inner.get("result")
+        if isinstance(nested, dict):
+            nested_id = nested.get("messageId")
+            if isinstance(nested_id, str) and nested_id.strip():
+                return nested_id.strip()
+    return None
+
+
+def _post_approval_prompt_metadata(trade_id: str, chain: str, to_addr: str, thread_id: str | None, message_id: str) -> None:
+    payload: dict[str, Any] = {
+        "schemaVersion": 1,
+        "tradeId": trade_id,
+        "chainKey": chain,
+        "channel": "telegram",
+        "to": to_addr,
+        "messageId": message_id,
+    }
+    if thread_id:
+        payload["threadId"] = thread_id
+    status_code, body = _api_request(
+        "POST",
+        "/agent/approvals/prompt",
+        payload=payload,
+        include_idempotency=True,
+        idempotency_key=f"rt-appr-prompt-{trade_id}-{secrets.token_hex(8)}",
+    )
+    if status_code < 200 or status_code >= 300:
+        code = str(body.get("code", "api_error"))
+        message = str(body.get("message", f"prompt report failed ({status_code})"))
+        raise WalletStoreError(f"{code}: {message}")
+
+
+def _maybe_send_telegram_approval_prompt(trade_id: str, chain: str) -> None:
+    # Avoid duplicate sends.
+    existing = _get_approval_prompt(trade_id)
+    if existing and str(existing.get("channel") or "") == "telegram":
+        return
+
+    policy = _fetch_outbound_transfer_policy(chain)
+    if not _approval_channels_enabled(policy, "telegram"):
+        return
+
+    delivery = _read_openclaw_last_delivery()
+    if not delivery or str(delivery.get("lastChannel") or "").lower() != "telegram":
+        return
+
+    chat_id = str(delivery.get("lastTo") or "").strip()
+    if not chat_id:
+        return
+
+    thread_raw = delivery.get("lastThreadId")
+    thread_id: str | None = None
+    if isinstance(thread_raw, int):
+        thread_id = str(thread_raw)
+    elif isinstance(thread_raw, str) and thread_raw.strip():
+        thread_id = thread_raw.strip()
+
+    callback_data = f"xappr|a|{trade_id}|{chain}"
+    if len(callback_data.encode("utf-8")) > 64:
+        # Fail closed: do not send a prompt we can't action safely.
+        return
+
+    text = f"Approval required: trade {trade_id} ({chain}).\\n\\nTap Approve to continue."
+    buttons = json.dumps([[{"text": "Approve", "callback_data": callback_data}]], separators=(",", ":"))
+    openclaw = _require_openclaw_bin()
+    cmd = [openclaw, "message", "send", "--channel", "telegram", "--target", chat_id, "--message", text, "--buttons", buttons, "--json"]
+    if thread_id:
+        cmd.extend(["--thread-id", thread_id])
+    proc = _run_subprocess(cmd, timeout_sec=30, kind="openclaw_send")
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        stdout = (proc.stdout or "").strip()
+        raise WalletStoreError(stderr or stdout or "openclaw message send failed.")
+
+    message_id = _extract_openclaw_message_id(proc.stdout or "")
+    if not message_id:
+        # We still record a stub so sync can handle later; without messageId delete won't work.
+        message_id = "unknown"
+
+    _record_approval_prompt(
+        trade_id,
+        {
+            "channel": "telegram",
+            "chainKey": chain,
+            "to": chat_id,
+            "threadId": thread_id,
+            "messageId": message_id,
+            "createdAt": utc_now(),
+        },
+    )
+
+    # Best-effort server sync; failures should not block local wait loop.
+    try:
+        _post_approval_prompt_metadata(trade_id, chain, chat_id, thread_id, message_id)
+    except Exception:
+        pass
+
+
+def _maybe_delete_telegram_approval_prompt(trade_id: str) -> None:
+    entry = _get_approval_prompt(trade_id)
+    if not entry or str(entry.get("channel") or "") != "telegram":
+        return
+    chat_id = str(entry.get("to") or "").strip()
+    message_id = str(entry.get("messageId") or "").strip()
+    if not chat_id or not message_id or message_id == "unknown":
+        _remove_approval_prompt(trade_id)
+        return
+    openclaw = shutil.which("openclaw")
+    if not openclaw:
+        return
+    cmd = [openclaw, "message", "delete", "--channel", "telegram", "--target", chat_id, "--message-id", message_id, "--json"]
+    proc = _run_subprocess(cmd, timeout_sec=20, kind="openclaw_delete")
+    if proc.returncode == 0:
+        _remove_approval_prompt(trade_id)
+
+
+def cmd_approvals_sync(args: argparse.Namespace) -> int:
+    chk = require_json_flag(args)
+    if chk is not None:
+        return chk
+    chain = args.chain
+    try:
+        state = _load_approval_prompts()
+        prompts = state.get("prompts")
+        if not isinstance(prompts, dict):
+            prompts = {}
+        checked = 0
+        deleted = 0
+        skipped = 0
+        failures: list[dict[str, Any]] = []
+        for trade_id, entry in list(prompts.items()):
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("chainKey") or "") != chain:
+                skipped += 1
+                continue
+            checked += 1
+            try:
+                trade = _read_trade_details(str(trade_id))
+                status = str(trade.get("status") or "")
+                if status == "approval_pending":
+                    skipped += 1
+                    continue
+                _maybe_delete_telegram_approval_prompt(str(trade_id))
+                deleted += 1
+            except Exception as exc:
+                failures.append({"tradeId": str(trade_id), "error": str(exc)})
+        return ok("Approval prompts synced.", chain=chain, checked=checked, deleted=deleted, skipped=skipped, failures=failures or None)
+    except Exception as exc:
+        return fail("approvals_sync_failed", str(exc), "Verify API auth and OpenClaw availability, then retry.", {"chain": chain}, exit_code=1)
 
 
 def _post_trade_status(trade_id: str, from_status: str, to_status: str, extra: dict[str, Any] | None = None) -> None:
@@ -4351,6 +4666,11 @@ def build_parser() -> argparse.ArgumentParser:
     approvals_check.add_argument("--chain", required=True)
     approvals_check.add_argument("--json", action="store_true")
     approvals_check.set_defaults(func=cmd_approvals_check)
+
+    approvals_sync = approvals_sub.add_parser("sync")
+    approvals_sync.add_argument("--chain", required=True)
+    approvals_sync.add_argument("--json", action="store_true")
+    approvals_sync.set_defaults(func=cmd_approvals_sync)
 
     trade = sub.add_parser("trade")
     trade_sub = trade.add_subparsers(dest="trade_cmd")

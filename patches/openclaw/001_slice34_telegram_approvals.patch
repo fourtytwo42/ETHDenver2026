@@ -1,0 +1,237 @@
+diff --git a/src/telegram/bot-handlers.ts b/src/telegram/bot-handlers.ts
+index ed6186346..a4f0174bb 100644
+--- a/src/telegram/bot-handlers.ts
++++ b/src/telegram/bot-handlers.ts
+@@ -32,6 +32,7 @@ import {
+ } from "./bot/helpers.js";
+ import { migrateTelegramGroupConfig } from "./group-migration.js";
+ import { resolveTelegramInlineButtonsScope } from "./inline-buttons.js";
++import { maybeHandleXclawApprovalCallback } from "./xclaw-approvals.js";
+ import {
+   buildModelsKeyboard,
+   buildProviderKeyboard,
+@@ -439,6 +440,18 @@ export const registerTelegramHandlers = ({
+         }
+       }
+ 
++      const xclawApproval = await maybeHandleXclawApprovalCallback({
++        cfg,
++        data,
++        chatId,
++        messageId: callbackMessage.message_id,
++        senderId,
++        botApi: bot.api,
++      });
++      if (xclawApproval.handled) {
++        return;
++      }
++
+       const paginationMatch = data.match(/^commands_page_(\d+|noop)(?::(.+))?$/);
+       if (paginationMatch) {
+         const pageValue = paginationMatch[1];
+diff --git a/src/telegram/xclaw-approvals.test.ts b/src/telegram/xclaw-approvals.test.ts
+new file mode 100644
+index 000000000..225522987
+--- /dev/null
++++ b/src/telegram/xclaw-approvals.test.ts
+@@ -0,0 +1,59 @@
++import { describe, expect, it } from "vitest";
++import type { OpenClawConfig } from "../config/config.js";
++import { maybeHandleXclawApprovalCallback } from "./xclaw-approvals.js";
++
++function makeCfg(env: Record<string, string>): OpenClawConfig {
++  return {
++    skills: {
++      entries: {
++        "xclaw-agent": { env },
++      },
++    },
++  } as unknown as OpenClawConfig;
++}
++
++describe("xclaw telegram approvals", () => {
++  it("ignores non-xappr callbacks", async () => {
++    const cfg = makeCfg({ XCLAW_API_BASE_URL: "https://xclaw.trade" });
++    const res = await maybeHandleXclawApprovalCallback({
++      cfg,
++      data: "commands_page_2",
++      chatId: "123",
++      messageId: "7",
++      senderId: "9",
++      botApi: {
++        deleteMessage: async () => ({}),
++        editMessageText: async () => ({}),
++      },
++      fetchImpl: async () => new Response(null, { status: 200 }),
++    });
++    expect(res.handled).toBe(false);
++  });
++
++  it("calls server and deletes message on success", async () => {
++    let called = false;
++    const cfg = makeCfg({
++      XCLAW_API_BASE_URL: "https://xclaw.trade",
++      XCLAW_APPROVALS_TELEGRAM_SECRET: "xappr_test",
++    });
++    const res = await maybeHandleXclawApprovalCallback({
++      cfg,
++      data: "xappr|a|trd_abc|base_sepolia",
++      chatId: "123",
++      messageId: "7",
++      senderId: "9",
++      botApi: {
++        deleteMessage: async () => {
++          called = true;
++          return {};
++        },
++        editMessageText: async () => ({}),
++      },
++      fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
++    });
++    expect(res.handled).toBe(true);
++    expect(res.ok).toBe(true);
++    expect(called).toBe(true);
++  });
++});
++
+diff --git a/src/telegram/xclaw-approvals.ts b/src/telegram/xclaw-approvals.ts
+new file mode 100644
+index 000000000..f8ed8ddf9
+--- /dev/null
++++ b/src/telegram/xclaw-approvals.ts
+@@ -0,0 +1,135 @@
++import type { OpenClawConfig } from "../config/config.js";
++
++type BotApi = {
++  deleteMessage: (chatId: number | string, messageId: number | string) => Promise<unknown>;
++  editMessageText: (
++    chatId: number | string,
++    messageId: number | string,
++    text: string,
++    extra?: unknown,
++  ) => Promise<unknown>;
++};
++
++function normalizeApiBaseUrl(raw: string): string | null {
++  const trimmed = (raw || "").trim().replace(/\/+$/, "");
++  if (!trimmed) return null;
++  // If configured at the root domain, append /api/v1 for this endpoint.
++  if (trimmed.endsWith("/api/v1")) return trimmed;
++  return `${trimmed}/api/v1`;
++}
++
++function chainKeyEnvSuffix(chainKey: string): string {
++  return chainKey
++    .trim()
++    .toUpperCase()
++    .replace(/[^A-Z0-9]+/g, "_")
++    .replace(/^_+/, "")
++    .replace(/_+$/, "");
++}
++
++function readSkillEnv(cfg: OpenClawConfig, key: string): string | null {
++  const entries = (cfg as unknown as { skills?: { entries?: Record<string, unknown> } })?.skills?.entries;
++  const xclaw = entries?.["xclaw-agent"] as { env?: Record<string, unknown> } | undefined;
++  const env = xclaw?.env;
++  const value = env?.[key];
++  return typeof value === "string" && value.trim() ? value.trim() : null;
++}
++
++function parseXclawApprovalCallback(data: string):
++  | { decision: "approve"; tradeId: string; chainKey: string }
++  | null {
++  const trimmed = (data || "").trim();
++  if (!trimmed.startsWith("xappr|")) return null;
++  const parts = trimmed.split("|").map((p) => p.trim());
++  // Expected: xappr|a|<tradeId>|<chainKey>
++  if (parts.length !== 4) return null;
++  if (parts[1] !== "a") return null;
++  const tradeId = parts[2] || "";
++  const chainKey = parts[3] || "";
++  if (!tradeId || !chainKey) return null;
++  return { decision: "approve", tradeId, chainKey };
++}
++
++export async function maybeHandleXclawApprovalCallback(params: {
++  cfg: OpenClawConfig;
++  data: string;
++  chatId: number | string;
++  messageId: number | string;
++  senderId: string;
++  botApi: BotApi;
++  fetchImpl?: typeof fetch;
++}): Promise<{ handled: boolean; ok?: boolean }> {
++  const parsed = parseXclawApprovalCallback(params.data);
++  if (!parsed) return { handled: false };
++
++  const baseUrl =
++    readSkillEnv(params.cfg, "XCLAW_API_BASE_URL") ||
++    (typeof process !== "undefined" ? (process.env.XCLAW_API_BASE_URL || "").trim() : "");
++  const normalized = normalizeApiBaseUrl(baseUrl);
++  if (!normalized) {
++    await params.botApi.editMessageText(
++      params.chatId,
++      params.messageId,
++      "Approval failed: missing XCLAW_API_BASE_URL in OpenClaw config.",
++    );
++    return { handled: true, ok: false };
++  }
++
++  const suffix = chainKeyEnvSuffix(parsed.chainKey);
++  const secret =
++    readSkillEnv(params.cfg, `XCLAW_APPROVALS_TELEGRAM_SECRET_${suffix}`) ||
++    readSkillEnv(params.cfg, "XCLAW_APPROVALS_TELEGRAM_SECRET") ||
++    (typeof process !== "undefined" ? (process.env[`XCLAW_APPROVALS_TELEGRAM_SECRET_${suffix}`] || process.env.XCLAW_APPROVALS_TELEGRAM_SECRET || "").trim() : "");
++
++  if (!secret) {
++    await params.botApi.editMessageText(
++      params.chatId,
++      params.messageId,
++      `Approval failed: missing Telegram approval secret for ${parsed.chainKey}.`,
++    );
++    return { handled: true, ok: false };
++  }
++
++  const fetchFn = params.fetchImpl ?? fetch;
++  const res = await fetchFn(`${normalized}/channel/approvals/decision`, {
++    method: "POST",
++    headers: {
++      "content-type": "application/json",
++      authorization: `Bearer ${secret}`,
++    },
++    body: JSON.stringify({
++      tradeId: parsed.tradeId,
++      chainKey: parsed.chainKey,
++      decision: "approve",
++      source: {
++        channel: "telegram",
++        to: String(params.chatId),
++        messageId: String(params.messageId),
++        senderId: params.senderId,
++      },
++    }),
++  });
++
++  if (res.ok) {
++    await params.botApi.deleteMessage(params.chatId, params.messageId);
++    return { handled: true, ok: true };
++  }
++
++  let errCode = "api_error";
++  let errMsg = `HTTP ${res.status}`;
++  try {
++    const body = (await res.json()) as { code?: string; message?: string };
++    if (typeof body?.code === "string" && body.code.trim()) errCode = body.code.trim();
++    if (typeof body?.message === "string" && body.message.trim()) errMsg = body.message.trim();
++  } catch {
++    // ignore
++  }
++
++  await params.botApi.editMessageText(
++    params.chatId,
++    params.messageId,
++    `Approval failed: ${errCode} (${errMsg}).`,
++  );
++  return { handled: true, ok: false };
++}
++

@@ -1140,3 +1140,67 @@ Use this every work session:
   - [x] `npm run build`
 - [x] Runtime tests:
   - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+---
+
+## 34) Slice 34: Telegram Approvals (Inline Button Approve) + Web UI Sync
+
+### 34.1 Canonical/doc sync (must happen before implementation)
+- [x] Add Slice 34 goal/DoD + issue mapping to `docs/XCLAW_SLICE_TRACKER.md`.
+- [x] Add Slice 34 roadmap checklist (this section).
+- [x] Update `docs/XCLAW_SOURCE_OF_TRUTH.md` with locked Telegram approval delivery semantics (strict callback execution, approve-only).
+- [x] Update `docs/api/openapi.v1.yaml` with new endpoints:
+  - [x] `POST /api/v1/management/approval-channels/update`
+  - [x] `POST /api/v1/channel/approvals/decision`
+  - [x] `POST /api/v1/agent/approvals/prompt`
+- [x] Update shared schemas in `packages/shared-schemas/json/` for new requests.
+- [x] Update handoff/process artifacts:
+  - [x] `docs/CONTEXT_PACK.md`
+  - [x] `spec.md`
+  - [x] `tasks.md`
+  - [x] `acceptance.md`
+
+### 34.2 Data model
+- [x] Migration adds:
+  - [x] `agent_chain_approval_channels` (per-agent/per-chain/channel enablement + secret hash)
+  - [x] `trade_approval_prompts` (prompt metadata for cleanup/sync)
+
+### 34.3 API + server behavior
+- [x] `POST /api/v1/management/approval-channels/update`:
+  - [x] step-up required to enable only,
+  - [x] returns secret once on enable, stores only hash,
+  - [x] disabling does not require step-up.
+- [x] `GET /api/v1/agent/transfers/policy` includes `approvalChannels.telegram.enabled`.
+- [x] `GET /api/v1/management/agent-state` includes chain-scoped `approvalChannels.telegram.enabled`.
+- [x] `POST /api/v1/agent/approvals/prompt` upserts prompt metadata (agent-auth).
+- [x] `POST /api/v1/channel/approvals/decision`:
+  - [x] authenticates via Bearer secret (no management cookies/CSRF),
+  - [x] idempotently transitions `approval_pending -> approved`,
+  - [x] emits `trade_approved` agent event with telegram source fields.
+
+### 34.4 Runtime + OpenClaw
+- [x] Runtime:
+  - [x] when trade is `approval_pending`, sends Telegram approval prompt iff:
+    - [x] Telegram approvals enabled for agent+chain, and
+    - [x] OpenClaw last active channel is Telegram (session store `lastChannel`).
+  - [x] tracks prompt metadata locally and reports it to server.
+  - [x] deletes Telegram prompt when trade exits `approval_pending`.
+  - [x] implements `xclaw-agent approvals sync` cleanup command.
+- [x] OpenClaw:
+  - [x] intercepts `xappr|...` callback payloads before message routing,
+  - [x] calls X-Claw `/api/v1/channel/approvals/decision` directly (no LLM mediation),
+  - [x] deletes prompt message on success, edits message on failure.
+
+### 34.5 UI
+- [x] `/agents/:id` management rail:
+  - [x] chain-scoped toggle `Telegram Approvals Enabled`,
+  - [x] enable is step-up gated and reveals secret once with copy + instructions.
+
+### 34.6 Validation + evidence
+- [x] Run required gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+  - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`

@@ -184,6 +184,29 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '409':
           $ref: '#/components/responses/ErrorResponse'
+  /api/v1/agent/approvals/prompt:
+    post:
+      summary: Report approval prompt metadata for authenticated agent (idempotent).
+      description: Stores delivery metadata for cross-surface cleanup/sync only. Does not authorize approvals.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentApprovalsPromptRequest'
+      responses:
+        '200':
+          description: Prompt metadata accepted.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
   /api/v1/agent/faucet/request:
     post:
       summary: Request one fixed testnet faucet drip (ETH + mock WETH/USDC) for authenticated agent wallet.
@@ -671,6 +694,50 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/management/approval-channels/update:
+    post:
+      summary: Enable or disable approval delivery channels for an agent (per-chain).
+      description: Enabling Telegram approvals requires an active step-up session and returns a one-time secret; disabling does not require step-up.
+      security:
+        - managementCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementApprovalChannelUpdateRequest'
+      responses:
+        '200':
+          description: Approval channel updated.
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/channel/approvals/decision:
+    post:
+      summary: Channel approval decision (Telegram inline button approve-only).
+      description: Strict channel auth endpoint. Uses `Authorization: Bearer xappr_...` and does not use management cookies/CSRF.
+      security:
+        - channelApprovalBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelApprovalDecisionRequest'
+      responses:
+        '200':
+          description: Decision accepted (idempotent).
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/management/audit:
     get:
@@ -1246,6 +1313,10 @@ components:
       type: apiKey
       in: cookie
       name: xclaw_stepup
+    channelApprovalBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: xappr-secret
   schemas:
     Error:
       type: object
@@ -1650,6 +1721,69 @@ components:
           description: Chain key (e.g. `base_sepolia`).
         chainEnabled:
           type: boolean
+    ManagementApprovalChannelUpdateRequest:
+      type: object
+      required: [agentId, chainKey, channel, enabled]
+      properties:
+        agentId:
+          type: string
+        chainKey:
+          type: string
+          description: Chain key (e.g. `base_sepolia`).
+        channel:
+          type: string
+          enum: [telegram]
+        enabled:
+          type: boolean
+    AgentApprovalsPromptRequest:
+      type: object
+      required: [schemaVersion, tradeId, chainKey, channel, to, messageId]
+      properties:
+        schemaVersion:
+          type: integer
+          const: 1
+        tradeId:
+          type: string
+        chainKey:
+          type: string
+        channel:
+          type: string
+          enum: [telegram]
+        to:
+          type: string
+        threadId:
+          type: string
+          nullable: true
+        messageId:
+          type: string
+    ChannelApprovalDecisionRequest:
+      type: object
+      required: [tradeId, chainKey, decision, source]
+      properties:
+        agentId:
+          type: string
+          nullable: true
+          description: Optional. When omitted, server derives agentId from tradeId.
+        tradeId:
+          type: string
+        chainKey:
+          type: string
+        decision:
+          type: string
+          enum: [approve]
+        source:
+          type: object
+          required: [channel, to, messageId, senderId]
+          properties:
+            channel:
+              type: string
+              enum: [telegram]
+            to:
+              type: string
+            messageId:
+              type: string
+            senderId:
+              type: string
     ManagementPolicyUpdateRequest:
       type: object
       required: [agentId, mode, approvalMode, maxTradeUsd, maxDailyUsd, allowedTokens]

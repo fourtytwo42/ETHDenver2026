@@ -373,6 +373,52 @@ Append-only enforcement:
 
 ---
 
+## 7.20 `agent_daily_trade_usage`
+- `usage_id` text PK
+- `agent_id` FK
+- `chain_key` varchar(64)
+- `utc_day` date
+- `daily_spend_usd` numeric
+- `daily_filled_trades` int
+- `updated_at` timestamptz
+- unique (`agent_id`, `chain_key`, `utc_day`)
+
+## 7.21 `agent_chain_policies`
+- `chain_policy_id` text PK
+- `agent_id` FK
+- `chain_key` varchar(64)
+- `chain_enabled` boolean
+- `updated_by_management_session_id` FK nullable
+- `created_at`, `updated_at`
+- unique (`agent_id`, `chain_key`)
+
+## 7.22 `agent_chain_approval_channels`
+- `channel_policy_id` text PK
+- `agent_id` FK
+- `chain_key` varchar(64)
+- `channel` varchar(32) (locked: `telegram` for MVP)
+- `enabled` boolean
+- `secret_hash` text nullable (server stores only a hash; raw secret never persisted)
+- `created_by_management_session_id` FK nullable
+- `created_at`, `updated_at`
+- unique (`agent_id`, `chain_key`, `channel`)
+
+## 7.23 `trade_approval_prompts`
+- `prompt_id` text PK
+- `trade_id` FK
+- `agent_id` FK
+- `chain_key` varchar(64)
+- `channel` varchar(32) (locked: `telegram` for MVP)
+- `to_address` text (Telegram chat id as string)
+- `thread_id` text nullable
+- `message_id` text
+- `created_at` timestamptz
+- `deleted_at` timestamptz nullable
+- `delete_error` text nullable
+- unique (`trade_id`, `channel`)
+
+---
+
 ## 8) API Contracts (Network App)
 
 All agent write endpoints require:
@@ -2516,3 +2562,40 @@ Limitations / notes:
    - `POST /api/v1/management/chains/update` upserts per-agent chain access.
    - `GET /api/v1/management/agent-state?agentId=...&chainKey=...` returns `chainPolicy` for active chain context.
    - `GET /api/v1/agent/transfers/policy?chainKey=...` returns `chainEnabled` for runtime enforcement.
+
+---
+
+## 58) Slice 34 Telegram Approvals Delivery (Inline Button, Strict) Contract (Locked)
+
+1. Telegram is an optional, owner-enabled approval delivery channel for trade approvals.
+2. Telegram approvals are per-agent and per-chain:
+   - a chain-scoped owner toggle determines whether Telegram prompts may be sent for that agent+chain.
+3. Approve-only in Telegram:
+   - Telegram offers an **Approve** button only.
+   - Reject remains web-only from `/agents/:id`.
+4. Strict execution boundary:
+   - clicking a Telegram inline button must trigger approval server-side **without LLM/tool mediation**.
+   - OpenClaw must intercept the callback payload and call the X-Claw channel approval endpoint directly.
+   - In this repo, the OpenClaw patch is shipped as `patches/openclaw/001_slice34_telegram_approvals.patch`.
+5. Trade lifecycle:
+   - when a trade is inserted as `approval_pending`, the runtime may send a Telegram approval prompt **only** if:
+     - Telegram approvals are enabled for that agent+chain, and
+     - OpenClaw’s last active channel is Telegram (session store `lastChannel == "telegram"`).
+6. Sync between Telegram and web:
+   - the pending approval item remains visible on `/agents/:id`.
+   - approving in either surface must converge:
+     - approving in Telegram removes the item from the web approvals queue,
+     - approving in the web UI triggers prompt deletion in Telegram by runtime cleanup (best-effort + periodic sync).
+7. Secrets:
+   - enabling Telegram approvals generates a new one-time secret (`xappr_...`) that is shown once.
+   - server stores only a hash; raw secrets are never persisted.
+   - approval decisions sent via Telegram must authenticate with the secret (Bearer token).
+8. Canonical endpoints:
+   - `POST /api/v1/management/approval-channels/update` (owner-auth):
+     - enable requires step-up; disable does not.
+     - returns the generated secret only on enable.
+   - `POST /api/v1/channel/approvals/decision` (channel auth):
+     - authorizes via Bearer secret (no management cookies/CSRF).
+     - idempotently transitions `approval_pending -> approved` when actionable.
+   - `POST /api/v1/agent/approvals/prompt` (agent-auth):
+     - records prompt metadata for cleanup/sync (does not authorize approvals).

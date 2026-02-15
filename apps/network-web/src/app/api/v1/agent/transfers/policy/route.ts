@@ -108,6 +108,19 @@ export async function GET(req: NextRequest) {
     const chainEnabled = (chainPolicyRow.rowCount ?? 0) > 0 ? Boolean(chainPolicyRow.rows[0].chain_enabled) : true;
     const chainEnabledUpdatedAt = (chainPolicyRow.rowCount ?? 0) > 0 ? chainPolicyRow.rows[0].updated_at ?? null : null;
 
+    const approvalChannels = await dbQuery<{ enabled: boolean; updated_at: string }>(
+      `
+      select enabled, updated_at::text
+      from agent_chain_approval_channels
+      where agent_id = $1
+        and chain_key = $2
+        and channel = 'telegram'
+      limit 1
+      `,
+      [auth.agentId, chainKey]
+    );
+    const telegramEnabled = (approvalChannels.rowCount ?? 0) > 0 ? Boolean(approvalChannels.rows[0].enabled) : false;
+
     return successResponse(
       {
         ok: true,
@@ -115,6 +128,9 @@ export async function GET(req: NextRequest) {
         chainKey,
         chainEnabled,
         chainEnabledUpdatedAt,
+        approvalChannels: {
+          telegram: { enabled: telegramEnabled }
+        },
         outboundTransfersEnabled,
         outboundMode,
         outboundWhitelistAddresses,

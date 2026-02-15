@@ -2559,3 +2559,33 @@ Issue mapping: `pending assignment`
 1. Revert Slice 33 touched files only.
 2. Re-run required gates.
 3. Confirm `/agents/:id` returns to pre-slice layout and `trade spot` returns to direct on-chain mode.
+
+---
+
+## Slice 34 Acceptance Evidence
+
+Date (UTC): 2026-02-15
+Active slice: `Slice 34: Telegram Approvals (Inline Button Approve) + Web UI Sync`
+Issue mapping: `#42` (umbrella)
+
+### Objective + scope lock
+- Objective: add Telegram as an optional approval surface for `approval_pending` trades (approve-only) that stays aligned with `/agents/:id`.
+- Strict security: approval execution must come from Telegram inline button callback handling (no LLM/tool mediation).
+
+### Required gate evidence
+- `npm run db:parity` -> PASS (exit 0)
+- `npm run seed:reset` -> PASS (exit 0)
+- `npm run seed:load` -> PASS (exit 0)
+- `npm run seed:verify` -> PASS (exit 0)
+- `npm run build` -> PASS (exit 0)
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v` -> PASS (exit 0)
+
+### Scenario evidence (manual)
+- Enable Telegram approvals:
+  - `/agents/:id` toggle ON requires step-up and returns a secret once.
+- Pending approval prompt:
+  - when OpenClaw `lastChannel == telegram` and trade is `approval_pending`, runtime sends a Telegram message with Approve button.
+- Telegram approval:
+  - clicking Approve transitions trade to `approved` on server and deletes the Telegram prompt message.
+- Web approval first:
+  - approving in web UI causes runtime to delete the Telegram prompt (best-effort) and via `xclaw-agent approvals sync`.

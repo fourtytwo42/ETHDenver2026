@@ -11,6 +11,7 @@ export type ApiErrorCode =
   | 'approval_required'
   | 'approval_expired'
   | 'approval_rejected'
+  | 'not_actionable'
   | 'policy_denied'
   | 'daily_usd_cap_exceeded'
   | 'daily_trade_count_cap_exceeded'

@@ -160,6 +160,47 @@ Redesign `/agents/:id` to feel like a MetaMask-style wallet (wallet header + ass
 
 ---
 
+# Slice 34 Spec: Telegram Approvals (Inline Button Approve) + Web UI Sync
+
+## Goal
+Add Telegram as an optional approval surface that stays aligned with the existing `/agents/:id` approvals UI.
+
+When a trade becomes `approval_pending` and the owner's active OpenClaw conversation is Telegram, the runtime sends a Telegram message with an **Approve** inline button. Clicking it approves the trade server-side (strict button execution, no LLM mediation), deletes the Telegram message, and the web approvals queue reflects the approval.
+
+## Success Criteria
+1. Owner can enable/disable Telegram approvals per chain on `/agents/:id` (enable is step-up gated; disable is not).
+2. Runtime sends Telegram approval prompt only when:
+   - Telegram approvals are enabled for agent+chain, and
+   - OpenClaw last active channel is Telegram (`lastChannel == telegram`).
+3. Telegram button click:
+   - calls X-Claw channel approval endpoint with Bearer secret,
+   - transitions trade `approval_pending -> approved` idempotently,
+   - deletes Telegram prompt message on success.
+4. Web approval first:
+   - runtime deletes Telegram prompt best-effort when it observes approval,
+   - plus `xclaw-agent approvals sync` can remove stale prompts.
+5. Docs/contracts remain synchronized (source-of-truth/openapi/schemas/tracker/roadmap/context/spec/tasks/acceptance).
+
+## Non-Goals
+1. Reject-in-Telegram (reject remains web-only).
+2. WhatsApp/Slack/Discord approval buttons.
+3. New generalized auth model for management actions outside approvals.
+
+## Constraints / Security
+1. Strict: approval execution must come from Telegram inline button callback handler (no LLM/tool mediation).
+2. Server never stores raw secrets; only hashes.
+3. Channel decision endpoint uses Bearer secret and does not use management cookies/CSRF.
+
+## Acceptance Checks
+- `npm run db:parity`
+- `npm run seed:reset`
+- `npm run seed:load`
+- `npm run seed:verify`
+- `npm run build`
+- `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+
+---
+
 # Slice 32 Spec: Per-Agent Chain Enable/Disable (Owner-Gated, Chain-Scoped Ops)
 
 ## Goal

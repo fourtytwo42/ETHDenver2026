@@ -327,3 +327,46 @@ Active slice: `Slice 31: Agents + Agent Management UX Refinement (Operational Cl
 - [x] Preserve Slice 30 cap controls/usage visibility and existing management actions.
 - [x] Sync openapi/context/spec/tasks/acceptance artifacts.
 - [x] Run required gates and capture evidence in `acceptance.md`.
+
+---
+
+# Slice 34 Tasks: Telegram Approvals (Inline Button Approve) + Web UI Sync
+
+Active slice: `Slice 34: Telegram Approvals (Inline Button Approve) + Web UI Sync`
+Issue mapping: `#42` (umbrella)
+
+## Checklist
+- [x] Docs sync first:
+  - [x] `docs/XCLAW_SLICE_TRACKER.md`
+  - [x] `docs/XCLAW_BUILD_ROADMAP.md`
+  - [x] `docs/XCLAW_SOURCE_OF_TRUTH.md`
+  - [x] `docs/api/openapi.v1.yaml`
+  - [x] `docs/CONTEXT_PACK.md`
+  - [x] `spec.md`
+  - [x] `tasks.md`
+  - [x] `acceptance.md`
+- [x] Data model:
+  - [x] `infrastructure/migrations/0010_slice34_telegram_approvals.sql`
+- [x] Server:
+  - [x] `POST /api/v1/management/approval-channels/update` (step-up gated on enable only; returns secret once)
+  - [x] extend `GET /api/v1/management/agent-state` with `approvalChannels.telegram.enabled` for active chain
+  - [x] extend `GET /api/v1/agent/transfers/policy` with `approvalChannels.telegram.enabled`
+  - [x] `POST /api/v1/agent/approvals/prompt` (agent-auth)
+  - [x] `POST /api/v1/channel/approvals/decision` (Bearer secret auth, approve-only)
+- [x] UI:
+  - [x] `/agents/:id` management rail toggle + one-time secret display + copy/instructions
+- [x] Runtime:
+  - [x] send Telegram prompt when trade is `approval_pending` and OpenClaw `lastChannel == telegram`
+  - [x] delete prompt when trade leaves `approval_pending`
+  - [x] implement `xclaw-agent approvals sync`
+- [x] OpenClaw:
+  - [x] intercept `xappr|...` callback before message routing (no LLM mediation)
+  - [x] call X-Claw decision endpoint and delete message on success; edit message on failure
+- [x] Gates:
+  - [x] `npm run db:parity`
+  - [x] `npm run seed:reset`
+  - [x] `npm run seed:load`
+  - [x] `npm run seed:verify`
+  - [x] `npm run build`
+  - [x] `python3 -m unittest apps/agent-runtime/tests/test_trade_path.py -v`
+- [ ] Commit + push Slice 34 (exclude `memory/`)
